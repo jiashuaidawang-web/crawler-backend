@@ -1,0 +1,130 @@
+package com.dunwugudao.crawler.strategy.eastmoney;
+
+import okhttp3.Authenticator;
+import okhttp3.Credentials;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okhttp3.Route;
+
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 东方财富 HTTP 请求封装（OkHttp）。
+ * <p>支持代理（含认证代理 user:pass@ip:port），按代理字符串缓存 OkHttpClient。
+ * 非 2xx 或 IO 异常抛 RuntimeException，交由 worker 的 RetryPolicy 裁决。</p>
+ */
+public class EastmoneyClient {
+
+    private static final OkHttpClient BASE_CLIENT = new OkHttpClient.Builder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .readTimeout(Duration.ofSeconds(30))
+            .build();
+
+    private final Map<String, OkHttpClient> proxyClientCache = new ConcurrentHashMap<>();
+
+    /**
+     * 执行 GET 请求。
+     *
+     * @param url 完整 URL
+     * @param ua  本次请求的 User-Agent（随机）
+     * @param proxy 代理字符串（如 "http://user:pass@ip:port" 或 "ip:port"，可为 null）
+     * @return 响应体文本
+     */
+    public String get(String url, String ua, String proxy) {
+        OkHttpClient client = proxy != null && !proxy.isBlank()
+                ? proxyClientCache.computeIfAbsent(proxy, EastmoneyClient::buildProxyClient)
+                : BASE_CLIENT;
+
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", ua)
+                .header("Referer", "https://quote.eastmoney.com/")
+                .get()
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            int code = response.code();
+            ResponseBody body = response.body();
+            String resp = body != null ? body.string() : "";
+            if (!response.isSuccessful()) {
+                throw new RuntimeException("Eastmoney HTTP " + code + " for " + url);
+            }
+            return resp;
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Eastmoney request failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 为代理字符串构建 OkHttpClient（含认证）。
+     * 支持格式：
+     *   - "ip:port"
+     *   - "user:pass@ip:port"
+     *   - "http://user:pass@ip:port"
+     *   - "socks5://user:pass@ip:port"
+     */
+    private static OkHttpClient buildProxyClient(String proxyStr) {
+        // 解析协议
+        String scheme = "http";
+        String rest = proxyStr;
+        int idx = proxyStr.indexOf("://");
+        if (idx > 0) {
+            scheme = proxyStr.substring(0, idx).trim().toLowerCase();
+            rest = proxyStr.substring(idx + 3);
+        }
+
+        // 解析认证信息
+        String username = null;
+        String password = null;
+        int at = rest.lastIndexOf('@');
+        if (at > 0) {
+            String auth = rest.substring(0, at);
+            rest = rest.substring(at + 1);
+            int colon = auth.indexOf(':');
+            if (colon > 0) {
+                username = auth.substring(0, colon);
+                password = auth.substring(colon + 1);
+            }
+        }
+
+        // 解析 host:port
+        int colon = rest.lastIndexOf(':');
+        if (colon < 0) {
+            throw new IllegalArgumentException("Invalid proxy (expect host:port): " + proxyStr);
+        }
+        String host = rest.substring(0, colon);
+        int port = Integer.parseInt(rest.substring(colon + 1));
+
+        Proxy.Type type = "socks".equals(scheme) || "socks5".equals(scheme)
+                ? Proxy.Type.SOCKS : Proxy.Type.HTTP;
+        Proxy proxy = new Proxy(type, new InetSocketAddress(host, port));
+
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .proxy(proxy)
+                .connectTimeout(Duration.ofSeconds(15))
+                .readTimeout(Duration.ofSeconds(30));
+
+        // 设置代理认证
+        if (username != null && password != null) {
+            final String user = username;
+            final String pass = password;
+            builder.authenticator(new Authenticator() {
+                @Override
+                public Request authenticate(Route route, Response response) {
+                    String credential = Credentials.basic(user, pass);
+                    return response.request().newBuilder()
+                            .header("Proxy-Authorization", credential)
+                            .build();
+                }
+            });
+        }
+
+        return builder.build();
+    }
+}

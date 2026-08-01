@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="crawler-admin" />
+        <module name="crawler-core" />
+        <module name="crawler-strategy" />
+        <module name="crawler-persistence" />
+        <module name="crawler-worker" />
+      </profile>
+    </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="crawler-admin" options="-parameters" />
+      <module name="crawler-core" options="-parameters" />
+      <module name="crawler-persistence" options="-parameters" />
+      <module name="crawler-strategy" options="-parameters" />
+      <module name="crawler-worker" options="-parameters" />
+    </option>
+  </component>
+</project>

@@ -1,0 +1,36 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: crawler-admin
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://100.92.86.64:15432/postgres
+    username: dbuser
+    password: OpenGauss@2026
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+# ---------------------- XXL-JOB 执行器（调度接入 M3） ----------------------
+# 执行器挂在 admin（控制面）：worker 只认领、不调度。
+# 未部署 xxl-job-admin 时，executor 启动会打连接错误日志，但【不影响 admin 应用启动】，
+# 仍可通过 JobController 手动 REST 触发任务（见 XxlJobHandlers / JobController）。
+xxl:
+  job:
+    admin:
+      addresses: http://124.223.220.245:8080/
+    access:
+      token: ""
+    executor:
+      appname: crawler-admin-executor
+      address: ""
+      ip: ""
+      port: 9999
+      logpath: ./logs/xxl-job
+      logretentiondays: 30

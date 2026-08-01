@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  crawler-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crawler-admin
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://100.92.86.64:15432/postgres
+      - SPRING_DATASOURCE_USERNAME=dbuser
+      - SPRING_DATASOURCE_PASSWORD=OpenGauss@2026
+      - SPRING_REDIS_HOST=127.0.0.1
+      - SPRING_REDIS_PASSWORD=pamirs@123
+      - XXL_JOB_ADMIN_ADDRESSES=http://124.223.220.245:8080/
+    restart: unless-stopped
+
+  crawler-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: crawler-worker
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://100.92.86.64:15432/postgres
+      - SPRING_DATASOURCE_USERNAME=dbuser
+      - SPRING_DATASOURCE_PASSWORD=OpenGauss@2026
+      - SPRING_REDIS_HOST=127.0.0.1
+      - SPRING_REDIS_PASSWORD=pamirs@123
+    restart: unless-stopped
