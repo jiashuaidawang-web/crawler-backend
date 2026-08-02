@@ -51,8 +51,16 @@ public class LimitPool {
     private String ztf;              // 涨停封单描述(强势池)
     private LocalDate ipod;          // 上市日期(次新池)
     private BigDecimal o;            // 开盘价(次新池)
-    private Integer od;              // 上市天数(次新池)
-    private Integer ods;             // 上市天数(次新池)
+    private Integer od;              // 开板日期(YYYYMMDD)
+    private Integer ods;             // 开板几日
+    private Integer isNewHigh;       // 是否新高标识(o: 1=新高)
+    private String ipod;             // 上市日期(YYYYMMDD)
+    private Integer zttjCt;          // 连板统计-连板数(zttj.ct)
+    private Integer zttjDays;        // 连板统计-天数(zttj.days)
+    private Integer lb;              // 连板数(强势池)
+    private Integer nh;              // N日新高(强势/次新池)
+    private String ztf;              // 涨停封单描述(强势池)
+    private BigDecimal bidAmount;    // 涨停封单金额(万元)
     // 基础字段
     private Integer dataSource;      // data_source: 0=东财 1=同花顺
     private String srcDetail;        // src_detail: 来源URL/接口/备注

@@ -52,11 +52,14 @@ public final class EastmoneyEndpoints {
                     // 涨停/跌停/强势/次新池：一次取全量（pagesize=5000），无需分页
                     // 实测能工作的 URL（2026-08-01）
                     // 源：https://push2ex.eastmoney.com/getTopicZTPool?cb=callbackdata6233583&ut=...&dpt=wz.ztzt&Pageindex=0&pagesize=17000&sort=fbt%3Aasc&date=20260801&_=1785562460759
+                    // 强势池排序不同：sort=zdp%3Adesc（用户实测 2026-08-02）
                     String d = tradeDate(params).replace("-", "");
                     long ts = System.currentTimeMillis();
+                    // 涨停/跌停用 fbt asc；强势/次新用 zdp desc
+                    String sort = ("strong".equals(lt) || "cixin".equals(lt)) ? "zdp%3Adesc" : "fbt%3Aasc";
                     return "https://push2ex.eastmoney.com/" + path
                             + "?cb=callbackdata6233583&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
-                            + "&date=" + d + "&Pageindex=0&pagesize=5000&sort=fbt%3Aasc&_=" + ts;
+                            + "&date=" + d + "&Pageindex=0&pagesize=5000&sort=" + sort + "&_=" + ts;
                 }
                 case KLINE: {
                     String secid = secidFor(taskType, params);

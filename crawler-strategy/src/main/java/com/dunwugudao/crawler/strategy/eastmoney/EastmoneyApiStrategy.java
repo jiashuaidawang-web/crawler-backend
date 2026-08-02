@@ -397,8 +397,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             row.put("latest_price", p != null ? p / 100.0 : null);
             // 涨跌幅（接口 zdp 已经是百分比数值）
             row.put("pct_chg", num(n, "zdp"));
-            // 涨停价
-            row.put("ztp", num(n, "ztp"));
+            // 涨停价（接口 ztp 单位是分，转元 ÷100）
+            Double ztpRaw = num(n, "ztp");
+            row.put("ztp", ztpRaw != null ? ztpRaw / 100.0 : null);
             // 连板/封板
             Integer lbc = toInt(num(n, "lbc"));
             row.put("board_pos", lbc);                   // 连板数
@@ -425,11 +426,18 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             row.put("lb", toInt(num(n, "lb")));          // 连板数
             row.put("nh", toInt(num(n, "nh")));          // N日新高
             row.put("ztf", txt(n, "ztf"));               // 涨停封单描述
-            // 次新池特有
-            row.put("ipod", txt(n, "ipod"));             // 上市日期
-            row.put("o", num(n, "o"));                   // 开盘价
-            row.put("od", toInt(num(n, "od")));          // 上市天数
-            row.put("ods", toInt(num(n, "ods")));        // 上市天数
+            // 次新池特有（按东财字段表）
+            // ztp：涨停价（分），1000000000=无涨停限制 → 存 NULL
+            Double ztpRawVal = num(n, "ztp");
+            if (ztpRawVal != null && ztpRawVal >= 1000000000.0) {
+                row.put("ztp", null);
+            } else {
+                row.put("ztp", ztpRawVal != null ? ztpRawVal / 100.0 : null);
+            }
+            row.put("ipod", txt(n, "ipod"));             // 上市日期（原始格式 YYYYMMDD）
+            row.put("o", toInt(num(n, "o")));            // 是否新高标识（1=新高，0=非新高）
+            row.put("od", toInt(num(n, "od")));          // 开板日期（原始格式 YYYYMMDD）
+            row.put("ods", toInt(num(n, "ods")));        // 开板几日
             // 限定
             row.put("type", lt);  // limit_up / limit_down / zhaban / strong / cixin
             // limit_style 近似：开板次数=0 且 09:30:00 封板 → 一字；否则 换手

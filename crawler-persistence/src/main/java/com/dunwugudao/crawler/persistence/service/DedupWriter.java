@@ -201,10 +201,12 @@ public class DedupWriter {
         e.setLb(intVal(r.get("lb")));                    // 强势池连板数
         e.setNh(intVal(r.get("nh")));                    // N日新高
         e.setZtf(str(r.get("ztf")));                     // 涨停封单描述
-        e.setIpod(toLocalDate(r.get("ipod")));           // 上市日期
-        e.setO(bigDec(r.get("o")));                      // 开盘价
-        e.setOd(intVal(r.get("od")));                    // 上市天数
-        e.setOds(intVal(r.get("ods")));                  // 上市天数
+        e.setBidAmount(bigDec(r.get("bid_amount")));     // 封单金额(万元)
+        e.setIpod(str(r.get("ipod")));                   // 上市日期(YYYYMMDD)
+        e.setOd(str(r.get("od")));                       // 开板日期(YYYYMMDD)
+        e.setOds(intVal(r.get("ods")));                  // 开板几日
+        e.setIsNewHigh(intVal(r.get("o")));              // 是否新高标识
+        e.setLb(intVal(r.get("lb")));                    // 连板数(强势池)
         e.setBoardCode(str(r.get("board_code")));
         e.setBoardName(str(r.get("board_name")));
         e.setDataSource(source.getCode());
@@ -632,7 +634,12 @@ public class DedupWriter {
             return dt.toLocalDate();
         }
         if (o != null) {
-            return LocalDate.parse(String.valueOf(o).substring(0, 10));
+            String s = String.valueOf(o).replace("-", "");
+            // 兼容 YYYY-M-D / YYYY-MM-DD / YYYYMMDD
+            if (s.length() >= 8) {
+                return LocalDate.parse(s.substring(0, 8), java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+            }
+            return LocalDate.parse(s);
         }
         return null;
     }
