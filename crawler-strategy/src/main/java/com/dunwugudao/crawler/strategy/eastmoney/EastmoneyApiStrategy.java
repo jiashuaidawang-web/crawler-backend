@@ -403,9 +403,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             // 连板/封板
             Integer lbc = toInt(num(n, "lbc"));
             row.put("board_pos", lbc);                   // 连板数
-            // 首次/最后封板时间（接口 fbt/lbt 是秒级时间戳 92500 = 09:25:00）
-            row.put("open_time", secondsToTime(txt(n, "fbt")));
-            row.put("last_time", secondsToTime(txt(n, "lbt")));
+            // 首次/最后封板时间（接口 fbt/lbt 是 HHMMSS 格式 92500 = 09:25:00）
+            row.put("open_time", hhmmssToTime(txt(n, "fbt")));
+            row.put("last_time", hhmmssToTime(txt(n, "lbt")));
             row.put("open_times", toInt(num(n, "zbc"))); // 开板次数 = 炸板次数
             // 板块（实测无 hymc，hybk 是行业代码不是名称）
             row.put("board_code", txt(n, "hybk"));
@@ -454,19 +454,16 @@ public class EastmoneyApiStrategy implements SourceStrategy {
     }
 
     /** 秒级时间戳（如 92500 = 09:25:00）转 HH:mm:ss。 */
-    private static String secondsToTime(String secondsStr) {
-        if (secondsStr == null || secondsStr.isEmpty()) {
-            return null;
-        }
-        try {
-            int totalSeconds = Integer.parseInt(secondsStr);
-            int hh = totalSeconds / 3600;
-            int mm = (totalSeconds % 3600) / 60;
-            int ss = totalSeconds % 60;
-            return String.format("%02d:%02d:%02d", hh, mm, ss);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+    /**
+     * 东财 fbt/lbt 格式转换：接口返回 HHMMSS（如 92500 = 092500 = 09:25:00）。
+     * <p>注意：不是秒数！是 6 位数字 hhmmss。</p>
+     */
+    private static String hhmmssToTime(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        // 右补 0 到 6 位（如 92500 → 092500）
+        String s = String.format("%06d", Integer.parseInt(raw));
+        if (s.length() != 6) return null;
+        return s.substring(0, 2) + ":" + s.substring(2, 4) + ":" + s.substring(4, 6);
     }
 
     /**

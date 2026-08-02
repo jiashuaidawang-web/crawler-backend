@@ -5,7 +5,11 @@ import com.dunwugudao.crawler.persistence.entity.BoardDaily;
 import com.dunwugudao.crawler.persistence.entity.DragonTiger;
 import com.dunwugudao.crawler.persistence.entity.DtDetail;
 import com.dunwugudao.crawler.persistence.entity.IndexDaily;
-import com.dunwugudao.crawler.persistence.entity.LimitPool;
+import com.dunwugudao.crawler.persistence.entity.LimitUpPool;
+import com.dunwugudao.crawler.persistence.entity.LimitDownPool;
+import com.dunwugudao.crawler.persistence.entity.ZhabanPool;
+import com.dunwugudao.crawler.persistence.entity.StrongPool;
+import com.dunwugudao.crawler.persistence.entity.CixinPool;
 import com.dunwugudao.crawler.persistence.entity.MainFundFlow;
 import com.dunwugudao.crawler.persistence.entity.StockBoardRel;
 import com.dunwugudao.crawler.persistence.entity.StockDaily;
@@ -14,7 +18,11 @@ import com.dunwugudao.crawler.persistence.mapper.BoardDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.persistence.mapper.DtDetailMapper;
 import com.dunwugudao.crawler.persistence.mapper.IndexDailyMapper;
-import com.dunwugudao.crawler.persistence.mapper.LimitPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.LimitUpPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.LimitDownPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.ZhabanPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.StrongPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.CixinPoolMapper;
 import com.dunwugudao.crawler.persistence.mapper.MainFundFlowMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBoardRelMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
@@ -42,7 +50,11 @@ import java.util.Map;
 @Service
 public class DedupWriter {
 
-    private final LimitPoolMapper limitPoolMapper;
+    private final LimitUpPoolMapper limitUpPoolMapper;
+    private final LimitDownPoolMapper limitDownPoolMapper;
+    private final ZhabanPoolMapper zhabanPoolMapper;
+    private final StrongPoolMapper strongPoolMapper;
+    private final CixinPoolMapper cixinPoolMapper;
     private final StockBoardRelMapper stockBoardRelMapper;
     private final BoardDailyMapper boardDailyMapper;
     private final StockDailyMapper stockDailyMapper;
@@ -52,10 +64,11 @@ public class DedupWriter {
     private final DragonTigerMapper dragonTigerMapper;
     private final DtDetailMapper dtDetailMapper;
 
-    /** 表 → 该表权威来源（优先级最高者）。 */
-    private final Map<String, SourceType> precedence = buildPrecedence();
-
-    public DedupWriter(LimitPoolMapper limitPoolMapper,
+    public DedupWriter(LimitUpPoolMapper limitUpPoolMapper,
+                       LimitDownPoolMapper limitDownPoolMapper,
+                       ZhabanPoolMapper zhabanPoolMapper,
+                       StrongPoolMapper strongPoolMapper,
+                       CixinPoolMapper cixinPoolMapper,
                        StockBoardRelMapper stockBoardRelMapper,
                        BoardDailyMapper boardDailyMapper,
                        StockDailyMapper stockDailyMapper,
@@ -63,10 +76,15 @@ public class DedupWriter {
                        IndexDailyMapper indexDailyMapper,
                        MainFundFlowMapper mainFundFlowMapper,
                        DragonTigerMapper dragonTigerMapper,
-                       DtDetailMapper dtDetailMapper) {
-        this.limitPoolMapper = limitPoolMapper;
-        this.stockBoardRelMapper = stockBoardRelMapper;
+                       DtDetailMapper dtDetailMapper
+    ) {
+        this.limitUpPoolMapper = limitUpPoolMapper;
+        this.limitDownPoolMapper = limitDownPoolMapper;
+        this.zhabanPoolMapper = zhabanPoolMapper;
+        this.strongPoolMapper = strongPoolMapper;
+        this.cixinPoolMapper = cixinPoolMapper;
         this.boardDailyMapper = boardDailyMapper;
+        this.stockBoardRelMapper = stockBoardRelMapper;
         this.stockDailyMapper = stockDailyMapper;
         this.stockWeeklyMapper = stockWeeklyMapper;
         this.indexDailyMapper = indexDailyMapper;
@@ -75,37 +93,47 @@ public class DedupWriter {
         this.dtDetailMapper = dtDetailMapper;
     }
 
+//        this.stockBoardRelMapper = stockBoardRelMapper;
+//        this.boardDailyMapper = boardDailyMapper;
+//        this.stockDailyMapper = stockDailyMapper;
+//        this.stockWeeklyMapper = stockWeeklyMapper;
+//        this.indexDailyMapper = indexDailyMapper;
+//        this.mainFundFlowMapper = mainFundFlowMapper;
+//        this.dragonTigerMapper = dragonTigerMapper;
+//        this.dtDetailMapper = dtDetailMapper;
+
+
     /** 写入 limit_pool（示例原始表）。openGauss 兼容：select → update/insert。 */
-    @Transactional(rollbackFor = Exception.class)
-    public void writeLimitPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
-        LocalDate today = LocalDate.now();
-        for (Map<String, Object> r : rows) {
-            String tsCode = String.valueOf(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) {
-                log.warn("skip limit_pool row missing ts_code/trade_date: {}", r);
-                continue;
-            }
-            // 优先级裁决：已存在且优先级 >= 新来源 → 不覆盖
-            Integer existing = limitPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) {
-                continue;
-            }
-            LimitPool entity = toEntity(r, source, srcDetail);
-            if (existing != null) {
-                limitPoolMapper.updateRow(entity);
-            } else {
-                limitPoolMapper.insertIfAbsent(entity);
-            }
-        }
-    }
+//    @Transactional(rollbackFor = Exception.class)
+//    public void writeLimitPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+//        int newCode = source.getCode();
+//        LocalDateTime now = LocalDateTime.now();
+//        LocalDate today = LocalDate.now();
+//        for (Map<String, Object> r : rows) {
+//            String tsCode = String.valueOf(r.get("ts_code"));
+//            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+//            if (tsCode == null || tradeDate == null) {
+//                log.warn("skip limit_pool row missing ts_code/trade_date: {}", r);
+//                continue;
+//            }
+//            // 优先级裁决：已存在且优先级 >= 新来源 → 不覆盖
+//            Integer existing = limitPoolMapper.selectDataSource(tsCode, tradeDate);
+//            if (existing != null && existing >= newCode) {
+//                continue;
+//            }
+//            LimitPool entity = toEntity(r, source, srcDetail);
+//            if (existing != null) {
+//                limitPoolMapper.updateRow(entity);
+//            } else {
+//                limitPoolMapper.insertIfAbsent(entity);
+//            }
+//        }
+//    }
 
     /** 返回某表的权威来源（供种子/调度选择策略时使用）。 */
-    public SourceType preferredSource(String tableName) {
-        return precedence.getOrDefault(tableName, SourceType.EASTMONEY);
-    }
+//    public SourceType preferredSource(String tableName) {
+//        return precedence.getOrDefault(tableName, SourceType.EASTMONEY);
+//    }
 
     /** 写入板块日线（board_daily）。openGauss 兼容：select → update/insert。 */
     @Transactional(rollbackFor = Exception.class)
@@ -170,49 +198,49 @@ public class DedupWriter {
         }
     }
 
-    private LimitPool toEntity(Map<String, Object> r, SourceType source, String srcDetail) {
-        LimitPool e = new LimitPool();
-        e.setTradeDate(toLocalDate(r.get("trade_date")));
-        e.setTsCode(str(r.get("ts_code")));
-        e.setStockName(str(r.get("stock_name")));
-        e.setType(str(r.get("type")));
-        e.setLatestPrice(bigDec(r.get("latest_price")));  // 最新价(元)
-        e.setPctChg(bigDec(r.get("pct_chg")));            // 涨跌幅%
-        e.setBoardPos(intVal(r.get("board_pos")));
-        e.setIsFirst(intVal(r.get("is_first")));
-        e.setIsContinuous(intVal(r.get("is_continuous")));
-        e.setLimitStyle(str(r.get("limit_style")));
-        // open_time/last_time 已是 HH:mm:ss 字符串
-        e.setOpenTime(str(r.get("open_time")));
-        e.setLastTime(str(r.get("last_time")));
-        e.setOpenTimes(intVal(r.get("open_times")));
-        e.setBidAmount(bigDec(r.get("bid_amount")));
-        e.setHs(bigDec(r.get("hs")));                    // 换手率%
-        e.setTurnover(bigDec(r.get("hs")));              // 换手率%（复用）
-        e.setZtp(bigDec(r.get("ztp")));                  // 涨停价
-        e.setAmount(bigDec(r.get("amount")));            // 成交额
-        e.setFund(bigDec(r.get("fund")));                // 封单资金
-        e.setLtsz(bigDec(r.get("ltsz")));                // 流通市值
-        e.setTshare(bigDec(r.get("tshare")));            // 总市值
-        e.setZf(bigDec(r.get("zf")));                    // 炸板涨幅%
-        e.setZs(bigDec(r.get("zs")));                    // 炸板振幅%
-        e.setZttjCt(intVal(r.get("zttj_ct")));           // 连板统计-连板数
-        e.setZttjDays(intVal(r.get("zttj_days")));       // 连板统计-天数
-        e.setLb(intVal(r.get("lb")));                    // 强势池连板数
-        e.setNh(intVal(r.get("nh")));                    // N日新高
-        e.setZtf(str(r.get("ztf")));                     // 涨停封单描述
-        e.setBidAmount(bigDec(r.get("bid_amount")));     // 封单金额(万元)
-        e.setIpod(str(r.get("ipod")));                   // 上市日期(YYYYMMDD)
-        e.setOd(str(r.get("od")));                       // 开板日期(YYYYMMDD)
-        e.setOds(intVal(r.get("ods")));                  // 开板几日
-        e.setIsNewHigh(intVal(r.get("o")));              // 是否新高标识
-        e.setLb(intVal(r.get("lb")));                    // 连板数(强势池)
-        e.setBoardCode(str(r.get("board_code")));
-        e.setBoardName(str(r.get("board_name")));
-        e.setDataSource(source.getCode());
-        e.setSrcDetail(srcDetail);
-        return e;
-    }
+//    private LimitPool toEntity(Map<String, Object> r, SourceType source, String srcDetail) {
+//        LimitPool e = new LimitPool();
+//        e.setTradeDate(toLocalDate(r.get("trade_date")));
+//        e.setTsCode(str(r.get("ts_code")));
+//        e.setStockName(str(r.get("stock_name")));
+//        e.setType(str(r.get("type")));
+//        e.setLatestPrice(bigDec(r.get("latest_price")));  // 最新价(元)
+//        e.setPctChg(bigDec(r.get("pct_chg")));            // 涨跌幅%
+//        e.setBoardPos(intVal(r.get("board_pos")));
+//        e.setIsFirst(intVal(r.get("is_first")));
+//        e.setIsContinuous(intVal(r.get("is_continuous")));
+//        e.setLimitStyle(str(r.get("limit_style")));
+//        // open_time/last_time 已是 HH:mm:ss 字符串
+//        e.setOpenTime(str(r.get("open_time")));
+//        e.setLastTime(str(r.get("last_time")));
+//        e.setOpenTimes(intVal(r.get("open_times")));
+//        e.setBidAmount(bigDec(r.get("bid_amount")));
+//        e.setHs(bigDec(r.get("hs")));                    // 换手率%
+//        e.setTurnover(bigDec(r.get("hs")));              // 换手率%（复用）
+//        e.setZtp(bigDec(r.get("ztp")));                  // 涨停价
+//        e.setAmount(bigDec(r.get("amount")));            // 成交额
+//        e.setFund(bigDec(r.get("fund")));                // 封单资金
+//        e.setLtsz(bigDec(r.get("ltsz")));                // 流通市值
+//        e.setTshare(bigDec(r.get("tshare")));            // 总市值
+//        e.setZf(bigDec(r.get("zf")));                    // 炸板涨幅%
+//        e.setZs(bigDec(r.get("zs")));                    // 炸板振幅%
+//        e.setZttjCt(intVal(r.get("zttj_ct")));           // 连板统计-连板数
+//        e.setZttjDays(intVal(r.get("zttj_days")));       // 连板统计-天数
+//        e.setLb(intVal(r.get("lb")));                    // 强势池连板数
+//        e.setNh(intVal(r.get("nh")));                    // N日新高
+//        e.setZtf(str(r.get("ztf")));                     // 涨停封单描述
+//        e.setBidAmount(bigDec(r.get("bid_amount")));     // 封单金额(万元)
+//        e.setIpod(str(r.get("ipod")));                   // 上市日期(YYYYMMDD)
+//        e.setOd(str(r.get("od")));                       // 开板日期(YYYYMMDD)
+//        e.setOds(intVal(r.get("ods")));                  // 开板几日
+//        e.setIsNewHigh(intVal(r.get("o")));              // 是否新高标识
+//        e.setLb(intVal(r.get("lb")));                    // 连板数(强势池)
+//        e.setBoardCode(str(r.get("board_code")));
+//        e.setBoardName(str(r.get("board_name")));
+//        e.setDataSource(source.getCode());
+//        e.setSrcDetail(srcDetail);
+//        return e;
+//    }
 
     /** 解析 HH:mm:ss 字符串为 LocalTime。 */
     private static LocalTime parseTime(String s) {
@@ -276,6 +304,133 @@ public class DedupWriter {
         return m;
     }
 
+    // 5 个池子独立 writer（插在这里，路由调用）
+    @Transactional(rollbackFor = Exception.class)
+    public void writeLimitUpPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        int newCode = source.getCode();
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || tradeDate == null) continue;
+            Integer existing = limitUpPoolMapper.selectDataSource(tsCode, tradeDate);
+            if (existing != null && existing >= newCode) continue;
+            LimitUpPool e = new LimitUpPool();
+            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            e.setFund(bigDec(r.get("fund")));
+            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            if (existing != null) limitUpPoolMapper.updateRow(e); else limitUpPoolMapper.insertIfAbsent(e);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void writeLimitDownPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        int newCode = source.getCode();
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || tradeDate == null) continue;
+            Integer existing = limitDownPoolMapper.selectDataSource(tsCode, tradeDate);
+            if (existing != null && existing >= newCode) continue;
+            LimitDownPool e = new LimitDownPool();
+            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            e.setPe(bigDec(r.get("pe"))); e.setFba(bigDec(r.get("fba")));
+            e.setDays(intVal(r.get("days"))); e.setOc(intVal(r.get("oc")));
+            if (existing != null) limitDownPoolMapper.updateRow(e); else limitDownPoolMapper.insertIfAbsent(e);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void writeZhabanPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        int newCode = source.getCode();
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || tradeDate == null) continue;
+            Integer existing = zhabanPoolMapper.selectDataSource(tsCode, tradeDate);
+            if (existing != null && existing >= newCode) continue;
+            ZhabanPool e = new ZhabanPool();
+            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            e.setZtp(bigDec(r.get("ztp"))); e.setZf(bigDec(r.get("zf"))); e.setZs(bigDec(r.get("zs")));
+            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            if (existing != null) zhabanPoolMapper.updateRow(e); else zhabanPoolMapper.insertIfAbsent(e);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void writeStrongPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        int newCode = source.getCode();
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || tradeDate == null) continue;
+            Integer existing = strongPoolMapper.selectDataSource(tsCode, tradeDate);
+            if (existing != null && existing >= newCode) continue;
+            StrongPool e = new StrongPool();
+            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            e.setZtp(bigDec(r.get("ztp"))); e.setZs(bigDec(r.get("zs"))); e.setNh(intVal(r.get("nh"))); e.setLb(bigDec(r.get("lb")));
+            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            if (existing != null) strongPoolMapper.updateRow(e); else strongPoolMapper.insertIfAbsent(e);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void writeCixinPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        int newCode = source.getCode();
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || tradeDate == null) continue;
+            Integer existing = cixinPoolMapper.selectDataSource(tsCode, tradeDate);
+            if (existing != null && existing >= newCode) continue;
+            CixinPool e = new CixinPool();
+            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            e.setZtp(bigDec(r.get("ztp"))); e.setOds(intVal(r.get("ods"))); e.setOd(str(r.get("od"))); e.setIpod(str(r.get("ipod")));
+            e.setO(intVal(r.get("o"))); e.setNh(intVal(r.get("nh")));
+            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            if (existing != null) cixinPoolMapper.updateRow(e); else cixinPoolMapper.insertIfAbsent(e);
+        }
+    }
+
+    /** 设置 5 个池子实体的公共字段。 */
+    private void setPoolBaseFields(Object e, Map<String, Object> r, LocalDate tradeDate, String tsCode,
+                                   SourceType source, String srcDetail, LocalDate today, LocalDateTime now) {
+        try {
+            e.getClass().getMethod("setTradeDate", LocalDate.class).invoke(e, tradeDate);
+            e.getClass().getMethod("setTsCode", String.class).invoke(e, tsCode);
+            e.getClass().getMethod("setStockName", String.class).invoke(e, str(r.get("stock_name")));
+            e.getClass().getMethod("setLatestPrice", BigDecimal.class).invoke(e, bigDec(r.get("latest_price")));
+            e.getClass().getMethod("setPctChg", BigDecimal.class).invoke(e, bigDec(r.get("pct_chg")));
+            e.getClass().getMethod("setTurnoverRate", BigDecimal.class).invoke(e, bigDec(r.get("turnover_rate")));
+            e.getClass().getMethod("setBoardCode", String.class).invoke(e, str(r.get("board_code")));
+            try { e.getClass().getMethod("setOpenTime", String.class).invoke(e, str(r.get("open_time"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setLastTime", String.class).invoke(e, str(r.get("last_time"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setOpenTimes", Integer.class).invoke(e, intVal(r.get("open_times"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setBoardPos", Integer.class).invoke(e, intVal(r.get("board_pos"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setIsFirst", Integer.class).invoke(e, intVal(r.get("is_first"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setIsContinuous", Integer.class).invoke(e, intVal(r.get("is_continuous"))); } catch (Exception ignored) {}
+            try { e.getClass().getMethod("setLimitStyle", String.class).invoke(e, str(r.get("limit_style"))); } catch (Exception ignored) {}
+            e.getClass().getMethod("setAmount", BigDecimal.class).invoke(e, bigDec(r.get("amount")));
+            e.getClass().getMethod("setLtsz", BigDecimal.class).invoke(e, bigDec(r.get("ltsz")));
+            e.getClass().getMethod("setTshare", BigDecimal.class).invoke(e, bigDec(r.get("tshare")));
+            e.getClass().getMethod("setDataSource", Integer.class).invoke(e, source.getCode());
+            e.getClass().getMethod("setSrcDetail", String.class).invoke(e, srcDetail);
+            e.getClass().getMethod("setCreateDate", LocalDate.class).invoke(e, today);
+            e.getClass().getMethod("setUpdateDate", LocalDateTime.class).invoke(e, now);
+        } catch (Exception ex) {
+            log.warn("setPoolBaseFields failed: {}", ex.getMessage());
+        }
+    }
+
     // ----------------------------------------------------------------------
     // 路由入口（按 taskType 分派到对应 writer，修复「全部写进 limit_pool」的路由缺失）
     // ----------------------------------------------------------------------
@@ -290,8 +445,11 @@ public class DedupWriter {
             return;
         }
         switch (taskType) {
-            case "LIMIT_UP", "LIMIT_DOWN", "LIMIT_ZHABAN", "LIMIT_POOL", "STRONG_POOL", "CIXIN_POOL" ->
-                    writeLimitPool(rows, source, srcDetail);
+            case "LIMIT_UP" -> writeLimitUpPool(rows, source, srcDetail);
+            case "LIMIT_DOWN" -> writeLimitDownPool(rows, source, srcDetail);
+            case "LIMIT_ZHABAN" -> writeZhabanPool(rows, source, srcDetail);
+            case "STRONG_POOL" -> writeStrongPool(rows, source, srcDetail);
+            case "CIXIN_POOL" -> writeCixinPool(rows, source, srcDetail);
             case "STOCK_DAILY" -> writeStockDaily(rows, source, srcDetail);
             case "STOCK_WEEKLY" -> writeStockWeekly(rows, source, srcDetail);
             case "INDEX_DAILY" -> writeIndexDaily(rows, source, srcDetail);
