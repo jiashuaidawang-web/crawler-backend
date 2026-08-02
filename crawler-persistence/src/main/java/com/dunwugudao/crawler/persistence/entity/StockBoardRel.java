@@ -3,12 +3,14 @@ package com.dunwugudao.crawler.persistence.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
- * A7 股票-板块关联（S4 合力结构：一主线多分支、卡位/助攻/中军/后排）。
- * <p>is_leader/is_midarm 是书要的合力结构标记。非接口直接爬取，由 M1 计算或人工标注。</p>
+ * 板块-个股关联关系（存量快照）。
+ * <p>主键 = (board_code, ts_code, board_type, data_source)，由数据库唯一约束兜底防重。
+ * effective_date 记录关系建立日期（now()），仅作展示，不参与主键。</p>
+ * <p>无 id 列：走自定义 insertOrUpdate / selectDataSource，不走 BaseMapper 的按 id 方法。</p>
  */
 @Data
 @TableName("stock_board_rel")
@@ -16,13 +18,13 @@ public class StockBoardRel {
     private String tsCode;
     private String boardCode;
     private String boardName;
-    private Integer boardType;       // 1：地域 2：行业 3：概念
-    private Integer isLeader;        // 是否板块龙头
-    private Integer isMidarm;        // 是否中军
-    private BigDecimal weight;       // 权重
-    private LocalDate effectiveDate; // 生效日
-    private Integer source;          // 0=东财 1=同花顺
+    private Integer boardType;       // NOT NULL（1=地域 2=行业 3=概念）
+    private Integer isLeader;        // 0/1
+    private Integer isMidarm;        // 0/1
+    private java.math.BigDecimal weight;
+    private LocalDate effectiveDate; // 关系建立日期（now()）
+    private Integer dataSource;      // 0=东财 1=同花顺
+    private String srcDetail;
     private LocalDate createDate;
-    private LocalDate updateDate;
-
+    private LocalDateTime updateDate;
 }

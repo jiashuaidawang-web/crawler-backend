@@ -86,7 +86,7 @@ public class ClaimLoop {
             CrawlResult result = strategy.fetch(ctx);
 
             if (result.getData() != null && !result.getData().isEmpty()) {
-                dedupWriter.writeLimitPool(result.getData(), core.getSource(), entity.getUrl());
+                dedupWriter.write(core.getTaskType(), result.getData(), core.getSource(), entity.getUrl());
             }
             volumeValidator.validate(entity, result.getRowCount());
             claimService.complete(entity.getTaskId(), result.getRowCount(), System.currentTimeMillis() - start);

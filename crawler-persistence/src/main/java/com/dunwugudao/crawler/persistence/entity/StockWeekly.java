@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * A3 个股周线（S6 趋势战法：10/30周均线、RS、RSI）。
@@ -37,5 +38,5 @@ public class StockWeekly {
     private Integer dataSource;      // data_source: 0=东财 1=同花顺
     private LocalDate createDate;    // 创建日期
     private String srcDetail;        // src_detail: 来源URL/接口/备注
-    private LocalDate updateDate;    // 修改日期
+    private LocalDateTime updateDate;    // 修改日期
 }

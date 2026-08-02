@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * A2 个股日线（S1/S2/S6 底层；昨日涨停今表现、八大特征、技术面）。
@@ -50,5 +51,5 @@ public class StockDaily {
     private Integer dataSource;          // data_source: 0=东财 1=同花顺          // 0=东财 1=同花顺
     private LocalDate createDate;    // 创建日期
     private String srcDetail;        // src_detail: 来源URL/接口/备注
-    private LocalDate updateDate;    // 修改日期
+    private LocalDateTime updateDate;    // 修改日期
 }

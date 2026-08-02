@@ -71,6 +71,18 @@ public class XxlJobHandlers {
         XxlJobHelper.log("retryScan reclaimed={} promoted={}", reclaimed, promoted);
     }
 
+    /**
+     * 串联龙虎榜明细：从 dragon_tiger 表读某交易日上榜代码 → 下发 DRAGON_TIGER_DETAIL 子任务。
+     * <p>需在 DRAGON_TIGER 爬完后调用。param: date=2024-01-02（缺失则今天）。</p>
+     */
+    @XxlJob("chainDragonDetails")
+    public void chainDragonDetails() {
+        Map<String, String> p = parse(XxlJobHelper.getJobParam());
+        String date = p.getOrDefault("date", LocalDate.now().format(FMT));
+        int n = seedGenerator.chainDragonTigerDetails(date);
+        XxlJobHelper.log("chainDragonDetails date={} inserted={}", date, n);
+    }
+
     /** 解析 XXL-JOB 的 k1=v1&k2=v2 形式 param。 */
     private Map<String, String> parse(String param) {
         Map<String, String> m = new LinkedHashMap<>();

@@ -20,16 +20,16 @@ public interface LimitPoolMapper extends BaseMapper<LimitPool> {
      */
     @Insert("""
             INSERT INTO limit_pool
-              (trade_date, ts_code, stock_name, limit_type, board_pos, is_first, is_continuous,
+              (trade_date, ts_code, stock_name, type, board_pos, is_first, is_continuous,
                limit_style, open_time, last_time, open_times, bid_amount, turnover, pct_chg,
                reason, board_code, board_name, data_source, src_detail)
             VALUES
-              (#{tradeDate}, #{tsCode}, #{stockName}, #{limitType}, #{boardPos}, #{isFirst}, #{isContinuous},
+              (#{tradeDate}, #{tsCode}, #{stockName}, #{type}, #{boardPos}, #{isFirst}, #{isContinuous},
                #{limitStyle}, #{openTime}, #{lastTime}, #{openTimes}, #{bidAmount}, #{turnover}, #{pctChg},
                #{reason}, #{boardCode}, #{boardName}, #{dataSource}, #{srcDetail})
             ON CONFLICT (ts_code, trade_date) DO UPDATE SET
               stock_name    = EXCLUDED.stock_name,
-              limit_type    = EXCLUDED.limit_type,
+              type          = EXCLUDED.type,
               board_pos     = EXCLUDED.board_pos,
               is_first      = EXCLUDED.is_first,
               is_continuous = EXCLUDED.is_continuous,

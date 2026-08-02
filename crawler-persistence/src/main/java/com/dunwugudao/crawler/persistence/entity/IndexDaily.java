@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * A1 指数日线（S1 技术面维度 + S4/S6 对比基准）。
@@ -26,6 +27,7 @@ public class IndexDaily {
     private BigDecimal amount;       // 成交额(元)
     private BigDecimal turnover;     // 换手率%
     private Integer dataSource;          // data_source: 0=东财 1=同花顺          // 0=东财 1=同花顺
+    private String srcDetail;        // src_detail: 来源URL/接口/备注
     private LocalDate createDate;
-    private LocalDate updateDate;
+    private LocalDateTime updateDate;    // 修改日期
 }

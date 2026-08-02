@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * A8 龙虎榜（S3 主力博弈）。
@@ -46,6 +47,7 @@ public class DragonTiger {
     private String tradeMarketCode;
     // 基础字段
     private Integer dataSource;          // data_source: 0=东财 1=同花顺
+    private String srcDetail;        // src_detail: 来源URL/接口/备注
     private LocalDate createDate;
-    private LocalDate updateDate;
+    private LocalDateTime updateDate;    // 修改日期
 }

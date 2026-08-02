@@ -43,7 +43,12 @@ public class ClaimService {
         if (durationMs != null) {
             t.setDurationMs(durationMs);
         }
-        crawlTaskMapper.update(t, new UpdateWrapper<CrawlTask>().eq("task_id", taskId));
+        // 状态守卫：仅当任务仍为 CLAIMED 时才置 SUCCESS，避免与 retryScan 的 reclaim/promote 竞态
+        int updated = crawlTaskMapper.update(t,
+                new UpdateWrapper<CrawlTask>().eq("task_id", taskId).eq("status", "CLAIMED"));
+        if (updated == 0) {
+            log.warn("task {} complete 跳过（已非 CLAIMED，可能被 retryScan 回收/耗尽）", taskId);
+        }
     }
 
     /**
@@ -70,7 +75,8 @@ public class ClaimService {
             t.setStatus("FAILED");
             t.setFinishedAt(LocalDateTime.now());
         }
-        crawlTaskMapper.update(t, new UpdateWrapper<CrawlTask>().eq("task_id", taskId));
+        crawlTaskMapper.update(t,
+                new UpdateWrapper<CrawlTask>().eq("task_id", taskId).in("status", "CLAIMED", "RETRY"));
         log.warn("task {} -> {} (retryCount={}/{})", taskId, t.getStatus(), t.getRetryCount(), maxRetry);
     }
 

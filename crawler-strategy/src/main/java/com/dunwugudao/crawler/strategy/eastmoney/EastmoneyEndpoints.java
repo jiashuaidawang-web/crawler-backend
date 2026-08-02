@@ -66,10 +66,18 @@ public final class EastmoneyEndpoints {
                             + "&end=" + date + "&lmt=" + lmt;
                 }
                 case CLIST: {
-                    String fsVal = fs != null ? fs : String.valueOf(params.getOrDefault("fs", ""));
+                    String fsVal;
+                    // STOCK_BY_BOARD 的 fs 需要动态拼：b:bk{boardCode}+f:!50
+                    if ("STOCK_BY_BOARD".equals(taskType)) {
+                        String bc = String.valueOf(params.getOrDefault("boardCode", ""));
+                        String bk = bc.toLowerCase(); // board_basic 存 BK0450，接口要小写 bk0450
+                        fsVal = "b:" + bk + "+f:!50";
+                    } else {
+                        fsVal = fs != null ? fs : String.valueOf(params.getOrDefault("fs", ""));
+                    }
                     String fields = String.valueOf(params.getOrDefault("fields", defaultFields(taskType)));
                     return baseUrl
-                            + "?pn=" + page + "&pz=200&po=1&np=1&fltt=2&invt=2"
+                            + "?pn=" + page + "&pz=100&po=1&np=1&fltt=2&invt=2"
                             + "&fs=" + fsVal + "&fields=" + fields;
                 }
                 case DATACENTER: {
@@ -122,6 +130,18 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("BOARD_DAILY", new EndpointSpec(
                 "BOARD_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:2,m:90+t:3,m:90+t:1", null, null));
+        // 地域板块日线（board_type=1）
+        SPEC_BY_TYPE.put("REGION_DAILY", new EndpointSpec(
+                "REGION_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:1+f:!50", null, null));
+        // 行业板块日线（board_type=2）
+        SPEC_BY_TYPE.put("INDUSTRY_DAILY", new EndpointSpec(
+                "INDUSTRY_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:2+f:!50", null, null));
+        // 概念板块日线（board_type=3）
+        SPEC_BY_TYPE.put("CONCEPT_DAILY", new EndpointSpec(
+                "CONCEPT_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:3+f:!50", null, null));
         // 个股主力资金流
         SPEC_BY_TYPE.put("MAIN_FUND_STOCK", new EndpointSpec(
                 "MAIN_FUND_STOCK", "https://push2.eastmoney.com/api/qt/clist/get",
@@ -138,6 +158,10 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("DRAGON_TIGER_DETAIL", new EndpointSpec(
                 "DRAGON_TIGER_DETAIL", "https://datacenter-web.eastmoney.com/api/data/get",
                 ParserType.DATACENTER, null, "RPT_BILLBOARD_DETAIL", null));
+        // 板块-个股关联（fs 动态拼 b:bk{boardCode}+f:!50，在 buildUrl 里处理）
+        SPEC_BY_TYPE.put("STOCK_BY_BOARD", new EndpointSpec(
+                "STOCK_BY_BOARD", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, null, null, null));
     }
 
     private static final Map<String, String> INDEX_SECIDS = new HashMap<>();
@@ -178,12 +202,23 @@ public final class EastmoneyEndpoints {
     static String defaultFields(String taskType) {
         switch (taskType) {
             case "BOARD_DAILY":
-                return "f12,f14,f3,f62,f104,f105";
+                // 含行情明细：f2 价格/f4 涨跌额/f5 成交量/f6 成交额/f7 振幅/f8 换手/f10 量比
+                // f15 最高/f16 最低/f17 今开/f18 昨收/f20 总市值/f21 流通市值
+                // f166 领涨股代码 / f167 领涨股名称
+                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f166,f167";
+            case "REGION_DAILY":
+            case "INDUSTRY_DAILY":
+            case "CONCEPT_DAILY":
+                // 单类型板块行情投影（和 BOARD_DAILY 一致，含领涨股）
+                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f166,f167";
             case "MAIN_FUND_STOCK":
                 // 含 f13 以便补 ts_code 后缀
                 return "f12,f13,f14,f62,f66,f72,f78,f84";
             case "MAIN_FUND_BOARD":
                 return "f12,f14,f62,f66,f72,f78,f84";
+            case "STOCK_BY_BOARD":
+                // f12=股票代码, f13=市场码(补后缀), f14=股票名称
+                return "f12,f13,f14";
             default:
                 return "f12,f14,f3,f62";
         }

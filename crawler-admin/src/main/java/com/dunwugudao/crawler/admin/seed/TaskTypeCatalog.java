@@ -42,14 +42,18 @@ public final class TaskTypeCatalog {
     public static final List<TaskSpec> ALL = List.of(
             new TaskSpec("LIMIT_POOL", 1, true, false, null,
                     "涨停/跌停/炸板池（每日拆成 limit_up/limit_down/zhaban 三个子任务）"),
-            new TaskSpec("BOARD_DAILY", 1, true, false, null, "板块每日行情（市场级）"),
+            new TaskSpec("CIXIN_POOL", 1, true, false, null, "次新股池（市场级）"),
+            new TaskSpec("REGION_DAILY", 1, true, false, null, "地域板块每日行情（市场级，board_type=1）"),
+            new TaskSpec("INDUSTRY_DAILY", 1, true, false, null, "行业板块每日行情（市场级，board_type=2）"),
+            new TaskSpec("CONCEPT_DAILY", 1, true, false, null, "概念板块每日行情（市场级，board_type=3）"),
             new TaskSpec("MAIN_FUND_STOCK", 1, true, false, null, "个股主力资金流（市场级）"),
             new TaskSpec("MAIN_FUND_BOARD", 1, true, false, null, "板块主力资金流（市场级）"),
-            new TaskSpec("DRAGON_TIGER", 1, true, false, null, "龙虎榜（市场级，DragonTigerDetails 需父任务后补）"),
+            new TaskSpec("DRAGON_TIGER", 1, true, false, null, "龙虎榜（市场级）"),
             new TaskSpec("STRONG_POOL", 1, true, false, null, "强势股池（市场级）"),
-            new TaskSpec("STOCK_DAILY", 1, false, true, 1, "个股日线（逐券，需股票池）"),
-            new TaskSpec("STOCK_WEEKLY", 1, false, true, 1, "个股周线（逐券，需股票池）"),
-            new TaskSpec("INDEX_DAILY", 1, false, true, 1, "指数日线（逐券，需指数池）")
+            new TaskSpec("STOCK_DAILY", 1, false, true, 1, "个股日线（逐券）"),
+            new TaskSpec("STOCK_WEEKLY", 1, false, true, 1, "个股周线（逐券）"),
+            new TaskSpec("INDEX_DAILY", 1, false, true, 1, "指数日线（逐券）"),
+            new TaskSpec("STOCK_BY_BOARD", 1, false, false, null, "板块-个股关系（逐板块，需 board_basic 表）")
     );
 
     public static List<TaskSpec> marketWideTypes() {
@@ -80,15 +84,44 @@ public final class TaskTypeCatalog {
     /**
      * params_json 构造（手写 JSON，禁止引入其它 JSON 库）。
      * <ul>
-     *   <li>市场级（code==null 且 limitType==null）：{"tradeDate":"DATE"}</li>
+     *   <li>市场级（code==null 且 limitType==null 且 boardCode==null 且 boardType==null）：{"tradeDate":"DATE"}</li>
      *   <li>涨停/跌停/炸板子任务（limitType!=null）：{"tradeDate":"DATE","limitType":"..."}</li>
+     *   <li>REGION_DAILY / INDUSTRY_DAILY / CONCEPT_DAILY（boardType!=null）：{"boardType":N,"tradeDate":"DATE"}</li>
      *   <li>STOCK_DAILY / STOCK_WEEKLY：{"tsCode":"CODE","tradeDate":"DATE"}</li>
      *   <li>INDEX_DAILY：{"indexCode":"CODE","tradeDate":"DATE"}</li>
+     *   <li>STOCK_BY_BOARD：{"boardCode":"CODE","boardName":"...","boardType":N,"tradeDate":"DATE"}</li>
      * </ul>
      */
     public static String buildParams(String taskType, String date, String code, String limitType) {
+        return buildParams(taskType, date, code, limitType, null, null, null);
+    }
+
+    /** 板块行情专用：带 boardType（REGION/INDUSTRY/CONCEPT_DAILY）。 */
+    public static String buildParams(String taskType, String date, Integer boardType) {
         ObjectNode n = OM.createObjectNode();
-        if (limitType != null) {
+        n.put("boardType", boardType);
+        n.put("tradeDate", date);
+        try {
+            return OM.writeValueAsString(n);
+        } catch (Exception e) {
+            return "{\"boardType\":" + boardType + ",\"tradeDate\":\"" + date + "\"}";
+        }
+    }
+
+    /** STOCK_BY_BOARD 专用：带 boardCode / boardName / boardType。 */
+    public static String buildParams(String taskType, String date, String code, String limitType,
+                                     String boardCode, String boardName, Integer boardType) {
+        ObjectNode n = OM.createObjectNode();
+        if (boardCode != null) {
+            n.put("boardCode", boardCode);
+            if (boardName != null) {
+                n.put("boardName", boardName);
+            }
+            if (boardType != null) {
+                n.put("boardType", boardType);
+            }
+            n.put("tradeDate", date);
+        } else if (limitType != null) {
             n.put("tradeDate", date);
             n.put("limitType", limitType);
         } else if (code != null) {
@@ -105,6 +138,9 @@ public final class TaskTypeCatalog {
             return OM.writeValueAsString(n);
         } catch (Exception e) {
             // 纯字符串拼接，不可能抛异常；兜底直接拼
+            if (boardCode != null) {
+                return "{\"boardCode\":\"" + boardCode + "\",\"tradeDate\":\"" + date + "\"}";
+            }
             if (limitType != null) {
                 return "{\"tradeDate\":\"" + date + "\",\"limitType\":\"" + limitType + "\"}";
             }

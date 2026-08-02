@@ -64,7 +64,7 @@ public class BrowserContextFactory {
 
         String proxy = cfg.getProxyFor(SourceType.TONGHUASHUN);
         if (proxy != null && !proxy.isBlank()) {
-            opts.setProxy(new Proxy(proxy));
+            opts.setProxy(parseProxy(proxy));
         }
 
         BrowserContext ctx = browser.newContext(opts);
@@ -96,7 +96,6 @@ public class BrowserContextFactory {
             List<Map<String, Object>> raw = MAPPER.readValue(
                     Files.readString(file), new TypeReference<List<Map<String, Object>>>() {
                     });
-            String url = "https://" + host;
             for (Map<String, Object> c : raw) {
                 String name = str(c, "name");
                 String value = str(c, "value");
@@ -104,9 +103,10 @@ public class BrowserContextFactory {
                     continue;
                 }
                 Cookie ck = new Cookie(name, value)
-                        .setUrl(url)
                         .setDomain(str(c, "domain"))
                         .setPath(str(c, "path"));
+                // 注意：不要 setUrl——Playwright Java Cookie 代理里 setPath() 会冲掉 url/domain，
+                // 导致 addCookies 报 "should have either url or domain"。用 domain+path 组合即可通过校验。
                 if (c.get("expires") instanceof Number) {
                     ck.setExpires(((Number) c.get("expires")).doubleValue());
                 }
@@ -152,6 +152,7 @@ public class BrowserContextFactory {
         try {
             ck.setSameSite(SameSiteAttribute.valueOf(v.toUpperCase()));
         } catch (IllegalArgumentException e) {
+            // Cookie-编辑器导出常用 "unspecified"，Playwright 无此枚举，回退 Lax。
             ck.setSameSite(SameSiteAttribute.LAX);
         }
     }
@@ -162,6 +163,34 @@ public class BrowserContextFactory {
             return URI.create(url).getHost();
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * 解析 proxy 字符串（http://user:pass@host:port）为 Playwright Proxy，显式设用户名/密码。
+     * <p>注意：{@code new Proxy("http://user:pass@host:port")} 不会自动把 userinfo 作为代理认证发送，
+     * 会导致 407；必须拆出来调 setUsername/setPassword（见 ProxySanityCheck3 验证）。</p>
+     */
+    public static Proxy parseProxy(String proxy) {
+        if (proxy == null || proxy.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(proxy);
+            String host = uri.getHost();
+            int port = uri.getPort();
+            if (host == null || port <= 0) {
+                return new Proxy(proxy);
+            }
+            String userinfo = uri.getUserInfo();
+            if (userinfo != null && userinfo.contains(":")) {
+                String[] parts = userinfo.split(":", 2);
+                return new Proxy(host + ":" + port).setUsername(parts[0]).setPassword(parts[1]);
+            }
+            return new Proxy(host + ":" + port);
+        } catch (Exception e) {
+            // 解析失败回退原行为
+            return new Proxy(proxy);
         }
     }
 }

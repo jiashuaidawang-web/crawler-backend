@@ -2,15 +2,21 @@ package com.dunwugudao.crawler.admin.seed;
 
 import com.dunwugudao.crawler.admin.service.BoardBasicService;
 import com.dunwugudao.crawler.core.model.SourceType;
+import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
+import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
+import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 种子任务生成器（M3-2 核心）。
@@ -38,11 +44,17 @@ public class SeedGenerator {
     private final CrawlTaskMapper mapper;
     private final StockUniverseProvider universe;
     private final BoardBasicService boardBasicService;
+    private final BoardBasicMapper boardBasicMapper;
+    private final DragonTigerMapper dragonTigerMapper;
 
-    public SeedGenerator(CrawlTaskMapper mapper, StockUniverseProvider universe, BoardBasicService boardBasicService) {
+    public SeedGenerator(CrawlTaskMapper mapper, StockUniverseProvider universe,
+                         BoardBasicService boardBasicService, BoardBasicMapper boardBasicMapper,
+                         DragonTigerMapper dragonTigerMapper) {
         this.mapper = mapper;
         this.universe = universe;
         this.boardBasicService = boardBasicService;
+        this.boardBasicMapper = boardBasicMapper;
+        this.dragonTigerMapper = dragonTigerMapper;
     }
 
     /** 单个交易日的市场级 + 逐券种子（dailyCloseSeed 用）。 */
@@ -65,6 +77,15 @@ public class SeedGenerator {
                 for (String limitType : LIMIT_SUBTYPES) {
                     n += insertOne(limitType, source, date, null, null);
                 }
+            } else if ("REGION_DAILY".equals(spec.taskType())) {
+                n += insertOne(spec.taskType(), source, date, null, null,
+                        TaskTypeCatalog.buildParams(spec.taskType(), date, 1));
+            } else if ("INDUSTRY_DAILY".equals(spec.taskType())) {
+                n += insertOne(spec.taskType(), source, date, null, null,
+                        TaskTypeCatalog.buildParams(spec.taskType(), date, 2));
+            } else if ("CONCEPT_DAILY".equals(spec.taskType())) {
+                n += insertOne(spec.taskType(), source, date, null, null,
+                        TaskTypeCatalog.buildParams(spec.taskType(), date, 3));
             } else {
                 n += insertOne(spec.taskType(), source, date, null, null);
             }
@@ -80,8 +101,33 @@ public class SeedGenerator {
                 }
             }
         }
+        // 逐板块：从 board_basic 表读去重 boardCode，每个板块一个任务（板块-个股关联初始化）
+        n += seedByBoard(source, date);
         log.info("dailySeed date={} source={} inserted={}", date, source, n);
         return n;
+    }
+
+    /** 逐板块种子：读 board_basic 表去重 boardCode，每个建一条 STOCK_BY_BOARD 任务。 */
+    private int seedByBoard(int source, String date) {
+        List<BoardBasic> boards = boardBasicMapper.selectList(null);
+        // 按 boardCode 去重（保留首位）
+        Set<String> seen = new LinkedHashSet<>();
+        List<BoardBasic> deduped = new ArrayList<>();
+        for (BoardBasic b : boards) {
+            if (b.getBoardCode() != null && seen.add(b.getBoardCode())) {
+                deduped.add(b);
+            }
+        }
+        int total = 0;
+        for (BoardBasic b : deduped) {
+            String params = TaskTypeCatalog.buildParams(
+                    "STOCK_BY_BOARD", date, null, null,
+                    b.getBoardCode(), b.getBoardName(), b.getBoardType());
+            CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, params);
+            total += mapper.insertIfAbsent(task);
+        }
+        log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
+        return total;
     }
 
     /**
@@ -154,7 +200,7 @@ public class SeedGenerator {
         List<CrawlTask> batch = new ArrayList<>(BATCH);
         int total = 0;
         for (String code : codes) {
-            // 逐券唯一键：DRAGON_TIGER_DETAIL|source|code|date
+            // 逐券唯一键：DRAGON_TIGER_DETAIL|source|source|code|date
             batch.add(buildTask("DRAGON_TIGER_DETAIL", 1, date, code, 1,
                     TaskTypeCatalog.buildParams("DRAGON_TIGER_DETAIL", date, code)));
             if (batch.size() >= BATCH) {
@@ -167,6 +213,27 @@ public class SeedGenerator {
         return total;
     }
 
+    /**
+     * 自动串联：从 dragon_tiger 表读某交易日上榜代码 → 批量下发 DRAGON_TIGER_DETAIL 子任务。
+     * <p>设计为显式调用（XXL-JOB / REST），而非 dailySeed 自动触发，原因：</p>
+     * <ul>
+     *   <li>依赖「DRAGON_TIGER 已爬完并落库 dragon_tiger 表」，dailySeed 触发时数据未就绪；</li>
+     *   <li>显式触发可在 DRAGON_TIGER 跑完后按需调用，支持单日回填与重试。</li>
+     * </ul>
+     * @param date 交易日（yyyy-MM-dd）
+     * @return 新插入的 DRAGON_TIGER_DETAIL 任务数；dragon_tiger 无记录返回 0
+     */
+    public int chainDragonTigerDetails(String date) {
+        LocalDate d = LocalDate.parse(date, FMT);
+        List<String> codes = dragonTigerMapper.selectDistinctCodes(d);
+        if (codes.isEmpty()) {
+            log.info("chainDragonTigerDetails date={} 无上榜代码（dragon_tiger 表无记录），跳过", date);
+            return 0;
+        }
+        log.info("chainDragonTigerDetails date={} 读到 {} 个上榜代码，开始下发 DRAGON_TIGER_DETAIL", date, codes.size());
+        return seedDragonTigerDetails(date, codes);
+    }
+
     private int flush(List<CrawlTask> batch) {
         if (batch.isEmpty()) {
             return 0;
@@ -176,6 +243,11 @@ public class SeedGenerator {
 
     private int insertOne(String taskType, int source, String date, String code, Integer expected) {
         return mapper.insertIfAbsent(buildTask(taskType, source, date, code, expected));
+    }
+
+    /** 带自定义 params 的 insertOne（用于 REGION/INDUSTRY/CONCEPT_DAILY 等需要传 boardType 的场景）。 */
+    private int insertOne(String taskType, int source, String date, String code, Integer expected, String params) {
+        return mapper.insertIfAbsent(buildTask(taskType, source, date, code, expected, params));
     }
 
     private CrawlTask buildTask(String taskType, int source, String date, String code, Integer expected) {

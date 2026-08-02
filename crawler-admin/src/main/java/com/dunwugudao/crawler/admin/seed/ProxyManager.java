@@ -1,28 +1,28 @@
 package com.dunwugudao.crawler.admin.seed;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.dunwugudao.crawler.strategy.eastmoney.KuaidailiProxyProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
 import org.apache.http.client.fluent.Executor;
 import org.apache.http.client.fluent.Request;
 
 import java.net.URI;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 代理管理器：获取代理 + 构建 Executor + 报告质量 + 失败重试。
+ * 代理管理器：获取代理 + 构建 Executor + 失败重试。
+ *
+ * <p>代理来源已从旧池子（124.223.220.245:8088）切换为快代理私密代理（KuaidailiProxyProvider），
+ * 与 worker 模块统一使用同一付费代理源。</p>
  */
 @Slf4j
 public class ProxyManager {
 
-    private static final String PROXY_POOL_URL = "http://124.223.220.245:8088";
     private static final int MAX_RETRIES = 3;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final KuaidailiProxyProvider proxyProvider = new KuaidailiProxyProvider();
 
     /**
-     * 执行带代理的 HTTP 请求（自动重试 + 报告质量）。
+     * 执行带代理的 HTTP 请求（自动重试）。
      *
      * @param url    请求 URL
      * @return 响应内容，失败返回 null
@@ -37,7 +37,6 @@ public class ProxyManager {
 
             // 解析代理信息用于日志
             String proxyInfo = extractProxyInfo(proxyStr);
-            String supplier = extractSupplier(proxyStr);
             long start = System.currentTimeMillis();
 
             try {
@@ -56,14 +55,11 @@ public class ProxyManager {
                 String resp = executor.execute(request).returnContent().asString();
                 int latency = (int) (System.currentTimeMillis() - start);
 
-                // 报告成功
-                report(proxyStr, true, latency, supplier);
 
                 // 验证响应不是空的或错误
                 if (resp == null || resp.isEmpty() || resp.contains("502") || resp.contains("Bad Gateway")) {
                     log.warn("[ProxyManager] 代理返回错误响应 attempt={}/{} proxy={} latency={}ms resp={}",
                             attempt, MAX_RETRIES, proxyInfo, latency, resp.substring(0, Math.min(200, resp.length())));
-                    report(proxyStr, false, latency, supplier);
                     continue;
                 }
 
@@ -74,8 +70,6 @@ public class ProxyManager {
                 log.warn("[ProxyManager] 请求失败 attempt={}/{} proxy={} latency={}ms error={}",
                         attempt, MAX_RETRIES, proxyInfo, latency, e.getMessage());
 
-                // 报告失败
-                report(proxyStr, false, latency, supplier);
             }
         }
 
@@ -103,38 +97,15 @@ public class ProxyManager {
     }
 
     /**
-     * 从代理池获取一个代理。
+     * 从快代理提取 1 个 IP（与 worker 统一代理源）。
+     * 替换原实现：不再从 124.223.220.245:8088 取代理。
      */
     public String acquireProxy() {
         try {
-            String resp = Executor.newInstance()
-                    .execute(Request.Get(PROXY_POOL_URL + "/proxy/acquire"))
-                    .returnContent().asString();
-            JsonNode node = objectMapper.readTree(resp);
-            String proxy = node.path("proxy").asText(null);
-            if (proxy != null && !proxy.isEmpty()) {
-                return proxy;
-            }
-            return null;
+            return proxyProvider.acquire();
         } catch (Exception e) {
-            log.warn("获取代理失败：{}", e.getMessage());
+            log.warn("获取快代理失败：{}", e.getMessage());
             return null;
-        }
-    }
-
-    /**
-     * 报告代理使用结果。
-     */
-    public void report(String proxy, boolean success, int latencyMs, String supplier) {
-        try {
-            String json = String.format("{\"proxy\":\"%s\",\"success\":%s,\"latency_ms\":%d,\"supplier\":\"%s\"}",
-                    proxy.replace("\"", "\\\""), success, latencyMs, supplier != null ? supplier : "");
-            Executor.newInstance()
-                    .execute(Request.Post(PROXY_POOL_URL + "/proxy/report")
-                            .addHeader("Content-Type", "application/json")
-                            .bodyString(json, org.apache.http.entity.ContentType.APPLICATION_JSON));
-        } catch (Exception e) {
-            // 忽略报告失败
         }
     }
 
@@ -180,8 +151,4 @@ public class ProxyManager {
         }
     }
 
-    private String extractSupplier(String proxy) {
-        // 从代理字符串无法直接获取 supplier，返回 null
-        return null;
-    }
 }

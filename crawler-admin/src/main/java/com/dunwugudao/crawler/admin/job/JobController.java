@@ -65,4 +65,18 @@ public class JobController {
         r.put("promoted", promoted);
         return r;
     }
+
+    /**
+     * 串联龙虎榜明细：从 dragon_tiger 表读某交易日上榜代码 → 下发 DRAGON_TIGER_DETAIL 子任务。
+     * <p>需在 DRAGON_TIGER 爬完后调用。param: date=2024-01-02（缺失则今天）。</p>
+     */
+    @PostMapping("/chain-dragon-details")
+    public Map<String, Object> chainDragonDetails(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.chainDragonTigerDetails(d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
 }

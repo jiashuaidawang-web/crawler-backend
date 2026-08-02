@@ -31,19 +31,26 @@ import java.util.Random;
 public class EastmoneyApiStrategy implements SourceStrategy {
 
     private static final int POOL_MAX_PAGES = 50; // 池/明细安全上限（配合「空即停」）
-    private static final String PROXY_POOL_URL = "http://124.223.220.245:8088";
-    private static final int PROXY_MAX_RETRIES = 8;
 
     private final AntiCrawlConfig antiCrawlConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final EastmoneyClient client = new EastmoneyClient();
-    private final ProxyClient proxyClient = new ProxyClient(PROXY_POOL_URL);
+    /** Worker 级 IP 管理：1 worker = 1 IP，失败后才换新。替换原 ProxyClient 按请求取 IP。 */
+    private WorkerProxyManager workerProxyManager;
     private final RateLimiter rateLimiter;
     private final Random random = new Random();
 
     public EastmoneyApiStrategy(AntiCrawlConfig antiCrawlConfig) {
         this.antiCrawlConfig = antiCrawlConfig;
         this.rateLimiter = new RateLimiter(antiCrawlConfig.getRateLimitPerSec());
+    }
+
+    /**
+     * 注入 WorkerProxyManager（由 StrategyFactoryConfig 在装配时传入）。
+     * 必须在 worker 启动前调用，否则 fetch 会因 manager 为 null 失败。
+     */
+    public void setWorkerProxyManager(WorkerProxyManager workerProxyManager) {
+        this.workerProxyManager = workerProxyManager;
     }
 
     @Override
@@ -67,20 +74,31 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case CLIST: {
                 String td = EastmoneyEndpoints.requireTradeDate(params);
                 int page = 1;
+                int totalPages = 1;
                 while (true) {
                     rateLimiter.acquire();
                     String url = spec.buildUrl(params, page);
-                    String resp = fetchWithProxy(url, ua);
+                    String resp = fetchWithWorkerProxy(url, ua);
                     lastRaw = resp;
                     JsonNode root = readTree(resp);
                     JsonNode data = root.path("data");
-                    allRows.addAll(parseClist(data, spec, td));
-                    int totalPages = data.path("pages").asInt(1);
-                    int curPage = data.path("page").asInt(page);
-                    if (curPage >= totalPages) {
+                    allRows.addAll(parseClist(data, spec, td, params));
+                    // 翻页：优先用 pages；缺失则用 total+pz 算（push2 接口只有 total 无 pages）
+                    int pagesFromField = data.path("pages").asInt(0);
+                    if (pagesFromField > 0) {
+                        totalPages = pagesFromField;
+                    } else {
+                        int total = data.path("total").asInt(0);
+                        int pz = 200;
+                        try {
+                            pz = Integer.parseInt(String.valueOf(params.getOrDefault("pz", "200")));
+                        } catch (NumberFormatException ignored) { }
+                        totalPages = (total <= 0) ? 1 : ((total + pz - 1) / pz);
+                    }
+                    if (page >= totalPages) {
                         break;
                     }
-                    page = curPage + 1;
+                    page++;
                 }
                 break;
             }
@@ -91,7 +109,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 while (pageIdx < POOL_MAX_PAGES) {
                     rateLimiter.acquire();
                     String url = spec.buildUrl(params, pageIdx);
-                    String resp = fetchWithProxy(url, ua);
+                    String resp = fetchWithWorkerProxy(url, ua);
                     lastRaw = resp;
                     JsonNode root = readTree(resp);
                     List<Map<String, Object>> rows = (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL)
@@ -108,7 +126,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case KLINE: {
                 rateLimiter.acquire();
                 String url = spec.buildUrl(params, 1);
-                String resp = fetchWithProxy(url, ua);
+                String resp = fetchWithWorkerProxy(url, ua);
                 lastRaw = resp;
                 JsonNode root = readTree(resp);
                 allRows.addAll(parseKline(root.path("data"), spec, params));
@@ -128,36 +146,57 @@ public class EastmoneyApiStrategy implements SourceStrategy {
     }
 
     /**
-     * 用代理池的 IP 发请求（每次换新 IP，失败重试）。
-     * 成功 → report(true) → IP 回冷却池；失败 → report(false) → IP 丢弃 → 换新 IP 重试。
+     * 用 Worker 级代理发请求（极简方案：失败后才换新 IP）。
+     * <p>与原 {@code fetchWithProxy} 的关键区别：</p>
+     * <ul>
+     *   <li>不再每次换新 IP——用 worker 当前绑定的同一个 IP。</li>
+     *   <li>代理级错误（连接超时/重置/SSL/407）→ 标记失效 → 抛异常 → ClaimLoop 重试时自动换新 IP。</li>
+     *   <li>业务错误（HTTP 200 但 rc:102）→ 不标记失效 → 正常返回空数据。</li>
+     * </ul>
      */
-    private String fetchWithProxy(String url, String ua) {
-        for (int attempt = 0; attempt < PROXY_MAX_RETRIES; attempt++) {
-            // 每次请求换新 IP
-            ProxyClient.ProxyInfo proxyInfo = proxyClient.acquire();
-            String proxy = proxyInfo != null ? proxyInfo.getProxy() : null;
-            String supplier = proxyInfo != null ? proxyInfo.getSupplier() : "";
-
-            try {
-                long start = System.currentTimeMillis();
-                String resp = client.get(url, ua, proxy);
-                int latencyMs = (int) (System.currentTimeMillis() - start);
-                // 成功 → report true → IP 回冷却池
-                proxyClient.report(proxy != null ? proxy : "", true, latencyMs, supplier);
-                return resp;
-            } catch (Exception e) {
-                // 失败 → report false → IP 丢弃 → 换新 IP 重试
-                proxyClient.report(proxy != null ? proxy : "", false, 0, supplier);
-            }
+    private String fetchWithWorkerProxy(String url, String ua) {
+        if (workerProxyManager == null) {
+            throw new IllegalStateException("WorkerProxyManager 未注入，请在装配时调用 setWorkerProxyManager()");
         }
-        throw new RuntimeException("fetchWithProxy: all " + PROXY_MAX_RETRIES + " retries failed for " + url);
+        String proxy = workerProxyManager.getProxy();
+        try {
+            return client.get(url, ua, proxy);
+        } catch (Exception e) {
+            // 判断是否为代理级错误（需要换 IP）vs 业务错误（IP 没问题）
+            if (isProxyFailure(e)) {
+                workerProxyManager.invalidate();
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 判断异常是否由代理/IP 问题引起（需要换新 IP），而非目标站点业务错误。
+     * 代理级错误特征：连接超时、连接重置、SSL 握手失败、407 认证失败、无法建立隧道。
+     */
+    private static boolean isProxyFailure(Exception e) {
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        String cls = e.getClass().getSimpleName().toLowerCase();
+        // 连接层面错误
+        if (cls.contains("sockettimeout") && msg.contains("connect")) return true;
+        if (cls.contains("connectexception") && msg.contains("refused")) return true;
+        if (cls.contains("socketexception") && msg.contains("reset")) return true;
+        if (cls.contains("ssl") || cls.contains("handshake")) return true;
+        // HTTP 407 代理认证失败
+        if (msg.contains("407") || msg.contains("proxy authentication")) return true;
+        // 无法建立隧道（HTTPS through proxy）
+        if (msg.contains("unable to tunnel") || msg.contains("tunnel")) return true;
+        // 连接超时（读）通常是代理慢/挂了
+        if (cls.contains("sockettimeout") && msg.contains("read")) return true;
+        // 业务错误（东财返回 rc:102 但 HTTP 200）不在此列——那些是正常响应，不抛异常
+        return false;
     }
 
     // ----------------------------------------------------------------------
     // 解析器
     // ----------------------------------------------------------------------
 
-    private List<Map<String, Object>> parseClist(JsonNode data, EastmoneyEndpoints.EndpointSpec spec, String tradeDate) {
+    private List<Map<String, Object>> parseClist(JsonNode data, EastmoneyEndpoints.EndpointSpec spec, String tradeDate, Map<String, Object> params) {
         List<Map<String, Object>> rows = new ArrayList<>();
         JsonNode diff = data.path("diff");
         if (!diff.isArray()) {
@@ -167,14 +206,32 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             Map<String, Object> row = new HashMap<>();
             switch (spec.getTaskType()) {
                 case "BOARD_DAILY":
+                case "REGION_DAILY":
+                case "INDUSTRY_DAILY":
+                case "CONCEPT_DAILY":
                     row.put("board_code", txt(n, "f12"));
                     row.put("board_name", txt(n, "f14"));
+                    row.put("board_type", parseInt(params.get("boardType")));
                     row.put("pct_chg", num(n, "f3"));
                     row.put("main_net", num(n, "f62"));
-                    // TODO M6: board_daily.amount 东财 clist 无直接字段，暂置 NULL（需另取或下游聚合）
-                    row.put("amount", null);
+                    // 行情明细（基于实测 f 码映射）
+                    row.put("price", num(n, "f2"));                   // 价格（收盘价）
+                    row.put("rise_fall", num(n, "f4"));               // 涨跌额
+                    row.put("volume", num(n, "f5"));                  // 成交量（手）
+                    row.put("amplitude", num(n, "f7"));               // 振幅%
+                    row.put("high_price", num(n, "f15"));             // 最高价格
+                    row.put("low_price", num(n, "f16"));              // 最低价格
+                    row.put("today_open_price", num(n, "f17"));       // 今开
+                    row.put("yesterday_received_price", num(n, "f18")); // 昨收
+                    row.put("volume_ratio", num(n, "f10"));           // 量比
+                    row.put("turnover_ratio", num(n, "f8"));          // 换手率%
+                    row.put("total_market_value", num(n, "f20"));     // 总市值
+                    row.put("circulation_market_value", num(n, "f21")); // 流通市值
+                    row.put("amount", num(n, "f6"));                  // 成交额(元)
                     row.put("up_count", toInt(num(n, "f104")));
                     row.put("down_count", toInt(num(n, "f105")));
+                    row.put("leading_code", txt(n, "f166"));        // 领涨股代码
+                    row.put("leading_name", txt(n, "f167"));        // 领涨股名称
                     // TODO M6: limit_up_count 东财 clist 无直接字段，置 NULL
                     //          下游用 stock_board_rel × limit_pool 聚合计算
                     row.put("limit_up_count", null);
@@ -182,6 +239,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 case "MAIN_FUND_STOCK":
                     row.put("obj_type", "stock");
                     row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "f12"), txt(n, "f13")));
+                    // 主键五列 NOT NULL：个股级只对应 ts_code，其余代码列填占位 "0"
+                    row.put("board_code", "0");
+                    row.put("index_code", "0");
                     row.put("main_net", num(n, "f62"));
                     row.put("super_big", num(n, "f66"));
                     row.put("big_net", num(n, "f72"));
@@ -191,11 +251,25 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 case "MAIN_FUND_BOARD":
                     row.put("obj_type", "board");
                     row.put("board_code", txt(n, "f12"));
+                    // 主键五列 NOT NULL：板块级只对应 board_code，其余代码列填占位 "0"
+                    row.put("ts_code", "0");
+                    row.put("index_code", "0");
                     row.put("main_net", num(n, "f62"));
                     row.put("super_big", num(n, "f66"));
                     row.put("big_net", num(n, "f72"));
                     row.put("mid_net", num(n, "f78"));
                     row.put("small_net", num(n, "f84"));
+                    break;
+                case "STOCK_BY_BOARD":
+                    // 板块-个股关联：board 信息从 params 传入（seed 时从 board_basic 表补），股票信息从 diff 取
+                    // is_leader/is_midarm/weight 东财接口不返回，暂置 null（TODO M6 下游算）
+                    row.put("board_code", String.valueOf(params.getOrDefault("boardCode", "")));
+                    row.put("board_name", String.valueOf(params.getOrDefault("boardName", "")));
+                    row.put("board_type", parseInt(params.get("boardType")));
+                    row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "f12"), txt(n, "f13")));
+                    row.put("is_leader", null);
+                    row.put("is_midarm", null);
+                    row.put("weight", null);
                     break;
                 default:
                     // 通用兜底：用 EastmoneyFieldMap 投影
@@ -218,6 +292,8 @@ public class EastmoneyApiStrategy implements SourceStrategy {
      * 解析 kline（日/周线）。
      * <p>fields2 固定顺序：日期,开盘,收盘,最高,最低,成交量,成交额,振幅,涨跌幅,涨跌额,换手率。
      * pre_close 用上一行 close 推算（首行用当天 close 兜底）。</p>
+     * <p>列裁剪：INDEX_DAILY 只写指数表有的列（open/high/low/close/pre_close/pct_chg/vol/amount/turnover），
+     * 不携带个股专属列（total_mv/circ_mv/pe/is_limit_up 等）。STOCK_DAILY / STOCK_WEEKLY 各自按对应表字段写。</p>
      */
     private List<Map<String, Object>> parseKline(JsonNode data, EastmoneyEndpoints.EndpointSpec spec, Map<String, Object> params) {
         List<Map<String, Object>> rows = new ArrayList<>();
@@ -226,6 +302,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             return rows;
         }
         Double prevClose = null;
+        String taskType = spec.getTaskType();
+        boolean isIndex = "INDEX_DAILY".equals(taskType);
+        boolean isWeekly = "STOCK_WEEKLY".equals(taskType);
         for (JsonNode line : klines) {
             String[] f = line.asText().split(",");
             if (f.length < 11) {
@@ -245,16 +324,37 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             row.put("turnover", toDouble(f[10]));              // f61 换手率%
             // pre_close：首行用当天 close 兜底，后续用上一行 close
             row.put("pre_close", prevClose != null ? prevClose : toDouble(f[2]));
-            if ("INDEX_DAILY".equals(spec.getTaskType())) {
+
+            if (isIndex) {
+                // 指数日线：仅指数表列，不携带个股专属字段
                 String idx = String.valueOf(params.get("indexCode"));
                 row.put("index_code", idx);
                 row.put("index_name", EastmoneyEndpoints.indexName(idx));
-            } else {
+            } else if (isWeekly) {
+                // 个股周线：周线表列（无 total_mv/circ_mv/pe/is_limit_up 等日线专属）
                 row.put("ts_code", String.valueOf(params.get("tsCode")));
                 row.put("stock_name", txt(data, "name"));
+            } else {
+                // 个股日线：写真实 kline 列；其余 stock_daily 列（total_mv/circ_mv/pe/is_limit_up 等）置 null
+                row.put("ts_code", String.valueOf(params.get("tsCode")));
+                row.put("stock_name", txt(data, "name"));
+                // TODO M6: total_mv/circ_mv/pe/is_limit_up/leader_code/industry_code 等需其它接口补全
+                row.put("total_mv", null);
+                row.put("circ_mv", null);
+                row.put("pe", null);
+                row.put("is_limit_up", null);
+                row.put("is_limit_down", null);
+                row.put("volume_ratio", null);
+                row.put("avg_price", null);
+                row.put("main_net", null);
+                row.put("pe_static", null);
+                row.put("leader_code", null);
+                row.put("industry_code", null);
+                row.put("concept_code", null);
+                row.put("market_code", null);
             }
+
             prevClose = toDouble(f[2]);  // 记录当前 close 供下一行用
-            row.put("trade_date", f[0]);
             rows.add(row);
         }
         return rows;
@@ -462,6 +562,25 @@ public class EastmoneyApiStrategy implements SourceStrategy {
 
     private static Integer toInt(Double d) {
         return d == null ? null : d.intValue();
+    }
+
+    /** Object（params 传入）→ Integer，null/空串兜底为 null。 */
+    private static Integer parseInt(Object o) {
+        if (o == null) {
+            return null;
+        }
+        if (o instanceof Number n) {
+            return n.intValue();
+        }
+        String s = String.valueOf(o).trim();
+        if (s.isEmpty() || "-".equals(s)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static Double toDouble(String s) {

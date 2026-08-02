@@ -32,3 +32,12 @@ anti-crawl:
   ua-pool:
     - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   proxy-list: []
+
+# 快代理（kuaidaili）私密代理：密钥外置。未配置时 KuaidailiProxyProvider 使用兜底硬编码值。
+# 生产建议改为环境变量引用：secret-id: ${KUAIDAILI_SECRET_ID}
+proxy:
+  kuaidaili:
+    secret-id: o3icyopd76ugn5hcya8g
+    signature: 7dz6v5e9ba1bkejun2q9eobgdhrovfjm
+    username: d2383368918
+    password: tft4pvct
