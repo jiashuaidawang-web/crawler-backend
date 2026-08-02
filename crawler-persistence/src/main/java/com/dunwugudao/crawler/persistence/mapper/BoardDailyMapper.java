@@ -6,19 +6,35 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
 
 /**
  * 板块日线 Mapper。
- * <p>主键 (board_code, trade_date)，幂等 upsert。</p>
+ * <p>主键 (board_code, trade_date)，openGauss 兼容（无 ON CONFLICT）。</p>
  */
 @Mapper
 public interface BoardDailyMapper extends BaseMapper<BoardDaily> {
 
-    /**
-     * 幂等写入：以 (board_code, trade_date) 为自然键，冲突时更新全部业务列并刷新 data_source / src_detail。
-     */
+    @Select("SELECT data_source FROM board_daily WHERE board_code = #{boardCode} AND trade_date = #{tradeDate}")
+    Integer selectDataSource(@Param("boardCode") String boardCode, @Param("tradeDate") LocalDate tradeDate);
+
+    @Update("""
+            UPDATE board_daily SET
+              board_name = #{boardName}, board_type = #{boardType}, pct_chg = #{pctChg}, amount = #{amount},
+              up_count = #{upCount}, down_count = #{downCount}, limit_up_count = #{limitUpCount},
+              leading_code = #{leadingCode}, leading_name = #{leadingName}, main_net = #{mainNet},
+              board_code2 = #{boardCode2}, data_source = #{dataSource}, src_detail = #{srcDetail},
+              price = #{price}, rise_fall = #{riseFall}, volume = #{volume}, amplitude = #{amplitude},
+              high_price = #{highPrice}, low_price = #{lowPrice}, today_open_price = #{todayOpenPrice},
+              yesterday_received_price = #{yesterdayReceivedPrice}, volume_ratio = #{volumeRatio},
+              turnover_ratio = #{turnoverRatio}, total_market_value = #{totalMarketValue},
+              circulation_market_value = #{circulationMarketValue}, update_date = #{updateDate}
+            WHERE board_code = #{boardCode} AND trade_date = #{tradeDate}
+            """)
+    int updateRow(BoardDaily row);
+
     @Insert("""
             INSERT INTO board_daily
               (trade_date, board_code, board_name, board_type, pct_chg, amount, up_count, down_count,
@@ -26,46 +42,15 @@ public interface BoardDailyMapper extends BaseMapper<BoardDaily> {
                price, rise_fall, volume, amplitude, high_price, low_price, today_open_price,
                yesterday_received_price, volume_ratio, turnover_ratio, total_market_value,
                circulation_market_value, create_date, update_date)
-            VALUES
-              (#{tradeDate}, #{boardCode}, #{boardName}, #{boardType}, #{pctChg}, #{amount}, #{upCount}, #{downCount},
+            SELECT
+              #{tradeDate}, #{boardCode}, #{boardName}, #{boardType}, #{pctChg}, #{amount}, #{upCount}, #{downCount},
                #{limitUpCount}, #{leadingCode}, #{leadingName}, #{mainNet}, #{boardCode2}, #{dataSource}, #{srcDetail},
                #{price}, #{riseFall}, #{volume}, #{amplitude}, #{highPrice}, #{lowPrice}, #{todayOpenPrice},
                #{yesterdayReceivedPrice}, #{volumeRatio}, #{turnoverRatio}, #{totalMarketValue},
-               #{circulationMarketValue}, #{createDate}, #{updateDate})
-            ON CONFLICT (board_code, trade_date) DO UPDATE SET
-              board_name     = EXCLUDED.board_name,
-              board_type     = EXCLUDED.board_type,
-              pct_chg        = EXCLUDED.pct_chg,
-              amount         = EXCLUDED.amount,
-              up_count       = EXCLUDED.up_count,
-              down_count     = EXCLUDED.down_count,
-              limit_up_count = EXCLUDED.limit_up_count,
-              leading_code   = EXCLUDED.leading_code,
-              leading_name   = EXCLUDED.leading_name,
-              main_net       = EXCLUDED.main_net,
-              board_code2    = EXCLUDED.board_code2,
-              data_source    = EXCLUDED.data_source,
-              src_detail     = EXCLUDED.src_detail,
-              price          = EXCLUDED.price,
-              rise_fall      = EXCLUDED.rise_fall,
-              volume         = EXCLUDED.volume,
-              amplitude      = EXCLUDED.amplitude,
-              high_price     = EXCLUDED.high_price,
-              low_price      = EXCLUDED.low_price,
-              today_open_price = EXCLUDED.today_open_price,
-              yesterday_received_price = EXCLUDED.yesterday_received_price,
-              volume_ratio   = EXCLUDED.volume_ratio,
-              turnover_ratio = EXCLUDED.turnover_ratio,
-              total_market_value = EXCLUDED.total_market_value,
-              circulation_market_value = EXCLUDED.circulation_market_value,
-              update_date    = EXCLUDED.update_date
+               #{circulationMarketValue}, #{createDate}, #{updateDate}
+            WHERE NOT EXISTS (
+              SELECT 1 FROM board_daily WHERE board_code = #{boardCode} AND trade_date = #{tradeDate}
+            )
             """)
-    int insertOrUpdate(BoardDaily row);
-
-    /**
-     * 读取某自然键已存在的 data_source，供优先级覆写裁决使用。
-     * @return 已存在行优先级代码；无记录返回 null
-     */
-    @Select("SELECT data_source FROM board_daily WHERE board_code = #{boardCode} AND trade_date = #{tradeDate}")
-    Integer selectDataSource(@Param("boardCode") String boardCode, @Param("tradeDate") LocalDate tradeDate);
+    int insertIfAbsent(BoardDaily row);
 }

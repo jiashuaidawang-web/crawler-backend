@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +107,8 @@ public class DedupWriter {
         return precedence.getOrDefault(tableName, SourceType.EASTMONEY);
     }
 
-    /** 写入板块日线（board_daily）。逐行幂等 upsert，主键 (board_code, trade_date)。 */
+    /** 写入板块日线（board_daily）。openGauss 兼容：select → update/insert。 */
+    @Transactional(rollbackFor = Exception.class)
     public void writeBoardDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         int newCode = source.getCode();
         LocalDateTime now = LocalDateTime.now();
@@ -118,7 +120,6 @@ public class DedupWriter {
                 log.warn("skip board_daily row missing board_code/trade_date: {}", r);
                 continue;
             }
-            // 优先级裁决：已存在且优先级 >= 新来源 → 不覆盖
             Integer existing = boardDailyMapper.selectDataSource(boardCode, tradeDate);
             if (existing != null && existing >= newCode) {
                 continue;
@@ -126,7 +127,11 @@ public class DedupWriter {
             BoardDaily entity = toBoardDailyEntity(r, source, srcDetail);
             entity.setCreateDate(today);
             entity.setUpdateDate(now);
-            boardDailyMapper.insertOrUpdate(entity);
+            if (existing != null) {
+                boardDailyMapper.updateRow(entity);
+            } else {
+                boardDailyMapper.insertIfAbsent(entity);
+            }
         }
     }
 
@@ -155,7 +160,7 @@ public class DedupWriter {
             entity.setBoardType(boardType);
             entity.setIsLeader(intVal(r.get("is_leader")));
             entity.setIsMidarm(intVal(r.get("is_midarm")));
-            entity.setWeight(dec(r.get("weight")));
+            entity.setWeight(bigDec(r.get("weight")));
             entity.setEffectiveDate(today);
             entity.setDataSource(newCode);
             entity.setSrcDetail(srcDetail);
@@ -171,20 +176,52 @@ public class DedupWriter {
         e.setTsCode(str(r.get("ts_code")));
         e.setStockName(str(r.get("stock_name")));
         e.setType(str(r.get("type")));
+        e.setLatestPrice(bigDec(r.get("latest_price")));  // 最新价(元)
+        e.setPctChg(bigDec(r.get("pct_chg")));            // 涨跌幅%
         e.setBoardPos(intVal(r.get("board_pos")));
         e.setIsFirst(intVal(r.get("is_first")));
         e.setIsContinuous(intVal(r.get("is_continuous")));
         e.setLimitStyle(str(r.get("limit_style")));
+        // open_time/last_time 已是 HH:mm:ss 字符串
+        e.setOpenTime(str(r.get("open_time")));
+        e.setLastTime(str(r.get("last_time")));
         e.setOpenTimes(intVal(r.get("open_times")));
-        e.setBidAmount(dec(r.get("bid_amount")));
-        e.setTurnover(dec(r.get("turnover")));
-        e.setPctChg(dec(r.get("pct_chg")));
-        e.setReason(str(r.get("reason")));
+        e.setBidAmount(bigDec(r.get("bid_amount")));
+        e.setHs(bigDec(r.get("hs")));                    // 换手率%
+        e.setTurnover(bigDec(r.get("hs")));              // 换手率%（复用）
+        e.setZtp(bigDec(r.get("ztp")));                  // 涨停价
+        e.setAmount(bigDec(r.get("amount")));            // 成交额
+        e.setFund(bigDec(r.get("fund")));                // 封单资金
+        e.setLtsz(bigDec(r.get("ltsz")));                // 流通市值
+        e.setTshare(bigDec(r.get("tshare")));            // 总市值
+        e.setZf(bigDec(r.get("zf")));                    // 炸板涨幅%
+        e.setZs(bigDec(r.get("zs")));                    // 炸板振幅%
+        e.setZttjCt(intVal(r.get("zttj_ct")));           // 连板统计-连板数
+        e.setZttjDays(intVal(r.get("zttj_days")));       // 连板统计-天数
+        e.setLb(intVal(r.get("lb")));                    // 强势池连板数
+        e.setNh(intVal(r.get("nh")));                    // N日新高
+        e.setZtf(str(r.get("ztf")));                     // 涨停封单描述
+        e.setIpod(toLocalDate(r.get("ipod")));           // 上市日期
+        e.setO(bigDec(r.get("o")));                      // 开盘价
+        e.setOd(intVal(r.get("od")));                    // 上市天数
+        e.setOds(intVal(r.get("ods")));                  // 上市天数
         e.setBoardCode(str(r.get("board_code")));
         e.setBoardName(str(r.get("board_name")));
         e.setDataSource(source.getCode());
         e.setSrcDetail(srcDetail);
         return e;
+    }
+
+    /** 解析 HH:mm:ss 字符串为 LocalTime。 */
+    private static LocalTime parseTime(String s) {
+        if (s == null || s.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(s.length() == 5 ? s + ":00" : s);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private BoardDaily toBoardDailyEntity(Map<String, Object> r, SourceType source, String srcDetail) {
@@ -193,30 +230,30 @@ public class DedupWriter {
         e.setBoardCode(str(r.get("board_code")));
         e.setBoardName(str(r.get("board_name")));
         e.setBoardType(intVal(r.get("board_type")));
-        e.setPctChg(dec(r.get("pct_chg")));
-        e.setAmount(dec(r.get("amount")));
+        e.setPctChg(bigDec(r.get("pct_chg")));
+        e.setAmount(bigDec(r.get("amount")));
         e.setUpCount(intVal(r.get("up_count")));
         e.setDownCount(intVal(r.get("down_count")));
         e.setLimitUpCount(intVal(r.get("limit_up_count")));
         e.setLeadingCode(str(r.get("leading_code")));
         e.setLeadingName(str(r.get("leading_name")));
-        e.setMainNet(dec(r.get("main_net")));
+        e.setMainNet(bigDec(r.get("main_net")));
         e.setBoardCode2(str(r.get("board_code2")));
         e.setDataSource(source.getCode());
         e.setSrcDetail(srcDetail);
         // 行情明细
-        e.setPrice(dec(r.get("price")));
-        e.setRiseFall(dec(r.get("rise_fall")));
-        e.setVolume(dec(r.get("volume")));
-        e.setAmplitude(dec(r.get("amplitude")));
-        e.setHighPrice(dec(r.get("high_price")));
-        e.setLowPrice(dec(r.get("low_price")));
-        e.setTodayOpenPrice(dec(r.get("today_open_price")));
-        e.setYesterdayReceivedPrice(dec(r.get("yesterday_received_price")));
-        e.setVolumeRatio(dec(r.get("volume_ratio")));
-        e.setTurnoverRatio(dec(r.get("turnover_ratio")));
-        e.setTotalMarketValue(dec(r.get("total_market_value")));
-        e.setCirculationMarketValue(dec(r.get("circulation_market_value")));
+        e.setPrice(bigDec(r.get("price")));
+        e.setRiseFall(bigDec(r.get("rise_fall")));
+        e.setVolume(bigDec(r.get("volume")));
+        e.setAmplitude(bigDec(r.get("amplitude")));
+        e.setHighPrice(bigDec(r.get("high_price")));
+        e.setLowPrice(bigDec(r.get("low_price")));
+        e.setTodayOpenPrice(bigDec(r.get("today_open_price")));
+        e.setYesterdayReceivedPrice(bigDec(r.get("yesterday_received_price")));
+        e.setVolumeRatio(bigDec(r.get("volume_ratio")));
+        e.setTurnoverRatio(bigDec(r.get("turnover_ratio")));
+        e.setTotalMarketValue(bigDec(r.get("total_market_value")));
+        e.setCirculationMarketValue(bigDec(r.get("circulation_market_value")));
         return e;
     }
 
@@ -291,40 +328,44 @@ public class DedupWriter {
             e.setTradeDate(tradeDate);
             e.setTsCode(tsCode);
             e.setStockName(str(r.get("stock_name")));
-            e.setOpen(dec(r.get("open")));
-            e.setHigh(dec(r.get("high")));
-            e.setLow(dec(r.get("low")));
-            e.setClose(dec(r.get("close")));
-            e.setPreClose(dec(r.get("pre_close")));
-            e.setPctChg(dec(r.get("pct_chg")));
-            e.setVol(dec(r.get("vol")));
-            e.setAmount(dec(r.get("amount")));
-            e.setTurnover(dec(r.get("turnover")));
-            e.setTotalMv(dec(r.get("total_mv")));
-            e.setCircMv(dec(r.get("circ_mv")));
-            e.setPe(dec(r.get("pe")));
+            e.setOpen(bigDec(r.get("open")));
+            e.setHigh(bigDec(r.get("high")));
+            e.setLow(bigDec(r.get("low")));
+            e.setClose(bigDec(r.get("close")));
+            e.setPreClose(bigDec(r.get("pre_close")));
+            e.setPctChg(bigDec(r.get("pct_chg")));
+            e.setVol(bigDec(r.get("vol")));
+            e.setAmount(bigDec(r.get("amount")));
+            e.setTurnover(bigDec(r.get("turnover")));
+            e.setTotalMv(bigDec(r.get("total_mv")));
+            e.setCircMv(bigDec(r.get("circ_mv")));
+            e.setPe(bigDec(r.get("pe")));
             e.setIsLimitUp(intVal(r.get("is_limit_up")));
             e.setIsLimitDown(intVal(r.get("is_limit_down")));
-            e.setChgAmount(dec(r.get("chg_amount")));
-            e.setAmplitude(dec(r.get("amplitude")));
-            e.setVolumeRatio(dec(r.get("volume_ratio")));
-            e.setAvgPrice(dec(r.get("avg_price")));
-            e.setMainNet(dec(r.get("main_net")));
-            e.setPeStatic(dec(r.get("pe_static")));
+            e.setChgAmount(bigDec(r.get("chg_amount")));
+            e.setAmplitude(bigDec(r.get("amplitude")));
+            e.setVolumeRatio(bigDec(r.get("volume_ratio")));
+            e.setAvgPrice(bigDec(r.get("avg_price")));
+            e.setMainNet(bigDec(r.get("main_net")));
+            e.setPeStatic(bigDec(r.get("pe_static")));
             e.setLeaderCode(str(r.get("leader_code")));
             e.setIndustryCode(str(r.get("industry_code")));
             e.setConceptCode(str(r.get("concept_code")));
             e.setMarketCode(intVal(r.get("market_code")));
-            e.setReservedF24(dec(r.get("reserved_f24")));
-            e.setReservedF25(dec(r.get("reserved_f25")));
-            e.setReservedF107(dec(r.get("reserved_f107")));
-            e.setReservedF136(dec(r.get("reserved_f136")));
-            e.setReservedF173(dec(r.get("reserved_f173")));
+            e.setReservedF24(bigDec(r.get("reserved_f24")));
+            e.setReservedF25(bigDec(r.get("reserved_f25")));
+            e.setReservedF107(bigDec(r.get("reserved_f107")));
+            e.setReservedF136(bigDec(r.get("reserved_f136")));
+            e.setReservedF173(bigDec(r.get("reserved_f173")));
             e.setDataSource(newCode);
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            stockDailyMapper.insertOrUpdate(e);
+            if (existing != null) {
+                stockDailyMapper.updateRow(e);
+            } else {
+                stockDailyMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -348,18 +389,18 @@ public class DedupWriter {
             e.setTradeDate(tradeDate);
             e.setTsCode(tsCode);
             e.setStockName(str(r.get("stock_name")));
-            e.setOpen(dec(r.get("open")));
-            e.setHigh(dec(r.get("high")));
-            e.setLow(dec(r.get("low")));
-            e.setClose(dec(r.get("close")));
-            e.setVol(dec(r.get("vol")));
-            e.setAmount(dec(r.get("amount")));
-            e.setChgAmount(dec(r.get("chg_amount")));
-            e.setAmplitude(dec(r.get("amplitude")));
-            e.setVolumeRatio(dec(r.get("volume_ratio")));
-            e.setAvgPrice(dec(r.get("avg_price")));
-            e.setMainNet(dec(r.get("main_net")));
-            e.setPeStatic(dec(r.get("pe_static")));
+            e.setOpen(bigDec(r.get("open")));
+            e.setHigh(bigDec(r.get("high")));
+            e.setLow(bigDec(r.get("low")));
+            e.setClose(bigDec(r.get("close")));
+            e.setVol(bigDec(r.get("vol")));
+            e.setAmount(bigDec(r.get("amount")));
+            e.setChgAmount(bigDec(r.get("chg_amount")));
+            e.setAmplitude(bigDec(r.get("amplitude")));
+            e.setVolumeRatio(bigDec(r.get("volume_ratio")));
+            e.setAvgPrice(bigDec(r.get("avg_price")));
+            e.setMainNet(bigDec(r.get("main_net")));
+            e.setPeStatic(bigDec(r.get("pe_static")));
             e.setLeaderCode(str(r.get("leader_code")));
             e.setIndustryCode(str(r.get("industry_code")));
             e.setConceptCode(str(r.get("concept_code")));
@@ -368,7 +409,11 @@ public class DedupWriter {
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            stockWeeklyMapper.insertOrUpdate(e);
+            if (existing != null) {
+                stockWeeklyMapper.updateRow(e);
+            } else {
+                stockWeeklyMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -392,20 +437,24 @@ public class DedupWriter {
             e.setTradeDate(tradeDate);
             e.setIndexCode(indexCode);
             e.setIndexName(str(r.get("index_name")));
-            e.setOpen(dec(r.get("open")));
-            e.setHigh(dec(r.get("high")));
-            e.setLow(dec(r.get("low")));
-            e.setClose(dec(r.get("close")));
-            e.setPreClose(dec(r.get("pre_close")));
-            e.setPctChg(dec(r.get("pct_chg")));
-            e.setVol(dec(r.get("vol")));
-            e.setAmount(dec(r.get("amount")));
-            e.setTurnover(dec(r.get("turnover")));
+            e.setOpen(bigDec(r.get("open")));
+            e.setHigh(bigDec(r.get("high")));
+            e.setLow(bigDec(r.get("low")));
+            e.setClose(bigDec(r.get("close")));
+            e.setPreClose(bigDec(r.get("pre_close")));
+            e.setPctChg(bigDec(r.get("pct_chg")));
+            e.setVol(bigDec(r.get("vol")));
+            e.setAmount(bigDec(r.get("amount")));
+            e.setTurnover(bigDec(r.get("turnover")));
             e.setDataSource(newCode);
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            indexDailyMapper.insertOrUpdate(e);
+            if (existing != null) {
+                indexDailyMapper.updateRow(e);
+            } else {
+                indexDailyMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -434,16 +483,20 @@ public class DedupWriter {
             e.setTsCode(tsCode);
             e.setBoardCode(boardCode);
             e.setIndexCode(indexCode);
-            e.setMainNet(dec(r.get("main_net")));
-            e.setSuperBig(dec(r.get("super_big")));
-            e.setBigNet(dec(r.get("big_net")));
-            e.setMidNet(dec(r.get("mid_net")));
-            e.setSmallNet(dec(r.get("small_net")));
+            e.setMainNet(bigDec(r.get("main_net")));
+            e.setSuperBig(bigDec(r.get("super_big")));
+            e.setBigNet(bigDec(r.get("big_net")));
+            e.setMidNet(bigDec(r.get("mid_net")));
+            e.setSmallNet(bigDec(r.get("small_net")));
             e.setDataSource(newCode);
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            mainFundFlowMapper.insertOrUpdate(e);
+            if (existing != null) {
+                mainFundFlowMapper.updateRow(e);
+            } else {
+                mainFundFlowMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -470,24 +523,24 @@ public class DedupWriter {
             e.setReason(str(r.get("reason")));
             e.setExplanation(str(r.get("explanation")));
             e.setAbnormalType(str(r.get("abnormal_type")));
-            e.setNetBuy(dec(r.get("net_buy")));
-            e.setTotalBuy(dec(r.get("total_buy")));
-            e.setTotalSell(dec(r.get("total_sell")));
-            e.setBillboardDealAmt(dec(r.get("billboard_deal_amt")));
-            e.setAccumAmount(dec(r.get("accum_amount")));
-            e.setBuyRatio(dec(r.get("buy_ratio")));
-            e.setSellRatio(dec(r.get("sell_ratio")));
+            e.setNetBuy(bigDec(r.get("net_buy")));
+            e.setTotalBuy(bigDec(r.get("total_buy")));
+            e.setTotalSell(bigDec(r.get("total_sell")));
+            e.setBillboardDealAmt(bigDec(r.get("billboard_deal_amt")));
+            e.setAccumAmount(bigDec(r.get("accum_amount")));
+            e.setBuyRatio(bigDec(r.get("buy_ratio")));
+            e.setSellRatio(bigDec(r.get("sell_ratio")));
             e.setBuySeat(intVal(r.get("buy_seat")));
             e.setSellSeat(intVal(r.get("sell_seat")));
             e.setBuySeatNew(intVal(r.get("buy_seat_new")));
             e.setSellSeatNew(intVal(r.get("sell_seat_new")));
-            e.setChangeRate(dec(r.get("change_rate")));
-            e.setClosePrice(dec(r.get("close_price")));
-            e.setTurnoverrate(dec(r.get("turnoverrate")));
-            e.setFreeMarketCap(dec(r.get("free_market_cap")));
+            e.setChangeRate(bigDec(r.get("change_rate")));
+            e.setClosePrice(bigDec(r.get("close_price")));
+            e.setTurnoverrate(bigDec(r.get("turnoverrate")));
+            e.setFreeMarketCap(bigDec(r.get("free_market_cap")));
             e.setMarket(str(r.get("market")));
-            e.setDealAmountRatio(dec(r.get("deal_amount_ratio")));
-            e.setDealNetRatio(dec(r.get("deal_net_ratio")));
+            e.setDealAmountRatio(bigDec(r.get("deal_amount_ratio")));
+            e.setDealNetRatio(bigDec(r.get("deal_net_ratio")));
             e.setSecurityInnerCode(str(r.get("security_inner_code")));
             e.setSecurityTypeCode(str(r.get("security_type_code")));
             e.setTradeId(r.get("trade_id") instanceof Number n ? n.longValue() : null);
@@ -497,7 +550,11 @@ public class DedupWriter {
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            dragonTigerMapper.insertOrUpdate(e);
+            if (existing != null) {
+                dragonTigerMapper.updateRow(e);
+            } else {
+                dragonTigerMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -523,15 +580,19 @@ public class DedupWriter {
             e.setTsCode(tsCode);
             e.setSeatName(seatName);
             e.setSeatType(str(r.get("seat_type")));
-            e.setBuy(dec(r.get("buy")));
-            e.setSell(dec(r.get("sell")));
+            e.setBuy(bigDec(r.get("buy")));
+            e.setSell(bigDec(r.get("sell")));
             e.setIsInstitution(intVal(r.get("is_institution")));
             e.setIsFamous(intVal(r.get("is_famous")));
             e.setDataSource(newCode);
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            dtDetailMapper.insertOrUpdate(e);
+            if (existing != null) {
+                dtDetailMapper.updateRow(e);
+            } else {
+                dtDetailMapper.insertIfAbsent(e);
+            }
         }
     }
 
@@ -543,8 +604,24 @@ public class DedupWriter {
         return o instanceof Number n ? n.intValue() : null;
     }
 
-    private static BigDecimal dec(Object o) {
-        return o instanceof Number n ? BigDecimal.valueOf(n.doubleValue()) : null;
+    private static BigDecimal bigDec(Object o) {
+        if (o == null) {
+            return null;
+        }
+        if (o instanceof BigDecimal b) {
+            return b;
+        }
+        if (o instanceof Number n) {
+            return BigDecimal.valueOf(n.doubleValue());
+        }
+        if (o instanceof String s && !s.isEmpty()) {
+            try {
+                return new BigDecimal(s);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static LocalDate toLocalDate(Object o) {

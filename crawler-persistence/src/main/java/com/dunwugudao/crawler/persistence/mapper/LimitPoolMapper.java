@@ -26,24 +26,33 @@ public interface LimitPoolMapper extends BaseMapper<LimitPool> {
 
     @Update("""
             UPDATE limit_pool SET
-              stock_name = #{stockName}, type = #{type}, board_pos = #{boardPos}, is_first = #{isFirst},
+              stock_name = #{stockName}, type = #{type}, latest_price = #{latestPrice},
+              board_pos = #{boardPos}, is_first = #{isFirst},
               is_continuous = #{isContinuous}, limit_style = #{limitStyle}, open_time = #{openTime},
               last_time = #{lastTime}, open_times = #{openTimes}, bid_amount = #{bidAmount},
               turnover = #{turnover}, pct_chg = #{pctChg}, reason = #{reason}, board_code = #{boardCode},
-              board_name = #{boardName}, data_source = #{dataSource}, src_detail = #{srcDetail}
+              board_name = #{boardName}, data_source = #{dataSource}, src_detail = #{srcDetail},
+              amount = #{amount}, fund = #{fund}, ltsz = #{ltsz}, tshare = #{tshare},
+              zf = #{zf}, zs = #{zs}, ztp = #{ztp},
+              zttj_ct = #{zttjCt}, zttj_days = #{zttjDays}, lb = #{lb}, nh = #{nh}, ztf = #{ztf},
+              ipod = #{ipod}, o = #{o}, od = #{od}, ods = #{ods}
             WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
             """)
     int updateRow(LimitPool row);
 
     @Insert("""
             INSERT INTO limit_pool
-              (trade_date, ts_code, stock_name, type, board_pos, is_first, is_continuous,
+              (trade_date, ts_code, stock_name, type, latest_price, board_pos, is_first, is_continuous,
                limit_style, open_time, last_time, open_times, bid_amount, turnover, pct_chg,
-               reason, board_code, board_name, data_source, src_detail)
+               reason, board_code, board_name, data_source, src_detail,
+               amount, fund, ltsz, tshare, zf, zs, ztp,
+               zttj_ct, zttj_days, lb, nh, ztf, ipod, o, od, ods)
             SELECT
-              #{tradeDate}, #{tsCode}, #{stockName}, #{type}, #{boardPos}, #{isFirst}, #{isContinuous},
+              #{tradeDate}, #{tsCode}, #{stockName}, #{type}, #{latestPrice}, #{boardPos}, #{isFirst}, #{isContinuous},
                #{limitStyle}, #{openTime}, #{lastTime}, #{openTimes}, #{bidAmount}, #{turnover}, #{pctChg},
-               #{reason}, #{boardCode}, #{boardName}, #{dataSource}, #{srcDetail}
+               #{reason}, #{boardCode}, #{boardName}, #{dataSource}, #{srcDetail},
+               #{amount}, #{fund}, #{ltsz}, #{tshare}, #{zf}, #{zs}, #{ztp},
+               #{zttjCt}, #{zttjDays}, #{lb}, #{nh}, #{ztf}, #{ipod}, #{o}, #{od}, #{ods}
             WHERE NOT EXISTS (
               SELECT 1 FROM limit_pool WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
             )

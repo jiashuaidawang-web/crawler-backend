@@ -64,19 +64,24 @@ public class ClaimService {
         t.setRetryCount(retryCount + 1);
 
         if (willRetry && retryCount < maxRetry) {
+            // 指数退避：延迟后再可被认领，避免立刻重试烧代理 IP（2s/4s/8s...）
             RetryPolicy policy = new ExponentialBackoffRetry(maxRetry, Duration.ofSeconds(2), Duration.ofMinutes(5));
-            LocalDateTime next = LocalDateTime.now().plus(policy.nextDelay(retryCount + 1));
+            LocalDateTime next = LocalDateTime.now().plus(policy.nextDelay(t.getRetryCount()));
             t.setStatus("RETRY");
             t.setNextRetryAt(next);
         } else if (retryCount >= maxRetry) {
+            // 耗尽重试 → DEAD，不再被认领，需人工介入
             t.setStatus("DEAD");
             t.setFinishedAt(LocalDateTime.now());
         } else {
             t.setStatus("FAILED");
             t.setFinishedAt(LocalDateTime.now());
         }
+        // 状态守卫：仅当任务仍为 CLAIMED/RETRY 时才更新，避免与 retryScan 竞态
         crawlTaskMapper.update(t,
                 new UpdateWrapper<CrawlTask>().eq("task_id", taskId).in("status", "CLAIMED", "RETRY"));
+        log.warn("task {} -> {} (retryCount={}/{}, nextRetryAt={})",
+                taskId, t.getStatus(), t.getRetryCount(), maxRetry, t.getNextRetryAt());
         log.warn("task {} -> {} (retryCount={}/{})", taskId, t.getStatus(), t.getRetryCount(), maxRetry);
     }
 

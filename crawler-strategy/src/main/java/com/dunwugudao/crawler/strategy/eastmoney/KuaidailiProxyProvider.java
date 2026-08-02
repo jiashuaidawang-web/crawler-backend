@@ -92,7 +92,7 @@ public class KuaidailiProxyProvider implements ProxyProvider {
             }
             // text = "ip:port" → "http://user:pass@ip:port"
             String proxy = "http://" + username + ":" + password + "@" + text;
-            log.info("[Kuaidaili] acquired proxy: {} (raw: {})", text, proxy);   // ← 打印取到的代理
+            log.debug("[Kuaidaili] acquired {}", text);
             return proxy;
         } catch (IOException e) {
             log.warn("[Kuaidaili] acquire failed: {}", e.getMessage());

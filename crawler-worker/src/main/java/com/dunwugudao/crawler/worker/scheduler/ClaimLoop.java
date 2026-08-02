@@ -36,6 +36,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ClaimLoop {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ClaimLoop.class);
+
     private final ClaimService claimService;
     private final StrategyFactory strategyFactory;
     private final DedupWriter dedupWriter;
@@ -64,6 +66,7 @@ public class ClaimLoop {
 
     private void process(com.dunwugudao.crawler.persistence.entity.CrawlTask entity) {
         long start = System.currentTimeMillis();
+        LOG.info("[ process task={}, type={}, source={}", entity.getTaskId(), entity.getTaskType(), entity.getSource());   // TODO M6
         CrawlTask core = toCore(entity);
 
         CrawlContext ctx = new CrawlContext();
@@ -74,6 +77,7 @@ public class ClaimLoop {
         ctx.setRetryPolicy(new ExponentialBackoffRetry(maxRetry, Duration.ofSeconds(2), Duration.ofMinutes(5)));
 
         SourceStrategy strategy = strategyFactory.get(core.getSource());
+        LOG.info("[ strategy={}", strategy.getClass().getSimpleName());   // TODO M6
 
         CrawlLog log = new CrawlLog();
         log.setTaskId(entity.getTaskId());
@@ -84,14 +88,18 @@ public class ClaimLoop {
 
         try {
             CrawlResult result = strategy.fetch(ctx);
+            LOG.info("[ fetch ok, rows={}", result.getRowCount());   // TODO M6
             // 实际请求的 URL（策略生成）优先于种子里的 url
             log.setUrl(result.getUrl() != null ? result.getUrl() : entity.getUrl());
 
             if (result.getData() != null && !result.getData().isEmpty()) {
+                LOG.info("[ writing {} rows", result.getData().size());   // TODO M6
                 dedupWriter.write(core.getTaskType(), result.getData(), core.getSource(), entity.getUrl());
+                LOG.info("[ write ok");   // TODO M6
             }
             volumeValidator.validate(entity, result.getRowCount());
             claimService.complete(entity.getTaskId(), result.getRowCount(), System.currentTimeMillis() - start);
+            LOG.info("[ complete ok");   // TODO M6
 
             log.setResultStatus("SUCCESS");
             log.setHttpStatus(result.getHttpStatus());
@@ -99,9 +107,11 @@ public class ClaimLoop {
             log.setRaw(truncate(result.getRaw()));   // 落库原始响应，便于排查 parser
             log.setBytes(result.getRaw() == null ? 0L : (long) result.getRaw().length());
         } catch (Exception e) {
+            LOG.error("[ process failed: {}", e.getMessage(), e);   // TODO M6
             int attempt = entity.getRetryCount() == null ? 0 : entity.getRetryCount();
             RetryPolicy policy = ctx.getRetryPolicy();
-            boolean willRetry = policy.shouldRetry(attempt, e);
+            boolean willRetry = policy.shouldRetry(attempt + 1, e);
+            // 指数退避在 ClaimService.fail 内部计算（2s/4s/8s），超限置 DEAD
             claimService.fail(entity.getTaskId(), e.getMessage(), willRetry);
             log.setResultStatus("FAIL");
             log.setErrorMsg(truncate(e.getMessage()));

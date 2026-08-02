@@ -21,22 +21,24 @@ public class LimitPool {
     private String tsCode;
     private String stockName;
     private String type;             // limit_up涨停 / limit_down跌停 / zhaban炸板 / strong强势 / cixin次新
+    private BigDecimal latestPrice;  // 最新价(元) = p/100
+    private BigDecimal pctChg;       // 涨跌幅%
     private Integer boardPos;        // 连板数
     private Integer isFirst;         // 是否首板
     private Integer isContinuous;    // 是否连板(>=2)
     private String limitStyle;       // 一字 / T字 / 换手 / 自然 / 烂板
-    private LocalTime openTime;      // 首次封板时间(fbt)
-    private LocalTime lastTime;      // 最后封板/炸板时间(lbt)
+    private String openTime;         // 首次封板时间(fbt)，格式 HH:mm:ss
+    private String lastTime;         // 最后封板/炸板时间(lbt)，格式 HH:mm:ss
     private Integer openTimes;       // 开板次数(zbc)
     private BigDecimal bidAmount;    // 涨停封单金额
     private BigDecimal turnover;     // 换手率%
-    private BigDecimal pctChg;       // 涨跌幅%
     private String reason;           // 涨停原因/题材标签
     private String boardCode;        // 所属板块(hybk)
     private String boardName;        // 板块名称(实测无hymc)
     // 实测 push2ex 新增字段
     private BigDecimal amount;       // 成交额(元)
     private BigDecimal fund;         // 封单资金(涨停池)
+    private BigDecimal hs;           // 换手率%
     private BigDecimal ltsz;         // 流通市值(元)
     private BigDecimal tshare;       // 总股本(元)
     private BigDecimal zf;           // 涨幅%(炸板池)

@@ -20,7 +20,7 @@ import java.util.Random;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import lombok.extern.slf4j.Slf4j;
+
 
 /**
  * 东方财富 HTTP/JSON API 策略（M2 深化）。
@@ -32,7 +32,6 @@ import lombok.extern.slf4j.Slf4j;
  * <p>能力：分页(clist 用 pages；池/Datacenter 用「返回空即停」)、字段映射对齐 PART A 原始表、
  * UA 随机 + 代理(perSource) + 令牌桶限速。失败抛 RuntimeException 交 worker RetryPolicy。</p>
  */
-@Slf4j
 public class EastmoneyApiStrategy implements SourceStrategy {
 
     private static final int POOL_MAX_PAGES = 50; // 池/明细安全上限（配合「空即停」）
@@ -115,18 +114,15 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 while (pageIdx < POOL_MAX_PAGES) {
                     rateLimiter.acquire();
                     String url = spec.buildUrl(params, pageIdx);
-                    log.info("[DEBUG] ZT_POOL/DATACENTER URL = {}", url);   // TODO M6 实测后移除
                     String resp = fetchWithWorkerProxy(url, ua);
                     lastRaw = resp;
                     lastUrl = url;
                     String cleaned = cleanJsonp(resp);
                     JsonNode root = readTree(cleaned);
-                    log.info("[DEBUG] ZT_POOL page={}, rc={}, dataIsNull={}, poolIsArray={}", pageIdx, root.path("rc").asInt(0), root.path("data").isNull(), root.path("data").path("pool").isArray());   // TODO M6 实测后移除
                     List<Map<String, Object>> rows;
                     if (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL) {
                         rows = parseZtPool(root.path("data"), spec, params);
                         // 涨停/跌停/强势/次新：一次取全量，无需翻页
-                        log.info("[DEBUG] ZT_POOL rows={}", rows.size());   // TODO M6 实测后移除
                         allRows.addAll(rows);
                         break;
                     } else {
@@ -177,7 +173,6 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             throw new IllegalStateException("WorkerProxyManager 未注入，请在装配时调用 setWorkerProxyManager()");
         }
         String proxy = workerProxyManager.getProxy();
-        log.info("[DEBUG] fetch url={}, proxy={}", url, proxy);   // TODO M6 实测后移除
         try {
             return client.get(url, ua, proxy);
         } catch (Exception e) {
@@ -397,23 +392,29 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             // 代码/名称
             row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "c"), txt(n, "m")));
             row.put("stock_name", txt(n, "n"));
-            // 价格
+            // 最新价（接口 p 单位是分，转元 ÷100）
+            Double p = num(n, "p");
+            row.put("latest_price", p != null ? p / 100.0 : null);
+            // 涨跌幅（接口 zdp 已经是百分比数值）
             row.put("pct_chg", num(n, "zdp"));
-            row.put("close", num(n, "ztp"));             // 涨停价
+            // 涨停价
+            row.put("ztp", num(n, "ztp"));
             // 连板/封板
             Integer lbc = toInt(num(n, "lbc"));
             row.put("board_pos", lbc);                   // 连板数
-            row.put("open_time", txt(n, "fbt"));         // 首次封板时间
-            row.put("open_times", toInt(num(n, "zbc"))); // 开板次数
-            row.put("last_time", txt(n, "lbt"));         // 最后封板时间（炸板）
-            // 板块（实测无 hymc，板块名需下游另取）
+            // 首次/最后封板时间（接口 fbt/lbt 是秒级时间戳 92500 = 09:25:00）
+            row.put("open_time", secondsToTime(txt(n, "fbt")));
+            row.put("last_time", secondsToTime(txt(n, "lbt")));
+            row.put("open_times", toInt(num(n, "zbc"))); // 开板次数 = 炸板次数
+            // 板块（实测无 hymc，hybk 是行业代码不是名称）
             row.put("board_code", txt(n, "hybk"));
             row.put("board_name", null);                 // 实测响应不含 hymc
-            // 资金/市值
-            row.put("fund", num(n, "fund"));             // 封单资金（涨停池）
-            row.put("amount", num(n, "amount"));         // 成交额
-            row.put("ltsz", num(n, "ltsz"));             // 流通市值
-            row.put("tshare", num(n, "tshare"));         // 总股本
+            // 资金/市值（接口单位是元，表存亿元 ÷1e8）
+            row.put("fund", num(n, "fund"));             // 封单资金(元) → 下游转亿
+            row.put("amount", num(n, "amount"));         // 成交额(元)
+            row.put("ltsz", num(n, "ltsz"));             // 流通市值(元)
+            row.put("tshare", num(n, "tshare"));         // 总市值(元)
+            row.put("hs", num(n, "hs"));                 // 换手率（接口是百分比数值）
             // 连板统计（嵌套对象 zttj.ct / zttj.days）
             row.put("zttj_ct", toInt(num(n, "zttj.ct")));
             row.put("zttj_days", toInt(num(n, "zttj.days")));
@@ -434,7 +435,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             // limit_style 近似：开板次数=0 且 09:30:00 封板 → 一字；否则 换手
             String fbt = txt(n, "fbt");
             Integer zbc = toInt(num(n, "zbc"));
-            boolean isOneChar = (zbc != null && zbc == 0) && "09:30:00".equals(fbt);
+            boolean isOneChar = (zbc != null && zbc == 0) && "92500".equals(fbt);
             row.put("limit_style", isOneChar ? "一字" : "换手");
             row.put("is_first", (lbc != null && lbc == 1) ? 1 : 0);
             row.put("is_continuous", (lbc != null && lbc >= 2) ? 1 : 0);
@@ -442,6 +443,22 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             rows.add(row);
         }
         return rows;
+    }
+
+    /** 秒级时间戳（如 92500 = 09:25:00）转 HH:mm:ss。 */
+    private static String secondsToTime(String secondsStr) {
+        if (secondsStr == null || secondsStr.isEmpty()) {
+            return null;
+        }
+        try {
+            int totalSeconds = Integer.parseInt(secondsStr);
+            int hh = totalSeconds / 3600;
+            int mm = (totalSeconds % 3600) / 60;
+            int ss = totalSeconds % 60;
+            return String.format("%02d:%02d:%02d", hh, mm, ss);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**
