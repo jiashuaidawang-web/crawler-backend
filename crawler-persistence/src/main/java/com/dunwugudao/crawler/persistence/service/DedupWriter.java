@@ -21,6 +21,7 @@ import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockWeeklyMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -73,9 +74,12 @@ public class DedupWriter {
         this.dtDetailMapper = dtDetailMapper;
     }
 
-    /** 写入 limit_pool（示例原始表）。M2 再补齐字段映射与批量优化。 */
+    /** 写入 limit_pool（示例原始表）。openGauss 兼容：select → update/insert。 */
+    @Transactional(rollbackFor = Exception.class)
     public void writeLimitPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         int newCode = source.getCode();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = LocalDate.now();
         for (Map<String, Object> r : rows) {
             String tsCode = String.valueOf(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
@@ -89,7 +93,11 @@ public class DedupWriter {
                 continue;
             }
             LimitPool entity = toEntity(r, source, srcDetail);
-            limitPoolMapper.insertOrUpdate(entity);
+            if (existing != null) {
+                limitPoolMapper.updateRow(entity);
+            } else {
+                limitPoolMapper.insertIfAbsent(entity);
+            }
         }
     }
 
@@ -243,7 +251,7 @@ public class DedupWriter {
             return;
         }
         switch (taskType) {
-            case "LIMIT_UP", "LIMIT_DOWN", "LIMIT_ZHABAN", "STRONG_POOL", "CIXIN_POOL" ->
+            case "LIMIT_UP", "LIMIT_DOWN", "LIMIT_ZHABAN", "LIMIT_POOL", "STRONG_POOL", "CIXIN_POOL" ->
                     writeLimitPool(rows, source, srcDetail);
             case "STOCK_DAILY" -> writeStockDaily(rows, source, srcDetail);
             case "STOCK_WEEKLY" -> writeStockWeekly(rows, source, srcDetail);

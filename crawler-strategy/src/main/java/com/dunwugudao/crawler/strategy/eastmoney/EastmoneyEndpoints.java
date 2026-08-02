@@ -49,10 +49,14 @@ public final class EastmoneyEndpoints {
                     } else {
                         path = "getTopicZTPool";
                     }
-                    String d = tradeDate(params);
+                    // 涨停/跌停/强势/次新池：一次取全量（pagesize=5000），无需分页
+                    // 实测能工作的 URL（2026-08-01）
+                    // 源：https://push2ex.eastmoney.com/getTopicZTPool?cb=callbackdata6233583&ut=...&dpt=wz.ztzt&Pageindex=0&pagesize=17000&sort=fbt%3Aasc&date=20260801&_=1785562460759
+                    String d = tradeDate(params).replace("-", "");
+                    long ts = System.currentTimeMillis();
                     return "https://push2ex.eastmoney.com/" + path
-                            + "?ut=7eea3edcaed734bea9cbfc24409ed989&d=" + d
-                            + "&Pageindex=" + page + "&pagesize=200";
+                            + "?cb=callbackdata6233583&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
+                            + "&date=" + d + "&Pageindex=0&pagesize=5000&sort=fbt%3Aasc&_=" + ts;
                 }
                 case KLINE: {
                     String secid = secidFor(taskType, params);
@@ -102,7 +106,17 @@ public final class EastmoneyEndpoints {
     private static final Map<String, EndpointSpec> SPEC_BY_TYPE = new HashMap<>();
 
     static {
-        // 涨停/跌停/炸板池
+        // 涨停/跌停/炸板池（LIMIT_POOL 会被 SeedGenerator 展开成以下 3 个子任务）
+        SPEC_BY_TYPE.put("LIMIT_UP", new EndpointSpec(
+                "LIMIT_UP", "https://push2ex.eastmoney.com/getTopicZTPool",
+                ParserType.ZT_POOL, null, null, "limit_up"));
+        SPEC_BY_TYPE.put("LIMIT_DOWN", new EndpointSpec(
+                "LIMIT_DOWN", "https://push2ex.eastmoney.com/getTopicDTPool",
+                ParserType.ZT_POOL, null, null, "limit_down"));
+        SPEC_BY_TYPE.put("LIMIT_ZHABAN", new EndpointSpec(
+                "LIMIT_ZHABAN", "https://push2ex.eastmoney.com/getTopicZBPool",
+                ParserType.ZT_POOL, null, null, "zhaban"));
+        // 兼容：LIMIT_POOL 直接作为 taskType 时也映射到涨停池（兜底）
         SPEC_BY_TYPE.put("LIMIT_POOL", new EndpointSpec(
                 "LIMIT_POOL", "https://push2ex.eastmoney.com/getTopicZTPool",
                 ParserType.ZT_POOL, null, null, "limit_up"));

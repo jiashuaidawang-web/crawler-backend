@@ -1,5 +1,6 @@
 package com.dunwugudao.crawler.core.model;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
 import lombok.Getter;
 
 /**
@@ -9,6 +10,8 @@ import lombok.Getter;
  *   <li>1 = 东方财富（EASTMONEY，HTTP/JSON API 策略）</li>
  *   <li>2 = 其他（OTHER）</li>
  * </ul>
+ * {@code code} 标注 {@code @EnumValue}，MyBatis-Plus 全局枚举处理器据此按序数读写 DB，
+ * 无需自定义 TypeHandler（MP 3.5.x 的全局 CompositeEnumTypeHandler 优先级高于 field-level handler）。
  */
 @Getter
 public enum SourceType {
@@ -16,6 +19,7 @@ public enum SourceType {
     EASTMONEY(1),
     OTHER(2);
 
+    @EnumValue
     public final int code;
 
     SourceType(int code) {

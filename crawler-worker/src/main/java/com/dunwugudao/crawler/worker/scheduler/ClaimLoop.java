@@ -84,6 +84,8 @@ public class ClaimLoop {
 
         try {
             CrawlResult result = strategy.fetch(ctx);
+            // 实际请求的 URL（策略生成）优先于种子里的 url
+            log.setUrl(result.getUrl() != null ? result.getUrl() : entity.getUrl());
 
             if (result.getData() != null && !result.getData().isEmpty()) {
                 dedupWriter.write(core.getTaskType(), result.getData(), core.getSource(), entity.getUrl());
@@ -93,7 +95,9 @@ public class ClaimLoop {
 
             log.setResultStatus("SUCCESS");
             log.setHttpStatus(result.getHttpStatus());
-            log.setBytes((long) (result.getRaw() == null ? 0 : result.getRaw().length()));
+            log.setParseRows(result.getRowCount());
+            log.setRaw(truncate(result.getRaw()));   // 落库原始响应，便于排查 parser
+            log.setBytes(result.getRaw() == null ? 0L : (long) result.getRaw().length());
         } catch (Exception e) {
             int attempt = entity.getRetryCount() == null ? 0 : entity.getRetryCount();
             RetryPolicy policy = ctx.getRetryPolicy();

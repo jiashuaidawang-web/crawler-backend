@@ -18,6 +18,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * 东方财富 HTTP/JSON API 策略（M2 深化）。
  * <p>supports 返回 source == EASTMONEY。fetch 依据 {@code task.taskType} 从
@@ -28,6 +32,7 @@ import java.util.Random;
  * <p>能力：分页(clist 用 pages；池/Datacenter 用「返回空即停」)、字段映射对齐 PART A 原始表、
  * UA 随机 + 代理(perSource) + 令牌桶限速。失败抛 RuntimeException 交 worker RetryPolicy。</p>
  */
+@Slf4j
 public class EastmoneyApiStrategy implements SourceStrategy {
 
     private static final int POOL_MAX_PAGES = 50; // 池/明细安全上限（配合「空即停」）
@@ -69,6 +74,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
 
         List<Map<String, Object>> allRows = new ArrayList<>();
         String lastRaw = "";
+        String lastUrl = "";
 
         switch (spec.getParserType()) {
             case CLIST: {
@@ -109,17 +115,28 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 while (pageIdx < POOL_MAX_PAGES) {
                     rateLimiter.acquire();
                     String url = spec.buildUrl(params, pageIdx);
+                    log.info("[DEBUG] ZT_POOL/DATACENTER URL = {}", url);   // TODO M6 实测后移除
                     String resp = fetchWithWorkerProxy(url, ua);
                     lastRaw = resp;
-                    JsonNode root = readTree(resp);
-                    List<Map<String, Object>> rows = (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL)
-                            ? parseZtPool(root.path("data"), spec, params)
-                            : parseDatacenter(root.path("data"), spec, params);
-                    if (rows.isEmpty()) {
+                    lastUrl = url;
+                    String cleaned = cleanJsonp(resp);
+                    JsonNode root = readTree(cleaned);
+                    log.info("[DEBUG] ZT_POOL page={}, rc={}, dataIsNull={}, poolIsArray={}", pageIdx, root.path("rc").asInt(0), root.path("data").isNull(), root.path("data").path("pool").isArray());   // TODO M6 实测后移除
+                    List<Map<String, Object>> rows;
+                    if (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL) {
+                        rows = parseZtPool(root.path("data"), spec, params);
+                        // 涨停/跌停/强势/次新：一次取全量，无需翻页
+                        log.info("[DEBUG] ZT_POOL rows={}", rows.size());   // TODO M6 实测后移除
+                        allRows.addAll(rows);
                         break;
+                    } else {
+                        rows = parseDatacenter(root.path("data"), spec, params);
+                        if (rows.isEmpty()) {
+                            break;
+                        }
+                        allRows.addAll(rows);
+                        pageIdx++;
                     }
-                    allRows.addAll(rows);
-                    pageIdx++;
                 }
                 break;
             }
@@ -140,6 +157,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         result.setSuccess(true);
         result.setData(allRows);
         result.setRaw(lastRaw);
+        result.setUrl(lastUrl);
         result.setRowCount(allRows.size());
         result.setHttpStatus(200);
         return result;
@@ -159,6 +177,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             throw new IllegalStateException("WorkerProxyManager 未注入，请在装配时调用 setWorkerProxyManager()");
         }
         String proxy = workerProxyManager.getProxy();
+        log.info("[DEBUG] fetch url={}, proxy={}", url, proxy);   // TODO M6 实测后移除
         try {
             return client.get(url, ua, proxy);
         } catch (Exception e) {
@@ -509,6 +528,24 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         } catch (Exception e) {
             throw new RuntimeException("Eastmoney JSON parse failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 清洗 JSONP 包裹：东财 push2ex / datacenter 返回 {@code callback({...});}，
+     * 需剥掉前缀（第一个 '(' 之前）与后缀（最后一个 ');'）才是合法 JSON。
+     * <p>非 JSONP（纯 JSON / 空串）原样返回。</p>
+     */
+    private String cleanJsonp(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        int lparen = s.indexOf('(');
+        int rparen = s.lastIndexOf(')');
+        if (lparen > 0 && rparen > lparen && s.endsWith(");")) {
+            return s.substring(lparen + 1, rparen);
+        }
+        return s;
     }
 
     private String randomUa() {

@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @EnableScheduling
 @SpringBootApplication(scanBasePackages = "com.dunwugudao.crawler")
-@MapperScan("com.dunwugudao.crawler.persistencoe.mapper")
+@MapperScan("com.dunwugudao.crawler.persistence.mapper")
 public class CrawlerWorkerApplication {
 
     public static void main(String[] args) {

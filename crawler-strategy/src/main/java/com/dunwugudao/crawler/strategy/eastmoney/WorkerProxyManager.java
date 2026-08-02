@@ -77,7 +77,7 @@ public class WorkerProxyManager {
             currentProxy.set(newProxy);
             invalidated.set(false);
             consecutiveFailures.set(false);
-            log.info("[WorkerProxyManager] new proxy acquired, will be used until failure");
+            log.info("[WorkerProxyManager] new proxy acquired: {}, will be used until failure", newProxy);   // ← 打印代理地址
             return newProxy;
         } finally {
             fetchLock.unlock();

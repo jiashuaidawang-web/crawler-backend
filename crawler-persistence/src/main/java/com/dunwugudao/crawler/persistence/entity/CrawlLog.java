@@ -24,7 +24,11 @@ public class CrawlLog {
     private LocalDateTime finishedAt;
     private Long durationMs;
     private Integer httpStatus;
+    /** parser 实际抽出的行数（0=响应空 或 parser 失败，配合 raw 区分）。 */
+    private Integer parseRows;
     private String resultStatus;
+    /** 响应体文本（最后页），用于排查 parser 问题。 */
+    private String raw;
     private Long bytes;
     private String errorMsg;
     private LocalDateTime createdAt;

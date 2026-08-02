@@ -1,11 +1,9 @@
 package com.dunwugudao.crawler.persistence.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.dunwugudao.crawler.core.model.SourceType;
-import com.dunwugudao.crawler.persistence.handler.SourceTypeTypeHandler;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -26,7 +24,6 @@ public class CrawlTask {
 
     private String taskType;
 
-    @TableField(value = "source", typeHandler = SourceTypeTypeHandler.class)
     private SourceType source;
 
     private String url;

@@ -3,6 +3,7 @@ package com.dunwugudao.crawler.strategy.eastmoney;
 import okhttp3.Authenticator;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
@@ -11,6 +12,7 @@ import okhttp3.Route;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,10 +20,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * 东方财富 HTTP 请求封装（OkHttp）。
  * <p>支持代理（含认证代理 user:pass@ip:port），按代理字符串缓存 OkHttpClient。
  * 非 2xx 或 IO 异常抛 RuntimeException，交由 worker 的 RetryPolicy 裁决。</p>
+ *
+ * <p><b>关键：东财服务端对 HTTP/2 不兼容（会中途 reset 连接，报 unexpected end of stream），
+ * 故强制使用 HTTP/1.1。</b></p>
  */
 public class EastmoneyClient {
 
     private static final OkHttpClient BASE_CLIENT = new OkHttpClient.Builder()
+            .protocols(List.of(Protocol.HTTP_1_1))
             .connectTimeout(Duration.ofSeconds(10))
             .readTimeout(Duration.ofSeconds(30))
             .build();
@@ -106,6 +112,7 @@ public class EastmoneyClient {
         Proxy proxy = new Proxy(type, new InetSocketAddress(host, port));
 
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .protocols(List.of(Protocol.HTTP_1_1))
                 .proxy(proxy)
                 .connectTimeout(Duration.ofSeconds(15))
                 .readTimeout(Duration.ofSeconds(30));
