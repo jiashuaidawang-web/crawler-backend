@@ -33,9 +33,15 @@ anti-crawl:
     - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   proxy-list: []
 
-# 快代理（kuaidaili）私密代理：密钥外置。未配置时 KuaidailiProxyProvider 使用兜底硬编码值。
-# 生产建议改为环境变量引用：secret-id: ${KUAIDAILI_SECRET_ID}
+# 代理配置（两个子键：qg=青果长效IP，kuaidaili=快代理私密代理；优先使用 qg）
 proxy:
+  # 青果长效 IP（住宅隧道）：每 30 分钟换一次 IP，不限流量。
+  # 提取 API：https://longterm.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=txt&seq=%0D%0A&distinct=false
+  # 返回纯文本：ip:port（每行一个）；认证：username=api-key, password=AuthPwd
+  qg:
+    api-key: 8A9D6CC5
+    password: 742290397356
+  # 快代理（kuaidaili）私密代理：密钥外置。未配置时 KuaidailiProxyProvider 使用兜底硬编码值。
   kuaidaili:
     secret-id: o3icyopd76ugn5hcya8g
     signature: 7dz6v5e9ba1bkejun2q9eobgdhrovfjm

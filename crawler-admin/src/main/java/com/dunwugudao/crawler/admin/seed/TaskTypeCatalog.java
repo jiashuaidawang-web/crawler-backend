@@ -50,7 +50,7 @@ public final class TaskTypeCatalog {
             new TaskSpec("MAIN_FUND_BOARD", 1, true, false, null, "板块主力资金流（市场级）"),
             new TaskSpec("DRAGON_TIGER", 1, true, false, null, "龙虎榜（市场级）"),
             new TaskSpec("STRONG_POOL", 1, true, false, null, "强势股池（市场级）"),
-            new TaskSpec("STOCK_DAILY", 1, false, true, 1, "个股日线（逐券）"),
+            new TaskSpec("STOCK_DAILY", 1, true, false, null, "个股日线（市场级，按页拆任务，每页 100 条）"),
             new TaskSpec("STOCK_WEEKLY", 1, false, true, 1, "个股周线（逐券）"),
             new TaskSpec("INDEX_DAILY", 1, false, true, 1, "指数日线（逐券）"),
             new TaskSpec("STOCK_BY_BOARD", 1, false, false, null, "板块-个股关系（逐板块，需 board_basic 表）")
@@ -72,6 +72,23 @@ public final class TaskTypeCatalog {
     /** 逐券唯一键：taskType|source|code|date */
     public static String buildUniqueKey(String taskType, int source, String code, String date) {
         return taskType + "|" + source + "|" + code + "|" + date;
+    }
+
+    /** STOCK_DAILY 分页唯一键：taskType|source|date|pn */
+    public static String buildPageUniqueKey(String taskType, int source, String date, int pn) {
+        return taskType + "|" + source + "|" + date + "|" + pn;
+    }
+
+    /** STOCK_DAILY 专用：带页码（pn 从 1 开始）和交易日。 */
+    public static String buildPageParams(String date, int pn) {
+        ObjectNode n = OM.createObjectNode();
+        n.put("tradeDate", date);
+        n.put("pn", pn);
+        try {
+            return OM.writeValueAsString(n);
+        } catch (Exception e) {
+            return "{\"tradeDate\":\"" + date + "\",\"pn\":" + pn + "}";
+        }
     }
 
     private static final ObjectMapper OM = new ObjectMapper();

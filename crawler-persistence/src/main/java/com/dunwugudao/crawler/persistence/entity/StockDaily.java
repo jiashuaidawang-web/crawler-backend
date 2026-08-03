@@ -42,11 +42,21 @@ public class StockDaily {
     private String industryCode;     // f140 所属行业代码
     private String conceptCode;      // f141 所属概念代码
     private Integer marketCode;      // f152 市场码(0深/1沪/2京)
-    private BigDecimal reservedF24;  // f24 待确认
-    private BigDecimal reservedF25;  // f25 待确认
+    private BigDecimal reservedF24;  // f24 年初至今涨跌幅
+    private BigDecimal reservedF25;  // f25 涨停价(分→元)
     private BigDecimal reservedF107; // f107 待确认
-    private BigDecimal reservedF136; // f136 待确认
-    private BigDecimal reservedF173; // f173 待确认
+    private BigDecimal reservedF136; // f136 炸板次数
+    private BigDecimal reservedF173; // f173 涨速%
+    // push2 clist 完整投影新增字段（2026-08-02）
+    private BigDecimal velocity;        // f11 涨速%
+    private Integer isNewHigh;          // f22 是否新高 1/0
+    private BigDecimal chg60d;          // f23 60日涨跌幅%
+    private BigDecimal sealFund;        // f62 封单资金(元)
+    private Integer boardDays;          // f115 连板天数
+    private String boardStat;           // f128 涨停统计("3/2"=3天2板)
+    private String firstSealTime;       // f140 首次封板 HH:mm:ss
+    private String lastSealTime;        // f141 最后封板 HH:mm:ss
+    private Integer limitType;          // f152 涨停类型
     // 基础字段
     private Integer dataSource;          // data_source: 0=东财 1=同花顺          // 0=东财 1=同花顺
     private LocalDate createDate;    // 创建日期

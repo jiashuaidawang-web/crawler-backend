@@ -17,6 +17,13 @@ mybatis-plus:
     db-config:
       id-type: auto
 
+# ---------------------- STOCK_DAILY 拆页种子配置 ----------------------
+# 全市场股票总数（用于计算总页数 = ceil(nowStockSize / pageSize)）。
+# 市场扩容时调大此值（如 5545 → 6000），可从东财 clist total 字段或交易所官网获取。
+stock-daily:
+  now-stock-size: 5545
+  page-size: 100   # 东财 clist 每页最多 100 条（pz 参数）
+
 # ---------------------- XXL-JOB 执行器（调度接入 M3） ----------------------
 # 执行器挂在 admin（控制面）：worker 只认领、不调度。
 # 未部署 xxl-job-admin 时，executor 启动会打连接错误日志，但【不影响 admin 应用启动】，

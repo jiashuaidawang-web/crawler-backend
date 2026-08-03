@@ -83,8 +83,15 @@ public final class EastmoneyEndpoints {
                         fsVal = fs != null ? fs : String.valueOf(params.getOrDefault("fs", ""));
                     }
                     String fields = String.valueOf(params.getOrDefault("fields", defaultFields(taskType)));
+                    // 页码：STOCK_DAILY 由种子注入 pn（从 1 开始），其它 CLIST 沿用 page 参数
+                    int pn;
+                    if ("STOCK_DAILY".equals(taskType)) {
+                        pn = parseInt(params.getOrDefault("pn", page), page);
+                    } else {
+                        pn = page;
+                    }
                     return baseUrl
-                            + "?pn=" + page + "&pz=100&po=1&np=1&fltt=2&invt=2"
+                            + "?pn=" + pn + "&pz=100&po=1&np=1&fltt=2&invt=2"
                             + "&fs=" + fsVal + "&fields=" + fields;
                 }
                 case DATACENTER: {
@@ -131,10 +138,10 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("CIXIN_POOL", new EndpointSpec(
                 "CIXIN_POOL", "https://push2ex.eastmoney.com/getTopicCXPooll",
                 ParserType.ZT_POOL, null, null, "cixin"));
-        // 个股日线
+        // 个股日线（push2 clist 全市场快照，按页拆任务；fs 含沪深主板+创业板+科创板）
         SPEC_BY_TYPE.put("STOCK_DAILY", new EndpointSpec(
-                "STOCK_DAILY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-                ParserType.KLINE, null, null, null));
+                "STOCK_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", null, null));
         // 个股周线
         SPEC_BY_TYPE.put("STOCK_WEEKLY", new EndpointSpec(
                 "STOCK_WEEKLY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
@@ -176,8 +183,9 @@ public final class EastmoneyEndpoints {
                 "DRAGON_TIGER_DETAIL", "https://datacenter-web.eastmoney.com/api/data/get",
                 ParserType.DATACENTER, null, "RPT_BILLBOARD_DETAIL", null));
         // 板块-个股关联（fs 动态拼 b:bk{boardCode}+f:!50，在 buildUrl 里处理）
+        // 注意：STOCK_BY_BOARD 用 weblogin 路径（其他 CLIST 用 api 路径）
         SPEC_BY_TYPE.put("STOCK_BY_BOARD", new EndpointSpec(
-                "STOCK_BY_BOARD", "https://push2.eastmoney.com/api/qt/clist/get",
+                "STOCK_BY_BOARD", "https://push2.eastmoney.com/weblogin/api/qt/clist/get",
                 ParserType.CLIST, null, null, null));
     }
 
@@ -221,21 +229,24 @@ public final class EastmoneyEndpoints {
             case "BOARD_DAILY":
                 // 含行情明细：f2 价格/f4 涨跌额/f5 成交量/f6 成交额/f7 振幅/f8 换手/f10 量比
                 // f15 最高/f16 最低/f17 今开/f18 昨收/f20 总市值/f21 流通市值
-                // f166 领涨股代码 / f167 领涨股名称
-                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f166,f167";
+                // f140 领涨股代码 / f128 领涨股名称
+                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f140,f128";
             case "REGION_DAILY":
             case "INDUSTRY_DAILY":
             case "CONCEPT_DAILY":
                 // 单类型板块行情投影（和 BOARD_DAILY 一致，含领涨股）
-                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f166,f167";
+                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f140,f128";
             case "MAIN_FUND_STOCK":
                 // 含 f13 以便补 ts_code 后缀
                 return "f12,f13,f14,f62,f66,f72,f78,f84";
             case "MAIN_FUND_BOARD":
                 return "f12,f14,f62,f66,f72,f78,f84";
+            case "STOCK_DAILY":
+                // 全市场快照完整投影（f1-f173，含行情/市值/封板/涨停类型等）
+                return "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f62,f115,f128,f140,f141,f136,f152,f173";
             case "STOCK_BY_BOARD":
-                // f12=股票代码, f13=市场码(补后缀), f14=股票名称
-                return "f12,f13,f14";
+                // f12=股票代码, f14=股票名称, f2=权重, f3=类型标识
+                return "f12,f14,f2,f3";
             default:
                 return "f12,f14,f3,f62";
         }
@@ -286,5 +297,13 @@ public final class EastmoneyEndpoints {
 
     static String indexName(String indexCode) {
         return INDEX_NAMES.get(indexCode);
+    }
+
+    /** Object → int，解析失败返回 fallback。 */
+    static int parseInt(Object fallback, int val) {
+        if (fallback instanceof Number n) return n.intValue();
+        String s = String.valueOf(fallback).trim();
+        if (s.isEmpty() || "-".equals(s)) return val;
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return val; }
     }
 }

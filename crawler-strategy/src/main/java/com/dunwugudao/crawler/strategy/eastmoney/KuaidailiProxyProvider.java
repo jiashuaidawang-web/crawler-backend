@@ -78,24 +78,25 @@ public class KuaidailiProxyProvider implements ProxyProvider {
                 .build();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                log.warn("[Kuaidaili] API HTTP {}", response.code());
+                log.warn("[Kuaidaili] API HTTP {} (提取失败，返回 null)", response.code());
                 return null;
             }
             ResponseBody body = response.body();
             if (body == null) {
+                log.warn("[Kuaidaili] API 返回空 body（提取失败，返回 null）");
                 return null;
             }
             String text = body.string().trim();
             if (text.isEmpty() || !text.contains(":")) {
-                log.warn("[Kuaidaili] unexpected response: {}", text);
+                log.warn("[Kuaidaili] unexpected response: {}（提取失败，返回 null）", text);
                 return null;
             }
             // text = "ip:port" → "http://user:pass@ip:port"
             String proxy = "http://" + username + ":" + password + "@" + text;
-            log.debug("[Kuaidaili] acquired {}", text);
+            log.info("[Kuaidaili] acquire success: {} (proxy={})", text, proxy);
             return proxy;
         } catch (IOException e) {
-            log.warn("[Kuaidaili] acquire failed: {}", e.getMessage());
+            log.warn("[Kuaidaili] acquire failed: {}（提取失败，返回 null）", e.getMessage());
             return null;
         }
     }

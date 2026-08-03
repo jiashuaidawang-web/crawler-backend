@@ -1,13 +1,11 @@
 package com.dunwugudao.crawler.worker.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
 
 /**
  * 快代理（kuaidaili）私密代理配置。
  * <p>对应 application.yml 的 {@code proxy.kuaidaili.*}。密钥外置，避免硬编码进仓库。</p>
  */
-@Configuration
 @ConfigurationProperties(prefix = "proxy.kuaidaili")
 public class KuaidailiConfig {
 

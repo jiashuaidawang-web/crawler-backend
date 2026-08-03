@@ -82,6 +82,47 @@ public class BrowserContextFactory {
         return ctx;
     }
 
+    /**
+     * 新建带反爬配置的浏览器上下文（直接指定代理，用于东财 fallback 路径）。
+     * @param browser 已启动的浏览器实例
+     * @param cfg     反爬配置（用于 stealth/Cookie）
+     * @param host    目标 host
+     * @param proxy   代理字符串（http://user:pass@host:port），null 表示不代理
+     */
+    public BrowserContext newContext(Browser browser, AntiCrawlConfig cfg, String host, String proxy) {
+        StealthSpec spec = new StealthSpec();
+        spec.setEnabled(cfg.isStealthEnabled());
+        StealthSpec.Fingerprint fp = spec.randomize();
+
+        Browser.NewContextOptions opts = new Browser.NewContextOptions();
+        if (fp.getUserAgent() != null) {
+            opts.setUserAgent(fp.getUserAgent());
+        }
+        opts.setViewportSize(fp.getWidth(), fp.getHeight());
+        if (fp.getLocale() != null) {
+            opts.setLocale(fp.getLocale());
+        }
+        if (fp.getTimezone() != null) {
+            opts.setTimezoneId(fp.getTimezone());
+        }
+        opts.setJavaScriptEnabled(true);
+        opts.setPermissions(new ArrayList<>());
+
+        if (proxy != null && !proxy.isBlank()) {
+            opts.setProxy(parseProxy(proxy));
+        }
+
+        BrowserContext ctx = browser.newContext(opts);
+        ctx.addInitScript(STEALTH_JS);
+        if (cfg.getCookieDir() != null && host != null) {
+            List<Cookie> cookies = loadCookies(host, cfg.getCookieDir());
+            if (!cookies.isEmpty()) {
+                ctx.addCookies(cookies);
+            }
+        }
+        return ctx;
+    }
+
     /** 从 cookieDir/<host>.json 读取 Cookie 列表（Playwright 导出格式）。 */
     public List<Cookie> loadCookies(String host, String cookieDir) {
         List<Cookie> result = new ArrayList<>();

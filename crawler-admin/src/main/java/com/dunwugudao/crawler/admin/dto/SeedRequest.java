@@ -12,6 +12,7 @@ public record SeedRequest(
         String uniqueKey,
         Integer expectedCount,
         Integer priority,
-        Integer maxRetry
+        Integer maxRetry,
+        String tradeDate  // STOCK_DAILY 专用（如 "2026-08-01"），可为 null
 ) {
 }

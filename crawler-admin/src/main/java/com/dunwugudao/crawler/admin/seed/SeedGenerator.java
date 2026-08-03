@@ -7,6 +7,9 @@ import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
+import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -43,26 +46,39 @@ public class SeedGenerator {
 
     private final CrawlTaskMapper mapper;
     private final StockUniverseProvider universe;
-    private final BoardBasicService boardBasicService;
     private final BoardBasicMapper boardBasicMapper;
     private final DragonTigerMapper dragonTigerMapper;
+    private final ProxyManager proxyManager;
+    private final EastmoneyClient eastmoneyClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** 全市场股票总数（计算 STOCK_DAILY 总页数）。 */
+    private final int stockDailySize;
+    /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
+    private final int stockDailyPageSize;
+    /** STOCK_BY_BOARD 每页条数。 */
+    private static final int BOARD_BY_BOARD_PAGE_SIZE = 100;
 
     public SeedGenerator(CrawlTaskMapper mapper, StockUniverseProvider universe,
-                         BoardBasicService boardBasicService, BoardBasicMapper boardBasicMapper,
-                         DragonTigerMapper dragonTigerMapper) {
+                         BoardBasicMapper boardBasicMapper,
+                         DragonTigerMapper dragonTigerMapper,
+                         ProxyManager proxyManager,
+                         EastmoneyClient eastmoneyClient,
+                         org.springframework.core.env.Environment env) {
         this.mapper = mapper;
         this.universe = universe;
-        this.boardBasicService = boardBasicService;
         this.boardBasicMapper = boardBasicMapper;
         this.dragonTigerMapper = dragonTigerMapper;
+        this.proxyManager = proxyManager;
+        this.eastmoneyClient = eastmoneyClient;
+        // 默认全市场 5545 只、每页 100 条（56 页）；可通过 application.yml 覆盖
+        this.stockDailySize = Integer.parseInt(env.getProperty("stock-daily.now-stock-size", "5545"));
+        this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
     }
 
     /** 单个交易日的市场级 + 逐券种子（dailyCloseSeed 用）。 */
     public int dailySeed(String date, int source) {
-        // 1. 先维护板块基础数据
-        log.info("开始维护板块基础数据...");
-        int[] boardResult = boardBasicService.maintain();
-        log.info("板块维护完成：新增={}, 删除={}, 更新={}", boardResult[0], boardResult[1], boardResult[2]);
+        // board_basic 改为 board_daily 同步的副作用维护，不再单独 maintain（见 BoardBasicSyncService）
 
         // 2. 刷新股票/板块列表
         log.info("开始刷新股票/指数列表...");
@@ -77,6 +93,9 @@ public class SeedGenerator {
                 for (String limitType : LIMIT_SUBTYPES) {
                     n += insertOne(limitType, source, date, null, null);
                 }
+            } else if ("STOCK_DAILY".equals(spec.taskType())) {
+                // 全市场快照按页拆任务：总页数 = ceil(nowStockSize / pageSize)，每页一个 task（pn 从 1 开始）
+                n += seedStockDailyPages(source, date);
             } else if ("REGION_DAILY".equals(spec.taskType())) {
                 n += insertOne(spec.taskType(), source, date, null, null,
                         TaskTypeCatalog.buildParams(spec.taskType(), date, 1));
@@ -107,7 +126,32 @@ public class SeedGenerator {
         return n;
     }
 
-    /** 逐板块种子：读 board_basic 表去重 boardCode，每个建一条 STOCK_BY_BOARD 任务。 */
+    /**
+     * STOCK_DAILY 按页拆任务：总页数 = ceil(nowStockSize / pageSize)，每页一个 task（pn 从 1 开始）。
+     * <p>唯一键：STOCK_DAILY|source|date|pn（幂等，重复 seed 不重复入库）。
+     * worker 执行时只取 params.pn 拼 URL，不做分页判断。</p>
+     */
+    public int seedStockDailyPages(int source, String date) {
+        int totalPages = (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
+        List<CrawlTask> batch = new ArrayList<>(BATCH);
+        int total = 0;
+        for (int pn = 1; pn <= totalPages; pn++) {
+            String params = TaskTypeCatalog.buildPageParams(date, pn);
+            CrawlTask task = buildTask("STOCK_DAILY", source, date, null, null, params);
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_DAILY", source, date, pn));
+            batch.add(task);
+            if (batch.size() >= BATCH) {
+                total += flush(batch);
+                batch.clear();
+            }
+        }
+        total += flush(batch);
+        log.info("seedStockDailyPages date={} size={} pageSize={} pages={} inserted={}",
+                date, stockDailySize, stockDailyPageSize, totalPages, total);
+        return total;
+    }
+
+    /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */
     private int seedByBoard(int source, String date) {
         List<BoardBasic> boards = boardBasicMapper.selectList(null);
         // 按 boardCode 去重（保留首位）
@@ -120,14 +164,70 @@ public class SeedGenerator {
         }
         int total = 0;
         for (BoardBasic b : deduped) {
-            String params = TaskTypeCatalog.buildParams(
-                    "STOCK_BY_BOARD", date, null, null,
-                    b.getBoardCode(), b.getBoardName(), b.getBoardType());
-            CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, params);
-            total += mapper.insertIfAbsent(task);
+            // 先请求一次（pz=1）拿 total，计算页数
+            int totalCount = fetchBoardStockTotal(b.getBoardCode(), date);
+            int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
+            // 按页拆任务：每页一个 task（pn 从 1 开始）
+            for (int pn = 1; pn <= totalPages; pn++) {
+                String params = TaskTypeCatalog.buildParams(
+                        "STOCK_BY_BOARD", date, null, null,
+                        b.getBoardCode(), b.getBoardName(), b.getBoardType());
+                // 追加 pn 到 params（buildParams 没带 pn，这里拼进去）
+                String paramsWithPn = appendPnToParams(params, pn);
+                CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + b.getBoardCode());
+                total += mapper.insertIfAbsent(task);
+            }
         }
         log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
         return total;
+    }
+
+    /** 请求某板块下股票总数（pz=1，只拿 total）。 */
+    private int fetchBoardStockTotal(String boardCode, String date) {
+        String fs = "b:" + boardCode.toLowerCase() + "+f:!50";
+        String url = "https://push2.eastmoney.com/weblogin/api/qt/clist/get"
+                + "?pn=1&pz=1&po=1&np=1&fltt=1&invt=2&fid=f3"
+                + "&fs=" + fs + "&fields=f12";
+        try {
+            String proxy = proxyManager.acquireProxy();
+            String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            String cleaned = cleanJsonp(resp);
+            JsonNode root = objectMapper.readTree(cleaned);
+            int total = root.path("data").path("total").asInt(0);
+            log.info("[fetchBoardStockTotal] boardCode={}, total={}, proxy={}", boardCode, total, proxy);
+            return total;
+        } catch (Exception e) {
+            log.warn("[fetchBoardStockTotal] 失败(boardCode={}): {}", boardCode, e.getMessage());
+            return 0;
+        }
+    }
+
+    /** 把 pn 拼到 params JSON 末尾（简单字符串拼接，避免引入 JSON 库）。 */
+    private String appendPnToParams(String params, int pn) {
+        if (params == null || params.isEmpty()) {
+            return "{\"pn\":" + pn + "}";
+        }
+        // params 形如 {"boardCode":"BK0450",...}，在末尾 } 前插入 ,"pn":N
+        return params.substring(0, params.length() - 1) + ",\"pn\":" + pn + "}";
+    }
+
+    /** 清洗 JSONP 包裹：剥掉 callback(...); 前缀后缀。 */
+    private String cleanJsonp(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        int lparen = s.indexOf('(');
+        int rparen = s.lastIndexOf(')');
+        if (lparen > 0 && rparen > lparen && s.endsWith(");")) {
+            return s.substring(lparen + 1, rparen);
+        }
+        return s;
+    }
+
+    private String randomUa() {
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
     }
 
     /**
@@ -161,11 +261,24 @@ public class SeedGenerator {
                 for (String limitType : LIMIT_SUBTYPES) {
                     batch.add(buildTask(limitType, source, date, null, null));
                 }
+            } else if ("STOCK_DAILY".equals(spec.taskType())) {
+                // 历史回填也按页拆
+                for (int pn = 1; pn <= totalPages(date); pn++) {
+                    String params = TaskTypeCatalog.buildPageParams(date, pn);
+                    CrawlTask task = buildTask("STOCK_DAILY", source, date, null, null, params);
+                    task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_DAILY", source, date, pn));
+                    batch.add(task);
+                }
             } else {
                 batch.add(buildTask(spec.taskType(), source, date, null, null));
             }
         }
         return flush(batch);
+    }
+
+    /** STOCK_DAILY 总页数（size / pageSize 向上取整）。 */
+    private int totalPages(String date) {
+        return (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
     }
 
     private int backfillPerInstrument(String date, int source, List<String> typeFilter) {

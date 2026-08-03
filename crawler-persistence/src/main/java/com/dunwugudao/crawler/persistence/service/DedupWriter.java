@@ -63,6 +63,7 @@ public class DedupWriter {
     private final MainFundFlowMapper mainFundFlowMapper;
     private final DragonTigerMapper dragonTigerMapper;
     private final DtDetailMapper dtDetailMapper;
+    private final BoardBasicSyncService boardBasicSyncService;
 
     public DedupWriter(LimitUpPoolMapper limitUpPoolMapper,
                        LimitDownPoolMapper limitDownPoolMapper,
@@ -76,7 +77,8 @@ public class DedupWriter {
                        IndexDailyMapper indexDailyMapper,
                        MainFundFlowMapper mainFundFlowMapper,
                        DragonTigerMapper dragonTigerMapper,
-                       DtDetailMapper dtDetailMapper
+                       DtDetailMapper dtDetailMapper,
+                       BoardBasicSyncService boardBasicSyncService
     ) {
         this.limitUpPoolMapper = limitUpPoolMapper;
         this.limitDownPoolMapper = limitDownPoolMapper;
@@ -91,6 +93,7 @@ public class DedupWriter {
         this.mainFundFlowMapper = mainFundFlowMapper;
         this.dragonTigerMapper = dragonTigerMapper;
         this.dtDetailMapper = dtDetailMapper;
+        this.boardBasicSyncService = boardBasicSyncService;
     }
 
 //        this.stockBoardRelMapper = stockBoardRelMapper;
@@ -159,6 +162,15 @@ public class DedupWriter {
                 boardDailyMapper.updateRow(entity);
             } else {
                 boardDailyMapper.insertIfAbsent(entity);
+            }
+            // board_daily 落库后，顺手同步 board_basic 维表（幂等，失败不影响主流程）
+            try {
+                boardBasicSyncService.syncBoard(
+                        boardCode, str(r.get("board_name")),
+                        intVal(r.get("board_type")), newCode);
+            } catch (Exception e) {
+                log.warn("syncBoard 副作用失败(boardCode={}, tradeDate={}): {}",
+                        boardCode, tradeDate, e.getMessage());
             }
         }
     }
