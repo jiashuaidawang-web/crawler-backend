@@ -11,8 +11,8 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface StrongPoolMapper extends BaseMapper<StrongPool> {
 
-    @Select("SELECT data_source FROM strong_pool WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}")
-    Integer selectDataSource(@Param("tsCode") String tsCode, @Param("tradeDate") java.time.LocalDate tradeDate);
+    @Select("SELECT data_source FROM strong_pool WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate} AND data_source = #{dataSource}")
+    Integer selectDataSource(@Param("tsCode") String tsCode, @Param("tradeDate") java.time.LocalDate tradeDate, @Param("dataSource") int dataSource);
 
     @Update("""
             UPDATE strong_pool SET
@@ -21,7 +21,7 @@ public interface StrongPoolMapper extends BaseMapper<StrongPool> {
               amount = #{amount}, ltsz = #{ltsz}, tshare = #{tshare}, turnover_rate = #{turnoverRate},
               board_code = #{boardCode}, zttj_ct = #{zttjCt}, zttj_days = #{zttjDays},
               data_source = #{dataSource}, src_detail = #{srcDetail}, update_date = #{updateDate}
-            WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
+            WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate} AND data_source = #{dataSource}
             """)
     int updateRow(StrongPool row);
 

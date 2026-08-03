@@ -52,7 +52,8 @@ public class TonghuashunProxyDemo {
 
     public static void main(String[] args) {
         BrowserPool pool = new BrowserPool();
-        Browser browser = pool.acquire();
+        // Browser 在首次 attempt 拿到 proxy 后再 acquire（acquire 依赖 cfg 选择 SELF/CLOAK 模式）
+        Browser browser = null;
         try {
             for (String url : TARGETS) {
                 System.out.println("\n===================================================");
@@ -68,6 +69,9 @@ public class TonghuashunProxyDemo {
                     }
                     System.out.println("[PROXY] " + mask(proxy) + " (attempt " + attempt + "/" + MAX_PROXY_RETRY + ")");
                     AntiCrawlConfig cfg = new MinimalAntiCrawlConfig(proxy);
+                    if (browser == null) {
+                        browser = pool.acquire(cfg);
+                    }
 
                     BrowserContext ctx = new BrowserContextFactory().newContext(browser, cfg, BrowserContextFactory.hostOf(url));
                     try (Page page = ctx.newPage()) {
@@ -244,6 +248,41 @@ public class TonghuashunProxyDemo {
         @Override
         public String getProxyRotation() {
             return "RANDOM";
+        }
+
+        @Override
+        public String getStealthMode() {
+            return "SELF";
+        }
+
+        @Override
+        public String getCloakCdpUrl() {
+            return null;
+        }
+
+        @Override
+        public String getCloakLicenseKey() {
+            return "";
+        }
+
+        @Override
+        public boolean isCloakHumanize() {
+            return false;
+        }
+
+        @Override
+        public String getCloakFingerprintSeed() {
+            return "";
+        }
+
+        @Override
+        public int getCloakLocalPort() {
+            return 9222;
+        }
+
+        @Override
+        public String getCloakServeScript() {
+            return "scripts/cloak_serve.py";
         }
     }
 }

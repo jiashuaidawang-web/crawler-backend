@@ -39,11 +39,40 @@ public class BrowserContextFactory {
     /**
      * 新建带反爬配置的浏览器上下文。
      *
+     * <p>两种模式：
+     * <ul>
+     *   <li><b>SELF</b>：现状,注入 stealth JS、随机 UA/viewport/locale/timezone、按 source 取代理。</li>
+     *   <li><b>CLOAK</b>：CloakBrowser 已在二进制层处理指纹与代理,这里只保留 Cookie 注入,
+     *       不再灌 JS / 设 UA / viewport / 代理。</li>
+     * </ul>
+     *
      * @param browser 已启动的（常驻）浏览器实例
      * @param cfg     反爬配置
      * @param host    目标 host（用于定位 Cookie 文件，如 quote.10jqka.com.cn）
      */
     public BrowserContext newContext(Browser browser, AntiCrawlConfig cfg, String host) {
+        if ("CLOAK".equalsIgnoreCase(cfg.getStealthMode())) {
+            return newContextClover(browser, cfg, host);
+        }
+        return newContextSelf(browser, cfg, host, cfg.getProxyFor(SourceType.TONGHUASHUN));
+    }
+
+    /** CLOAK 模式：只建上下文 + 注入 Cookie,指纹/代理/时区全由 cloakserve 处理。 */
+    private BrowserContext newContextClover(Browser browser, AntiCrawlConfig cfg, String host) {
+        Browser.NewContextOptions opts = new Browser.NewContextOptions();
+        opts.setJavaScriptEnabled(true);
+        BrowserContext ctx = browser.newContext(opts);
+        if (cfg.getCookieDir() != null && host != null) {
+            List<Cookie> cookies = loadCookies(host, cfg.getCookieDir());
+            if (!cookies.isEmpty()) {
+                ctx.addCookies(cookies);
+            }
+        }
+        return ctx;
+    }
+
+    /** SELF 模式：现状逻辑,随机指纹 + stealth JS + 代理 + Cookie。 */
+    private BrowserContext newContextSelf(Browser browser, AntiCrawlConfig cfg, String host, String proxy) {
         StealthSpec spec = new StealthSpec();
         spec.setEnabled(cfg.isStealthEnabled());
         StealthSpec.Fingerprint fp = spec.randomize();
@@ -62,7 +91,6 @@ public class BrowserContextFactory {
         opts.setJavaScriptEnabled(true);
         opts.setPermissions(new ArrayList<>());
 
-        String proxy = cfg.getProxyFor(SourceType.TONGHUASHUN);
         if (proxy != null && !proxy.isBlank()) {
             opts.setProxy(parseProxy(proxy));
         }
@@ -90,37 +118,10 @@ public class BrowserContextFactory {
      * @param proxy   代理字符串（http://user:pass@host:port），null 表示不代理
      */
     public BrowserContext newContext(Browser browser, AntiCrawlConfig cfg, String host, String proxy) {
-        StealthSpec spec = new StealthSpec();
-        spec.setEnabled(cfg.isStealthEnabled());
-        StealthSpec.Fingerprint fp = spec.randomize();
-
-        Browser.NewContextOptions opts = new Browser.NewContextOptions();
-        if (fp.getUserAgent() != null) {
-            opts.setUserAgent(fp.getUserAgent());
+        if ("CLOAK".equalsIgnoreCase(cfg.getStealthMode())) {
+            return newContextClover(browser, cfg, host);
         }
-        opts.setViewportSize(fp.getWidth(), fp.getHeight());
-        if (fp.getLocale() != null) {
-            opts.setLocale(fp.getLocale());
-        }
-        if (fp.getTimezone() != null) {
-            opts.setTimezoneId(fp.getTimezone());
-        }
-        opts.setJavaScriptEnabled(true);
-        opts.setPermissions(new ArrayList<>());
-
-        if (proxy != null && !proxy.isBlank()) {
-            opts.setProxy(parseProxy(proxy));
-        }
-
-        BrowserContext ctx = browser.newContext(opts);
-        ctx.addInitScript(STEALTH_JS);
-        if (cfg.getCookieDir() != null && host != null) {
-            List<Cookie> cookies = loadCookies(host, cfg.getCookieDir());
-            if (!cookies.isEmpty()) {
-                ctx.addCookies(cookies);
-            }
-        }
-        return ctx;
+        return newContextSelf(browser, cfg, host, proxy);
     }
 
     /** 从 cookieDir/<host>.json 读取 Cookie 列表（Playwright 导出格式）。 */

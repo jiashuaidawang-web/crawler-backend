@@ -107,8 +107,8 @@ public class WorkerProxyManager {
             invalidated.set(false);
             consecutiveFailures.set(false);
             int attempt = fetchAttemptCount.incrementAndGet();
-            log.info("[WorkerProxyManager] new proxy acquired (attempt {}/{}), will be used until failure",
-                    attempt, maxProxyFetchAttempts);
+            log.info("[WorkerProxyManager] new proxy acquired (attempt {}/{}), proxy={}, will be used until failure",
+                    attempt, maxProxyFetchAttempts, newProxy);
             return newProxy;
         } finally {
             fetchLock.unlock();

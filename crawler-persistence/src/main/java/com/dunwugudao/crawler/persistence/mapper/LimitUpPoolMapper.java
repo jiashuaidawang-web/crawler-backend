@@ -11,8 +11,8 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface LimitUpPoolMapper extends BaseMapper<LimitUpPool> {
 
-    @Select("SELECT data_source FROM limit_up_pool WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}")
-    Integer selectDataSource(@Param("tsCode") String tsCode, @Param("tradeDate") java.time.LocalDate tradeDate);
+    @Select("SELECT data_source FROM limit_up_pool WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate} AND data_source = #{dataSource}")
+    Integer selectDataSource(@Param("tsCode") String tsCode, @Param("tradeDate") java.time.LocalDate tradeDate, @Param("dataSource") int dataSource);
 
     @Update("""
             UPDATE limit_up_pool SET
@@ -23,7 +23,7 @@ public interface LimitUpPoolMapper extends BaseMapper<LimitUpPool> {
               tshare = #{tshare}, turnover_rate = #{turnoverRate}, board_code = #{boardCode},
               zttj_ct = #{zttjCt}, zttj_days = #{zttjDays}, data_source = #{dataSource},
               src_detail = #{srcDetail}, update_date = #{updateDate}
-            WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
+            WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate} AND data_source = #{dataSource}
             """)
     int updateRow(LimitUpPool row);
 

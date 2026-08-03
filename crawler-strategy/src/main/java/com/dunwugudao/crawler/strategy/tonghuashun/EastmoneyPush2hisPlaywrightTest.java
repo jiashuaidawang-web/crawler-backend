@@ -27,12 +27,12 @@ public class EastmoneyPush2hisPlaywrightTest {
 
     public static void main(String[] args) {
         BrowserPool pool = new BrowserPool();
-        Browser browser = pool.acquire();
+        AntiCrawlConfig cfg = new DemoAntiCrawlConfig(PROXY);
+        Browser browser = pool.acquire(cfg);
         try {
             System.out.println("[TARGET] " + TARGET);
             System.out.println("[PROXY] " + PROXY);
 
-            AntiCrawlConfig cfg = new DemoAntiCrawlConfig(PROXY);
             BrowserContext ctx = new BrowserContextFactory().newContext(browser, cfg, "push2his.eastmoney.com");
 
             try (Page page = ctx.newPage()) {
@@ -101,6 +101,41 @@ public class EastmoneyPush2hisPlaywrightTest {
         @Override
         public String getProxyRotation() {
             return "RANDOM";
+        }
+
+        @Override
+        public String getStealthMode() {
+            return "SELF";
+        }
+
+        @Override
+        public String getCloakCdpUrl() {
+            return null;
+        }
+
+        @Override
+        public String getCloakLicenseKey() {
+            return "";
+        }
+
+        @Override
+        public boolean isCloakHumanize() {
+            return false;
+        }
+
+        @Override
+        public String getCloakFingerprintSeed() {
+            return "";
+        }
+
+        @Override
+        public int getCloakLocalPort() {
+            return 9222;
+        }
+
+        @Override
+        public String getCloakServeScript() {
+            return "scripts/cloak_serve.py";
         }
     }
 }

@@ -36,30 +36,39 @@ public final class EastmoneyEndpoints {
         public String buildUrl(Map<String, Object> params, int page) {
             switch (parserType) {
                 case ZT_POOL: {
-                    String lt = String.valueOf(params.getOrDefault("limitType", "limit_up"));
-                    String path;
-                    if ("limit_down".equals(lt)) {
-                        path = "getTopicDTPool";
-                    } else if ("zhaban".equals(lt)) {
-                        path = "getTopicZBPool";
-                    } else if ("strong".equals(lt)) {
-                        path = "getTopicQSPool";
-                    } else if ("cixin".equals(lt)) {
-                        path = "getTopicCXPooll";
-                    } else {
-                        path = "getTopicZTPool";
-                    }
-                    // 涨停/跌停/强势/次新池：一次取全量（pagesize=5000），无需分页
-                    // 实测能工作的 URL（2026-08-01）
-                    // 源：https://push2ex.eastmoney.com/getTopicZTPool?cb=callbackdata6233583&ut=...&dpt=wz.ztzt&Pageindex=0&pagesize=17000&sort=fbt%3Aasc&date=20260801&_=1785562460759
-                    // 强势池排序不同：sort=zdp%3Adesc（用户实测 2026-08-02）
+                    // 涨停/跌停/强势/次新池：按页拆任务，Pageindex/pagesize 由种子注入（Pageindex 从 0 开始，每页 100 条）
+                    // 排序：涨停/炸板 fbt asc；跌停用 fund asc；强势/次新用 zdp desc（用户实测 2026-08-02/03）
                     String d = tradeDate(params).replace("-", "");
                     long ts = System.currentTimeMillis();
-                    // 涨停/跌停用 fbt asc；强势/次新用 zdp desc
-                    String sort = ("strong".equals(lt) || "cixin".equals(lt)) ? "zdp%3Adesc" : "fbt%3Aasc";
+                    int pageindex = parseInt(params.getOrDefault("Pageindex", 0), 0);
+                    int pagesize = parseInt(params.getOrDefault("pagesize", 100), 100);
+                    // limitType 兼容两套命名：种子传 taskType 大写（LIMIT_DOWN/STRONG_POOL），spec 默认小写（down/strong）
+                    // 统一转小写后用 contains 匹配，兼容 limit_down 与 down、strong_pool 与 strong 等
+                    String lt = String.valueOf(params.getOrDefault("limitType", this.getPoolDefaultLimitType())).toLowerCase();
+                    String path;
+                    if (lt.contains("down")) {
+                        path = "getTopicDTPool";
+                    } else if (lt.contains("zhaban")) {
+                        path = "getTopicZBPool";
+                    } else if (lt.contains("strong")) {
+                        path = "getTopicQSPool";
+                    } else if (lt.contains("cixin")) {
+                        path = "getTopicCXPooll";
+                    } else {
+                        path = "getTopicZTPool"; // 涨停 / 默认
+                    }
+                    String sort;
+                    if (lt.contains("down")) {
+                        sort = "fund%3Aasc";
+                    } else if (lt.contains("strong") || lt.contains("cixin")) {
+                        sort = "zdp%3Adesc";
+                    } else {
+                        sort = "fbt%3Aasc";
+                    }
                     return "https://push2ex.eastmoney.com/" + path
                             + "?cb=callbackdata6233583&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
-                            + "&date=" + d + "&Pageindex=0&pagesize=5000&sort=" + sort + "&_=" + ts;
+                            + "&date=" + d + "&Pageindex=" + pageindex + "&pagesize=" + pagesize
+                            + "&sort=" + sort + "&_=" + ts;
                 }
                 case KLINE: {
                     String secid = secidFor(taskType, params);

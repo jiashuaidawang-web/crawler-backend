@@ -32,16 +32,33 @@ anti-crawl:
   ua-pool:
     - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   proxy-list: []
+  # stealth-mode: SELF（默认，现状 JS 注入）| CLOAK（CloakBrowser CDP，C++ 源码级补丁）
+  # stealth-mode: SELF
+  # ---- CloakBrowser(CLOAK 模式)参数 ----
+  # 开启 CLOAK 模式只需取消下面这行注释：
+  # stealth-mode: CLOAK
+  # cloak-license-key: ""                # 免费 key：cloakbrowser.dev/github 登录获取；空=用 v146 公开版
+  # cloak-humanize: true                 # 人类化鼠标/键盘/滚动
+  # cloak-fingerprint-seed: ""           # 固定 seed=同一身份回访；空=每次随机
+  # cloak-local-port: 9222               # 本机 cloakserve 端口（自动拉起）
+  # cloak-serve-script: scripts/cloak_serve.py
+  # cloak-cdp-url: ""                    # 显式 CDP URL；空则按 cloak-local-port 拼 http://127.0.0.1:{port}
 
-# 代理配置（两个子键：qg=青果长效IP，kuaidaili=快代理私密代理；优先使用 qg）
+# 代理配置（三个子键，OkHttp 路径优先顺序：juliang > kuaidaili > 兜底硬编码）
 proxy:
+  # 巨量（juliangip）动态代理：OkHttp 路径首选。auto_white=1 自动白名单鉴权（无需账号密码）。
+  juliang:
+    trade-no: 1072663527266511
+    sign: 79c84c7d9e9c02126871f39872f4624a
+    # username: ""   # 账号密码鉴权时填写；白名单鉴权留空
+    # password: ""
   # 青果长效 IP（住宅隧道）：每 30 分钟换一次 IP，不限流量。
   # 提取 API：https://longterm.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=txt&seq=%0D%0A&distinct=false
   # 返回纯文本：ip:port（每行一个）；认证：username=api-key, password=AuthPwd
   qg:
     api-key: 8A9D6CC5
     password: 742290397356
-  # 快代理（kuaidaili）私密代理：密钥外置。未配置时 KuaidailiProxyProvider 使用兜底硬编码值。
+  # 快代理（kuaidaili）私密代理：巨量未配置时的回退。密钥外置。
   kuaidaili:
     secret-id: o3icyopd76ugn5hcya8g
     signature: 7dz6v5e9ba1bkejun2q9eobgdhrovfjm

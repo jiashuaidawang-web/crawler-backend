@@ -58,7 +58,7 @@ public class EastmoneyPlaywrightStrategy implements SourceStrategy {
         int pn = EastmoneyEndpoints.parseInt(params.getOrDefault("pn", 1), 1);
         String url = spec.buildUrl(params, pn);
 
-        Browser browser = browserPool.acquire();
+        Browser browser = browserPool.acquire(antiCrawlConfig);
         // 代理来自青果长效 IP（WorkerProxyManager），没有则无代理
         String proxy = workerProxyManager != null ? workerProxyManager.getProxy() : null;
         BrowserContext context = new BrowserContextFactory().newContext(browser, antiCrawlConfig, hostOf(url), proxy);

@@ -8,6 +8,7 @@ import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
+import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -17,8 +18,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -76,6 +79,7 @@ public class SeedGenerator {
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
     }
 
+    /**
     /** 单个交易日的市场级 + 逐券种子（dailyCloseSeed 用）。 */
     public int dailySeed(String date, int source) {
         // board_basic 改为 board_daily 同步的副作用维护，不再单独 maintain（见 BoardBasicSyncService）
@@ -90,26 +94,36 @@ public class SeedGenerator {
         int n = 0;
         for (TaskTypeCatalog.TaskSpec spec : TaskTypeCatalog.marketWideTypes()) {
             if ("LIMIT_POOL".equals(spec.taskType())) {
+                // 涨停/跌停/炸板：先探测 total，按 ceil(tc/100) 拆任务
                 for (String limitType : LIMIT_SUBTYPES) {
-                    n += insertOne(limitType, source, date, null, null);
+                    n += seedPoolTasks(limitType, source, date);
                 }
             } else if ("STOCK_DAILY".equals(spec.taskType())) {
-                // 全市场快照按页拆任务：总页数 = ceil(nowStockSize / pageSize)，每页一个 task（pn 从 1 开始）
+                // 全市场快照：探测 data.total 后按页拆任务
                 n += seedStockDailyPages(source, date);
+            } else if ("STRONG_POOL".equals(spec.taskType()) || "CIXIN_POOL".equals(spec.taskType())) {
+                // 强势/次新：先探测 total，按 ceil(tc/100) 拆任务
+                n += seedPoolTasks(spec.taskType(), source, date);
             } else if ("REGION_DAILY".equals(spec.taskType())) {
-                n += insertOne(spec.taskType(), source, date, null, null,
-                        TaskTypeCatalog.buildParams(spec.taskType(), date, 1));
+                // 地域板块：探测 total 后按页拆（boardType=1）
+                n += seedClistType(spec.taskType(), source, date, 1);
             } else if ("INDUSTRY_DAILY".equals(spec.taskType())) {
-                n += insertOne(spec.taskType(), source, date, null, null,
-                        TaskTypeCatalog.buildParams(spec.taskType(), date, 2));
+                // 行业板块：探测 total 后按页拆（boardType=2）
+                n += seedClistType(spec.taskType(), source, date, 2);
             } else if ("CONCEPT_DAILY".equals(spec.taskType())) {
-                n += insertOne(spec.taskType(), source, date, null, null,
-                        TaskTypeCatalog.buildParams(spec.taskType(), date, 3));
+                // 概念板块：探测 total 后按页拆（boardType=3）
+                n += seedClistType(spec.taskType(), source, date, 3);
             } else {
-                n += insertOne(spec.taskType(), source, date, null, null);
+                // BOARD_DAILY / MAIN_FUND_STOCK / MAIN_FUND_BOARD 等 CLIST 类型：探测 total 后按页拆
+                n += seedClistType(spec.taskType(), source, date, null);
             }
         }
         for (TaskTypeCatalog.TaskSpec spec : TaskTypeCatalog.perInstrumentTypes()) {
+            // STOCK_WEEKLY / INDEX_DAILY 走 Playwright 浏览器路径，暂不种子（Chromium 环境未就绪）
+            if ("STOCK_WEEKLY".equals(spec.taskType()) || "INDEX_DAILY".equals(spec.taskType())) {
+                log.info("[dailySeed] 跳过 {}（Playwright 路径，暂不种子）", spec.taskType());
+                continue;
+            }
             if ("INDEX_DAILY".equals(spec.taskType())) {
                 for (String code : indexCodes) {
                     n += insertOne(spec.taskType(), source, date, code, spec.defaultExpected());
@@ -132,7 +146,7 @@ public class SeedGenerator {
      * worker 执行时只取 params.pn 拼 URL，不做分页判断。</p>
      */
     public int seedStockDailyPages(int source, String date) {
-        int totalPages = (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
+        int totalPages = totalPages(date);
         List<CrawlTask> batch = new ArrayList<>(BATCH);
         int total = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
@@ -146,9 +160,14 @@ public class SeedGenerator {
             }
         }
         total += flush(batch);
-        log.info("seedStockDailyPages date={} size={} pageSize={} pages={} inserted={}",
+        log.info("[seedStockDailyPages] date={} size={} pageSize={} pages={} inserted={}",
                 date, stockDailySize, stockDailyPageSize, totalPages, total);
         return total;
+    }
+
+    /** STOCK_DAILY 总页数（size / pageSize 向上取整）。 */
+    private int totalPages(String date) {
+        return (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
     }
 
     /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */
@@ -203,6 +222,136 @@ public class SeedGenerator {
         }
     }
 
+    /**
+     * 探测池子（涨停/跌停/炸板/强势/次新）当日总数 tc。
+     * <p>先请求一次（pagesize=1，最小化数据传输），解析 data.tc。返回 -1 表示探测失败。</p>
+     */
+    private int fetchPoolTotal(String limitType, String date) {
+        try {
+            Map<String, Object> probeParams = new java.util.HashMap<>();
+            probeParams.put("tradeDate", date);
+            if (limitType != null) {
+                probeParams.put("limitType", limitType);
+            }
+            probeParams.put("Pageindex", 0);
+            probeParams.put("pagesize", 1);
+            String taskType = taskTypeForLimitType(limitType);
+            EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
+            String url = spec.buildUrl(probeParams, 0);
+            String proxy = proxyManager.acquireProxy();
+            String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            String cleaned = cleanJsonp(resp);
+            JsonNode root = objectMapper.readTree(cleaned);
+            int tc = root.path("data").path("tc").asInt(-1);
+            log.info("[fetchPoolTotal] limitType={}, tc={}, proxy={}", limitType, tc, proxy);
+            return tc;
+        } catch (Exception e) {
+            log.warn("[fetchPoolTotal] 失败(limitType={}): {}", limitType, e.getMessage());
+            return -1;
+        }
+    }
+
+    /** limitType → 池子 taskType（用于查 EndpointSpec）。 */
+    private String taskTypeForLimitType(String limitType) {
+        if (limitType == null) return "LIMIT_POOL";
+        switch (limitType) {
+            case "LIMIT_UP": return "LIMIT_UP";
+            case "LIMIT_DOWN": return "LIMIT_DOWN";
+            case "LIMIT_ZHABAN": return "LIMIT_ZHABAN";
+            case "STRONG_POOL": return "STRONG_POOL";
+            case "CIXIN_POOL": return "CIXIN_POOL";
+            default: return limitType;
+        }
+    }
+
+    /**
+     * 池子 params JSON：含 tradeDate / limitType / Pageindex / pagesize。
+     */
+    private String buildPoolParams(String date, String limitType, int pageindex, int pagesize) {
+        if (limitType != null) {
+            return "{\"tradeDate\":\"" + date + "\",\"limitType\":\"" + limitType
+                    + "\",\"Pageindex\":" + pageindex + ",\"pagesize\":" + pagesize + "}";
+        }
+        return "{\"tradeDate\":\"" + date + "\",\"Pageindex\":" + pageindex + ",\"pagesize\":" + pagesize + "}";
+    }
+
+    /**
+     * 池子任务下发：先探测 total，再按 ceil(tc/100) 拆任务。
+     * @return 插入的任务数
+     */
+    private int seedPoolTasks(String limitType, int source, String date) {
+        int tc = fetchPoolTotal(limitType, date);
+        int numTasks;
+        if (tc <= 0) {
+            // 探测失败或无数据：仍下发 1 个 task（兜底，避免漏跑）
+            numTasks = 1;
+            log.info("[seedPoolTasks] limitType={} 探测无数据(tc={})，下发 1 个兜底 task", limitType, tc);
+        } else {
+            numTasks = (tc + 99) / 100; // ceil(tc/100)
+        }
+        String taskType = taskTypeForLimitType(limitType);
+        int inserted = 0;
+        for (int i = 0; i < numTasks; i++) {
+            String params = buildPoolParams(date, limitType, i, 100);
+            CrawlTask task = buildTask(taskType, source, date, null, null, params);
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, i));
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedPoolTasks] limitType={} tc={} numTasks={} inserted={}", limitType, tc, numTasks, inserted);
+        return inserted;
+    }
+
+    /**
+     * 探测 CLIST 类型（push2 clist）当日总数。
+     * <p>用 spec 的 fs 拼最小请求（pz=1, fields=f12），解析 data.total。</p>
+     */
+    private int fetchClistTotal(EastmoneyEndpoints.EndpointSpec spec, String date) {
+        String url = spec.getBaseUrl() + "?pn=1&pz=1&po=1&np=1&fltt=2&invt=2"
+                + "&fs=" + (spec.getFs() != null ? spec.getFs() : "") + "&fields=f12";
+        try {
+            String proxy = proxyManager.acquireProxy();
+            String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            String cleaned = cleanJsonp(resp);
+            JsonNode root = objectMapper.readTree(cleaned);
+            int total = root.path("data").path("total").asInt(-1);
+            log.info("[fetchClistTotal] taskType={} total={}, proxy={}", spec.getTaskType(), total, proxy);
+            return total;
+        } catch (Exception e) {
+            log.warn("[fetchClistTotal] taskType={} 失败: {}", spec.getTaskType(), e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * CLIST 类型按页拆任务：探测 data.total 后按 ceil(total/100) 拆，每任务 pn=1..N。
+     * @param boardType REGION/INDUSTRY/CONCEPT_DAILY 需要，其他传 null
+     */
+    private int seedClistType(String taskType, int source, String date, Integer boardType) {
+        EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
+        int total = fetchClistTotal(spec, date);
+        if (total <= 0) {
+            log.warn("[seedClistType] taskType={} 探测无数据({})，跳过", taskType, total);
+            return 0;
+        }
+        int pageSize = 100;
+        int totalPages = (total + pageSize - 1) / pageSize;
+        int inserted = 0;
+        for (int pn = 1; pn <= totalPages; pn++) {
+            String params;
+            if (boardType != null) {
+                params = TaskTypeCatalog.buildParams(taskType, date, boardType);
+            } else {
+                params = TaskTypeCatalog.buildParams(taskType, date, (String) null);
+            }
+            params = appendPnToParams(params, pn);
+            CrawlTask task = buildTask(taskType, source, date, null, null, params);
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn));
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedClistType] taskType={} total={} pages={} inserted={}", taskType, total, totalPages, inserted);
+        return inserted;
+    }
+
     /** 把 pn 拼到 params JSON 末尾（简单字符串拼接，避免引入 JSON 库）。 */
     private String appendPnToParams(String params, int pn) {
         if (params == null || params.isEmpty()) {
@@ -253,38 +402,45 @@ public class SeedGenerator {
 
     private int backfillMarketWide(String date, int source, List<String> typeFilter) {
         List<CrawlTask> batch = new ArrayList<>();
+        int inserted = 0; // 池子任务即时入库的计数
         for (TaskTypeCatalog.TaskSpec spec : TaskTypeCatalog.marketWideTypes()) {
             if (typeFilter != null && !typeFilter.contains(spec.taskType())) {
                 continue;
             }
             if ("LIMIT_POOL".equals(spec.taskType())) {
+                // 涨停/跌停/炸板：先探测 total，按 ceil(tc/100) 拆任务（即时入库）
                 for (String limitType : LIMIT_SUBTYPES) {
-                    batch.add(buildTask(limitType, source, date, null, null));
+                    inserted += seedPoolTasks(limitType, source, date);
                 }
             } else if ("STOCK_DAILY".equals(spec.taskType())) {
-                // 历史回填也按页拆
-                for (int pn = 1; pn <= totalPages(date); pn++) {
-                    String params = TaskTypeCatalog.buildPageParams(date, pn);
-                    CrawlTask task = buildTask("STOCK_DAILY", source, date, null, null, params);
-                    task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_DAILY", source, date, pn));
-                    batch.add(task);
-                }
+                // 历史回填也按页拆（探测 total 后拆分，即时入库）
+                inserted += seedStockDailyPages(source, date);
+            } else if ("STRONG_POOL".equals(spec.taskType()) || "CIXIN_POOL".equals(spec.taskType())) {
+                // 强势/次新：先探测 total，按 ceil(tc/100) 拆任务（即时入库）
+                inserted += seedPoolTasks(spec.taskType(), source, date);
+            } else if ("REGION_DAILY".equals(spec.taskType())) {
+                inserted += seedClistType(spec.taskType(), source, date, 1);
+            } else if ("INDUSTRY_DAILY".equals(spec.taskType())) {
+                inserted += seedClistType(spec.taskType(), source, date, 2);
+            } else if ("CONCEPT_DAILY".equals(spec.taskType())) {
+                inserted += seedClistType(spec.taskType(), source, date, 3);
             } else {
-                batch.add(buildTask(spec.taskType(), source, date, null, null));
+                // BOARD_DAILY / MAIN_FUND_STOCK / MAIN_FUND_BOARD 等 CLIST 类型
+                inserted += seedClistType(spec.taskType(), source, date, null);
             }
         }
-        return flush(batch);
-    }
-
-    /** STOCK_DAILY 总页数（size / pageSize 向上取整）。 */
-    private int totalPages(String date) {
-        return (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
+        return inserted + flush(batch);
     }
 
     private int backfillPerInstrument(String date, int source, List<String> typeFilter) {
         int total = 0;
         for (TaskTypeCatalog.TaskSpec spec : TaskTypeCatalog.perInstrumentTypes()) {
             if (typeFilter != null && !typeFilter.contains(spec.taskType())) {
+                continue;
+            }
+            // STOCK_WEEKLY / INDEX_DAILY 走 Playwright 浏览器路径，暂不种子
+            if ("STOCK_WEEKLY".equals(spec.taskType()) || "INDEX_DAILY".equals(spec.taskType())) {
+                log.info("[backfillPerInstrument] 跳过 {}（Playwright 路径，暂不种子）", spec.taskType());
                 continue;
             }
             List<String> codes = "INDEX_DAILY".equals(spec.taskType())

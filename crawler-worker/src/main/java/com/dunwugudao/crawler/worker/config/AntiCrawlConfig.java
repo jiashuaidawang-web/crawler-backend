@@ -41,6 +41,12 @@ public class AntiCrawlConfig implements com.dunwugudao.crawler.core.config.AntiC
     /** 是否启用浏览器 stealth（同花顺策略使用）。 */
     private boolean stealthEnabled = true;
 
+    /**
+     * Stealth 模式：SELF（默认，现状 JS 注入）或 CLOAK（CloakBrowser CDP）。
+     * CLOAK 模式下，BrowserPool 会走 CDP 连接、跳过 stealth JS / UA / viewport 注入。
+     */
+    private String stealthMode = "SELF";
+
     /** Cookie 目录（同花顺登录态持久化），可空。 */
     private String cookieDir = "/data/crawler/cookies";
 
@@ -51,6 +57,29 @@ public class AntiCrawlConfig implements com.dunwugudao.crawler.core.config.AntiC
 
     /** 代理轮换策略：RANDOM / ROUND_ROBIN。 */
     private String proxyRotation = "RANDOM";
+
+    // ---- CloakBrowser(CLOAK 模式)参数 ----
+
+    /**
+     * CLOAK 模式下 CDP server 地址。默认按 cloak-local-port 拼出 http://127.0.0.1:{port}。
+     * 若显式设置则直接用（可用于 Docker sidecar 等场景）。
+     */
+    private String cloakCdpUrl = null;
+
+    /** CLOAK 模式下 CloakBrowser license key（空=用 v146 公开免费版）。 */
+    private String cloakLicenseKey = "";
+
+    /** CLOAK 模式下是否启用 humanize（人类化鼠标/键盘/滚动）。 */
+    private boolean cloakHumanize = true;
+
+    /** CLOAK 模式下固定指纹 seed（空=每次随机）。同一 seed 在同一代理下模拟回访者身份。 */
+    private String cloakFingerprintSeed = "";
+
+    /** CLOAK 模式下本地自动拉起 cloakserve 的端口。 */
+    private int cloakLocalPort = 9222;
+
+    /** CLOAK 模式下 cloakserve 启动脚本路径（相对工作目录或绝对路径）。 */
+    private String cloakServeScript = "scripts/cloak_serve.java";
 
     private final Random random = new Random();
     private final AtomicInteger rrCounter = new AtomicInteger(0);
@@ -75,5 +104,17 @@ public class AntiCrawlConfig implements com.dunwugudao.crawler.core.config.AntiC
             return list.get(Math.abs(i % list.size()));
         }
         return list.get(random.nextInt(list.size()));
+    }
+
+    /**
+     * 返回 CLOAK 模式下的 CDP URL：优先用显式 cloakCdpUrl，
+     * 否则按 cloakLocalPort 拼出 http://127.0.0.1:{port}。
+     */
+    @Override
+    public String getCloakCdpUrl() {
+        if (cloakCdpUrl != null && !cloakCdpUrl.isBlank()) {
+            return cloakCdpUrl;
+        }
+        return "http://127.0.0.1:" + cloakLocalPort;
     }
 }

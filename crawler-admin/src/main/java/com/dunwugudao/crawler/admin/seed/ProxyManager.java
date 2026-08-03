@@ -1,6 +1,7 @@
 package com.dunwugudao.crawler.admin.seed;
 
-import com.dunwugudao.crawler.strategy.eastmoney.KuaidailiProxyProvider;
+import com.dunwugudao.crawler.strategy.eastmoney.JuliangProxyProvider;
+import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
 import org.apache.http.client.fluent.Executor;
@@ -11,15 +12,17 @@ import java.net.URI;
 /**
  * 代理管理器：获取代理 + 构建 Executor + 失败重试。
  *
- * <p>代理来源已从旧池子（124.223.220.245:8088）切换为快代理私密代理（KuaidailiProxyProvider），
- * 与 worker 模块统一使用同一付费代理源。</p>
+ * <p>代理来源使用巨量（juliangip）动态代理，与 worker 模块统一。</p>
+ *
+ * <p>本类为 spring-free 的纯 POJO（与 strategy 模块统一风格），Spring bean 由
+ * {@link SeedStrategyBeans} 手动装配，不加 @Component。</p>
  */
 @Slf4j
 public class ProxyManager {
 
-    private static final int MAX_RETRIES = 3;
+    private static final int MAX_RETRIES = 15;
 
-    private final KuaidailiProxyProvider proxyProvider = new KuaidailiProxyProvider();
+    private final ProxyProvider proxyProvider = new JuliangProxyProvider("1072663527266511", "79c84c7d9e9c02126871f39872f4624a");
 
     /**
      * 执行带代理的 HTTP 请求（自动重试）。

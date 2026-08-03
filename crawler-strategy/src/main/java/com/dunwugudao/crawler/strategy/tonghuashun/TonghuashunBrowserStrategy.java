@@ -58,7 +58,7 @@ public class TonghuashunBrowserStrategy implements SourceStrategy {
 
         rateLimiter.acquire();
 
-        Browser browser = browserPool.acquire();
+        Browser browser = browserPool.acquire(antiCrawlConfig);
         BrowserContext context = null;
         try {
             String host = BrowserContextFactory.hostOf(url);

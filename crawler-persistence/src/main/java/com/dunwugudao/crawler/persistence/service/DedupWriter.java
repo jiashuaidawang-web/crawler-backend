@@ -326,8 +326,7 @@ public class DedupWriter {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = limitUpPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) continue;
+            Integer existing = limitUpPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             LimitUpPool e = new LimitUpPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setFund(bigDec(r.get("fund")));
@@ -345,8 +344,7 @@ public class DedupWriter {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = limitDownPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) continue;
+            Integer existing = limitDownPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             LimitDownPool e = new LimitDownPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setPe(bigDec(r.get("pe"))); e.setFba(bigDec(r.get("fba")));
@@ -364,8 +362,7 @@ public class DedupWriter {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = zhabanPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) continue;
+            Integer existing = zhabanPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             ZhabanPool e = new ZhabanPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setZf(bigDec(r.get("zf"))); e.setZs(bigDec(r.get("zs")));
@@ -383,8 +380,7 @@ public class DedupWriter {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = strongPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) continue;
+            Integer existing = strongPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             StrongPool e = new StrongPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setZs(bigDec(r.get("zs"))); e.setNh(intVal(r.get("nh"))); e.setLb(bigDec(r.get("lb")));
@@ -402,8 +398,8 @@ public class DedupWriter {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = cixinPoolMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) continue;
+            // 主键 (ts_code, trade_date, data_source)：仅当同一来源已存在时才更新，否则插入（不同来源共存）
+            Integer existing = cixinPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             CixinPool e = new CixinPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setOds(intVal(r.get("ods"))); e.setOd(str(r.get("od"))); e.setIpod(str(r.get("ipod")));

@@ -3,6 +3,7 @@ package com.dunwugudao.crawler.worker.config;
 import com.dunwugudao.crawler.core.strategy.StrategyFactory;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyApiStrategy;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyPlaywrightStrategy;
+import com.dunwugudao.crawler.strategy.eastmoney.JuliangProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.KuaidailiProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.QgLongTermProxyProvider;
@@ -23,7 +24,7 @@ import java.util.List;
  * 1 worker 实例绑定 1 个代理 IP，IP 失败后才提取新 IP，避免囤积浪费。</p>
  */
 @Configuration
-@EnableConfigurationProperties({KuaidailiConfig.class, QgLongTermConfig.class})
+@EnableConfigurationProperties({JuliangConfig.class, KuaidailiConfig.class, QgLongTermConfig.class})
 public class StrategyFactoryConfig {
 
     @Bean
@@ -32,16 +33,28 @@ public class StrategyFactoryConfig {
     }
 
     /**
-     * Worker 级 IP 管理器 —— OkHttp 路径（快代理私密代理）。
-     * <p>每个 worker 实例一个该 bean，保证各 worker 独立 IP。</p>
+     * Worker 级 IP 管理器 —— OkHttp 路径。
+     * <p>优先使用巨量（juliangip）动态代理（{@link JuliangConfig}）；未配置时回退到快代理（{@link KuaidailiConfig}）。
+     * 每个 worker 实例一个该 bean，保证各 worker 独立 IP。</p>
+     * <p>IP 切换的额度控制已下沉到任务级（{@link EastmoneyApiStrategy#MAX_PROXY_FETCH_ATTEMPTS_PER_TASK}），
+     * 一个任务最多用 N 个 IP，接新任务重新计算。这里设为 -1（worker 级无限制），
+     * 避免 worker 级熔断与任务级控制冲突——任务级才是“一个任务最多用几个 IP”的真正控制层。</p>
      */
     @Bean
-    public WorkerProxyManager eastmoneyOkHttpProxyManager(KuaidailiConfig kuaidailiConfig) {
-        ProxyProvider provider = kuaidailiConfig.isConfigured()
-                ? new KuaidailiProxyProvider(kuaidailiConfig.getSecretId(), kuaidailiConfig.getSignature(),
-                        kuaidailiConfig.getUsername(), kuaidailiConfig.getPassword())
-                : new KuaidailiProxyProvider();
-        return new WorkerProxyManager(provider::acquire);
+    public WorkerProxyManager eastmoneyOkHttpProxyManager(JuliangConfig juliangConfig, KuaidailiConfig kuaidailiConfig) {
+        ProxyProvider provider;
+        if (juliangConfig.isConfigured()) {
+            provider = juliangConfig.getUsername() != null && !juliangConfig.getUsername().isBlank()
+                    ? new JuliangProxyProvider(juliangConfig.getTradeNo(), juliangConfig.getSign(),
+                            juliangConfig.getUsername(), juliangConfig.getPassword())
+                    : new JuliangProxyProvider(juliangConfig.getTradeNo(), juliangConfig.getSign());
+        } else if (kuaidailiConfig.isConfigured()) {
+            provider = new KuaidailiProxyProvider(kuaidailiConfig.getSecretId(), kuaidailiConfig.getSignature(),
+                    kuaidailiConfig.getUsername(), kuaidailiConfig.getPassword());
+        } else {
+            provider = new KuaidailiProxyProvider(); // 兜底硬编码（不推荐生产用）
+        }
+        return new WorkerProxyManager(provider::acquire, -1); // -1 = worker 级无限制，由任务级控制
     }
 
     /**

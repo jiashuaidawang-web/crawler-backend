@@ -17,6 +17,33 @@ services:
       - XXL_JOB_ADMIN_ADDRESSES=http://124.223.220.245:8080/
     restart: unless-stopped
 
+  # CloakBrowser CDP server sidecar（仅 anti-crawl.stealth-mode=CLOAK 时需要）。
+  # 一个 cloakserve 可服务多个 worker；worker 通过 CDP 接入。
+  # 默认不启：docker-compose --profile cloak up -d 启用
+  cloakserve:
+    image: cloakhq/cloakbrowser:latest
+    container_name: cloakserve
+    network_mode: host
+    environment:
+      - CLOAKBROWSER_LICENSE_KEY=${CLOAK_LICENSE_KEY:-}
+      - CLOAKSERVE_IDLE_TIMEOUT=300
+    command: >
+      cloakserve
+        --port 9222
+        --headless=false
+        --proxy-server=${CLOAK_PROXY:-}
+    ports:
+      - "127.0.0.1:9222:9222"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9222/json/version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    profiles:
+      - cloak
+
   crawler-worker:
     build:
       context: .
@@ -30,4 +57,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=OpenGauss@2026
       - SPRING_REDIS_HOST=127.0.0.1
       - SPRING_REDIS_PASSWORD=pamirs@123
+      # 开启 CLOAK 模式（与 cloakserve sidecar 配合）：
+      # - ANTI_CRAWL_STEALTH_MODE=CLOAK
+      # - ANTI_CRAWL_CLOAK_CDP_URL=http://127.0.0.1:9222
     restart: unless-stopped

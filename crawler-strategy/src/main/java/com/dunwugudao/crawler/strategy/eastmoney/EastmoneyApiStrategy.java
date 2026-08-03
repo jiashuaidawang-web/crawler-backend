@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,17 @@ public class EastmoneyApiStrategy implements SourceStrategy {
     private static final Logger log = LoggerFactory.getLogger(EastmoneyApiStrategy.class);
 
     private static final int POOL_MAX_PAGES = 50; // 池/明细安全上限（配合「空即停」）
+
+    /**
+     * 任务级：一个任务最多使用几个代理 IP。
+     * <p>worker 接新任务时 {@link CrawlContext#proxyFetchCount} 重建归零，所以这是"每个任务"的额度，
+     * 而非 worker 级总额度。每个 IP 失败后退避重试；用尽后不再换新 IP，直接失败交 worker 走 RETRY/DEAD。</p>
+     */
+    public static final int MAX_PROXY_FETCH_ATTEMPTS_PER_TASK = 15;
+
+    /** 换 IP 间的指数退避：base * 2^(used-1)，单位毫秒。第 1 次换 IP 等 2s，第 2 次 4s，第 3 次 8s…… */
+    private static final long PROXY_BACKOFF_BASE_MS = 2000L;
+    private static final long PROXY_BACKOFF_CAP_MS = 30000L;
 
     private final AntiCrawlConfig antiCrawlConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -126,46 +138,16 @@ public class EastmoneyApiStrategy implements SourceStrategy {
 
         switch (spec.getParserType()) {
             case CLIST: {
+                // CLIST 类型统一单请求：页码由种子注入 params.pn（从 1 开始），worker 不做分页
                 String td = EastmoneyEndpoints.requireTradeDate(params);
-                // STOCK_DAILY 按页拆任务：params.pn 显式传入时只抓这一页，不自动翻页
-                if (params.containsKey("pn")) {
-                    int pn = EastmoneyEndpoints.parseInt(params.get("pn"), 1);
-                    rateLimiter.acquire();
-                    String url = spec.buildUrl(params, pn);
-                    String resp = fetchWithWorkerProxy(url, ua);
-                    lastRaw = resp;
-                    JsonNode root = readTree(resp);
-                    JsonNode data = root.path("data");
-                    allRows.addAll(EastmoneyParsers.parseClist(data, spec, td, params));
-                    break;
-                }
-                int page = 1;
-                int totalPages = 1;
-                while (true) {
-                    rateLimiter.acquire();
-                    String url = spec.buildUrl(params, page);
-                    String resp = fetchWithWorkerProxy(url, ua);
-                    lastRaw = resp;
-                    JsonNode root = readTree(resp);
-                    JsonNode data = root.path("data");
-                    allRows.addAll(EastmoneyParsers.parseClist(data, spec, td, params));
-                    // 翻页：优先用 pages；缺失则用 total+pz 算（push2 接口只有 total 无 pages）
-                    int pagesFromField = data.path("pages").asInt(0);
-                    if (pagesFromField > 0) {
-                        totalPages = pagesFromField;
-                    } else {
-                        int total = data.path("total").asInt(0);
-                        int pz = 200;
-                        try {
-                            pz = Integer.parseInt(String.valueOf(params.getOrDefault("pz", "200")));
-                        } catch (NumberFormatException ignored) { }
-                        totalPages = (total <= 0) ? 1 : ((total + pz - 1) / pz);
-                    }
-                    if (page >= totalPages) {
-                        break;
-                    }
-                    page++;
-                }
+                int pn = EastmoneyEndpoints.parseInt(params.get("pn"), 1);
+                rateLimiter.acquire();
+                String url = spec.buildUrl(params, pn);
+                String resp = fetchWithWorkerProxy(url, ua, ctx);
+                lastRaw = resp;
+                JsonNode root = readTree(resp);
+                JsonNode data = root.path("data");
+                allRows.addAll(EastmoneyParsers.parseClist(data, spec, td, params));
                 break;
             }
             case ZT_POOL:
@@ -175,7 +157,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 while (pageIdx < POOL_MAX_PAGES) {
                     rateLimiter.acquire();
                     String url = spec.buildUrl(params, pageIdx);
-                    String resp = fetchWithWorkerProxy(url, ua);
+                    String resp = fetchWithWorkerProxy(url, ua, ctx);
                     lastRaw = resp;
                     lastUrl = url;
                     String cleaned = cleanJsonp(resp);
@@ -200,7 +182,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case KLINE: {
                 rateLimiter.acquire();
                 String url = spec.buildUrl(params, 1);
-                String resp = fetchWithWorkerProxy(url, ua);
+                String resp = fetchWithWorkerProxy(url, ua, ctx);
                 lastRaw = resp;
                 JsonNode root = readTree(resp);
                 allRows.addAll(EastmoneyParsers.parseKline(root.path("data"), spec, params));
@@ -221,58 +203,92 @@ public class EastmoneyApiStrategy implements SourceStrategy {
     }
 
     /**
-     * 用 Worker 级代理发请求（极简方案：失败后才换新 IP）。
-     * <p>与原 {@code fetchWithProxy} 的关键区别：</p>
-     * <ul>
-     *   <li>不再每次换新 IP——用 worker 当前绑定的同一个 IP。</li>
-     *   <li>代理级错误（连接超时/重置/SSL/407）→ 标记失效 → 抛异常 → ClaimLoop 重试时自动换新 IP。</li>
-     *   <li>业务错误（HTTP 200 但 rc:102）→ 不标记失效 → 正常返回空数据。</li>
-     * </ul>
+     * 用代理发请求，带<b>任务级</b>多 IP 重试 + 指数退避。
+     * <p>一个任务最多用 {@link #MAX_PROXY_FETCH_ATTEMPTS_PER_TASK} 个 IP（计数存在
+     * {@link CrawlContext#proxyFetchCount}，worker 接新任务时重建归零）。
+     * 每个 IP 失败（代理级错误）后：指数退避 → 标记失效 → 取新 IP → 重试同一请求；
+     * IP 用尽后不再换新，直接抛异常交 worker 走 RETRY/DEAD。</p>
+     * <p>业务错误（HTTP 200 但 rc:102 等）不消耗 IP 配额，直接抛异常。</p>
+     *
+     * @param ctx 任务上下文，携带本任务的 {@code proxyFetchCount}
      */
-    private String fetchWithWorkerProxy(String url, String ua) {
+    private String fetchWithWorkerProxy(String url, String ua, CrawlContext ctx) {
         if (workerProxyManager == null) {
             throw new IllegalStateException("WorkerProxyManager 未注入，请在装配时调用 setWorkerProxyManager()");
         }
-        String proxy = workerProxyManager.getProxy();
-        try {
-            String resp = client.get(url, ua, proxy);
-            log.info("[fetchWithWorkerProxy] success, proxy={}, url={}", proxy, url);
-            return resp;
-        } catch (Exception e) {
-            // 判断是否为代理级错误（需要换 IP）vs 业务错误（IP 没问题）
-            boolean proxyFailure = isProxyFailure(e);
-            if (proxyFailure) {
-                workerProxyManager.invalidate();
+        final AtomicInteger proxyFetchCount = ctx.getProxyFetchCount();
+        while (true) {
+            int used = proxyFetchCount.get(); // 本任务已尝试过的 IP 个数
+            String proxy = workerProxyManager.getProxy();
+            try {
+                String resp = client.get(url, ua, proxy);
+                log.info("[fetchWithWorkerProxy] success, proxy={}, usedIp={}/{}, url={}",
+                        proxy, used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, url);
+                return resp;
+            } catch (Exception e) {
+                boolean proxyFailure = isProxyFailure(e);
+                if (proxyFailure && used < MAX_PROXY_FETCH_ATTEMPTS_PER_TASK - 1) {
+                    // 还有 IP 配额：指数退避 → 标记失效 → 取新 IP → 重试同一请求
+                    long backoffMs = proxyBackoffMs(used);
+                    log.warn("[fetchWithWorkerProxy] proxy failed, usedIp={}/{}, backoff {}ms, rotate IP, error={}",
+                            used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, backoffMs, e.getMessage());
+                    workerProxyManager.invalidate();
+                    proxyFetchCount.incrementAndGet();
+                    sleepInterruptibly(backoffMs);
+                    continue;
+                }
+                // 配额已尽 or 业务错误：不再换 IP，抛异常交 worker
+                log.warn("[fetchWithWorkerProxy] give up, usedIp={}/{}, proxyFailure={}, error={}",
+                        used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, proxyFailure, e.getMessage());
+                throw e;
             }
-            log.warn("[fetchWithWorkerProxy] failed, proxy={}, proxyFailure={}, error={}",
-                    proxy, proxyFailure, e.getMessage());
-            throw e;
+        }
+    }
+
+    /** 第 used 次换 IP 的退避时长：base * 2^used，封顶。used=0 → 2s。 */
+    static long proxyBackoffMs(int used) {
+        long delay = PROXY_BACKOFF_BASE_MS * (1L << Math.min(used, 30));
+        return Math.min(delay, PROXY_BACKOFF_CAP_MS);
+    }
+
+    /** 可中断的 sleep，让 worker 能响应关闭；被中断时恢复中断标志并结束。 */
+    private static void sleepInterruptibly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted during proxy backoff", ie);
         }
     }
 
     /**
      * 判断异常是否由代理/IP 问题引起（需要换新 IP），而非目标站点业务错误。
-     * 代理级错误特征：连接超时、连接重置、SSL 握手失败、407 认证失败、无法建立隧道、
-     * 东财 TLS 指纹拦截（446/460 等）。
+     * <p>代理级错误特征：连接超时、连接重置、SSL 握手失败、407 认证失败、无法建立隧道、
+     * 东财 TLS 指纹拦截（446/460 等）、上游空响应/断流（EOF/unexpected end of stream）。</p>
+     * <p>注意：{@link EastmoneyClient} 会把 IOException 包装成 RuntimeException 抛出，
+     * 所以必须沿 cause 链向上追溯，只看最表层会漏掉 SocketException/EOFException 等真实原因。</p>
      */
     private static boolean isProxyFailure(Exception e) {
-        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
-        String cls = e.getClass().getSimpleName().toLowerCase();
-        // 连接层面错误
-        if (cls.contains("sockettimeout") && msg.contains("connect")) return true;
-        if (cls.contains("connectexception") && msg.contains("refused")) return true;
-        if (cls.contains("socketexception") && msg.contains("reset")) return true;
-        if (cls.contains("ssl") || cls.contains("handshake")) return true;
-        // HTTP 407 代理认证失败
-        if (msg.contains("407") || msg.contains("proxy authentication")) return true;
-        // 无法建立隧道（HTTPS through proxy）
-        if (msg.contains("unable to tunnel") || msg.contains("tunnel")) return true;
-        // 连接超时（读）通常是代理慢/挂了
-        if (cls.contains("sockettimeout") && msg.contains("read")) return true;
-        // 东财 TLS 指纹拦截（446/460 等）—— 代理级错误，需换 IP
-        // EastmoneyClient 抛出的 RuntimeException message 形如 "Eastmoney HTTP 446 for ..."
-        if (msg.contains("eastmoney http 446") || msg.contains("eastmoney http 460")) return true;
-        // 业务错误（东财返回 rc:102 但 HTTP 200）不在此列——那些是正常响应，不抛异常
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String msg = t.getMessage() == null ? "" : t.getMessage().toLowerCase();
+            String cls = t.getClass().getSimpleName().toLowerCase();
+            // 连接层面错误
+            if (cls.contains("sockettimeout") && msg.contains("connect")) return true;
+            if (cls.contains("connectexception") && msg.contains("refused")) return true;
+            if (cls.contains("socketexception") && msg.contains("reset")) return true;
+            if (cls.contains("ssl") || cls.contains("handshake")) return true;
+            // HTTP 407 代理认证失败
+            if (msg.contains("407") || msg.contains("proxy authentication")) return true;
+            // 无法建立隧道（HTTPS through proxy）
+            if (msg.contains("unable to tunnel") || msg.contains("tunnel")) return true;
+            // 连接超时（读）通常是代理慢/挂了
+            if (cls.contains("sockettimeout") && msg.contains("read")) return true;
+            // 东财 TLS 指纹拦截（446/460 等）
+            if (msg.contains("eastmoney http 446") || msg.contains("eastmoney http 460")) return true;
+            // 上游在响应前断开/返回空响应（EOF、unexpected end of stream）→ 代理级问题，换 IP
+            if (cls.contains("eofexception") || msg.contains("unexpected end of stream")) return true;
+            // 业务错误（东财返回 rc:102 但 HTTP 200）不在此列——那些是正常响应，不抛异常
+        }
         return false;
     }
 

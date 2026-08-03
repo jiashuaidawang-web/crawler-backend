@@ -19,16 +19,38 @@ COPY crawler-admin/src crawler-admin/src
 
 RUN mvn package -DskipTests -B
 
-# 运行阶段 - worker
+# 运行阶段 - worker（含 Python + CloakBrowser sidecar 依赖）
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+# ---- Python + CloakBrowser 运行依赖 ----
+# 装 python3 / pip / 字体（CloakBrowser canvas emoji 渲染需要）
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv \
+        fonts-noto-color-emoji fonts-freefont-ttf fonts-unifont \
+        fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf \
+        xvfb \
+        curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# 用 venv 装 cloakbrowser（避免污染系统 Python，且方便 COPY 缓存）
+RUN python3 -m venv /opt/cloak-venv
+ENV PATH="/opt/cloak-venv/bin:$PATH"
+RUN pip install --no-cache-dir cloakbrowser
+
 COPY --from=builder /app/crawler-worker/target/crawler-worker-*.jar app.jar
+COPY scripts/cloak_serve.py /app/scripts/cloak_serve.py
 
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 预下载 CloakBrowser binary（避免首请求慢 / 容器间网络限制）
+RUN python3 -m cloakbrowser install || true
+
+# worker 启动（默认不拉起 cloakserve；生产建议用独立 sidecar 容器）
+# 若要用"单容器双进程"模式,把 ENTRYPOINT 换成 scripts/entrypoint-with-cloak.sh
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
