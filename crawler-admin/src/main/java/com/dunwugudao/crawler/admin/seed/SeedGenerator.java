@@ -55,8 +55,6 @@ public class SeedGenerator {
     private final EastmoneyClient eastmoneyClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** 全市场股票总数（计算 STOCK_DAILY 总页数）。 */
-    private final int stockDailySize;
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
     private final int stockDailyPageSize;
     /** STOCK_BY_BOARD 每页条数。 */
@@ -74,8 +72,7 @@ public class SeedGenerator {
         this.dragonTigerMapper = dragonTigerMapper;
         this.proxyManager = proxyManager;
         this.eastmoneyClient = eastmoneyClient;
-        // 默认全市场 5545 只、每页 100 条（56 页）；可通过 application.yml 覆盖
-        this.stockDailySize = Integer.parseInt(env.getProperty("stock-daily.now-stock-size", "5545"));
+        // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
     }
 
@@ -141,33 +138,39 @@ public class SeedGenerator {
     }
 
     /**
-     * STOCK_DAILY 按页拆任务：总页数 = ceil(nowStockSize / pageSize)，每页一个 task（pn 从 1 开始）。
-     * <p>唯一键：STOCK_DAILY|source|date|pn（幂等，重复 seed 不重复入库）。
+     * STOCK_DAILY 按页拆任务：先探测 data.total，再按 ceil(total/pageSize) 拆，每页一个 task（pn 从 1 开始）。
+     * <p>探测失败（total<=0）时下发 1 个兜底 task，避免漏跑。
+     * 唯一键：STOCK_DAILY|source|date|pn（幂等，重复 seed 不重复入库）。
      * worker 执行时只取 params.pn 拼 URL，不做分页判断。</p>
      */
     public int seedStockDailyPages(int source, String date) {
-        int totalPages = totalPages(date);
+        // 探测真实全市场总数（最小请求：pz=1, fields=f12），计算页数
+        EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get("STOCK_DAILY");
+        int total = fetchClistTotal(spec, date);
+        int totalPages;
+        if (total <= 0) {
+            // 探测失败或无数据：仍下发 1 个 task（兜底，避免漏跑）
+            totalPages = 1;
+            log.warn("[seedStockDailyPages] date={} 探测无数据(total={})，下发 1 个兜底 task", date, total);
+        } else {
+            totalPages = (total + stockDailyPageSize - 1) / stockDailyPageSize;
+        }
         List<CrawlTask> batch = new ArrayList<>(BATCH);
-        int total = 0;
+        int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
             String params = TaskTypeCatalog.buildPageParams(date, pn);
             CrawlTask task = buildTask("STOCK_DAILY", source, date, null, null, params);
             task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_DAILY", source, date, pn));
             batch.add(task);
             if (batch.size() >= BATCH) {
-                total += flush(batch);
+                inserted += flush(batch);
                 batch.clear();
             }
         }
-        total += flush(batch);
-        log.info("[seedStockDailyPages] date={} size={} pageSize={} pages={} inserted={}",
-                date, stockDailySize, stockDailyPageSize, totalPages, total);
-        return total;
-    }
-
-    /** STOCK_DAILY 总页数（size / pageSize 向上取整）。 */
-    private int totalPages(String date) {
-        return (stockDailySize + stockDailyPageSize - 1) / stockDailyPageSize;
+        inserted += flush(batch);
+        log.info("[seedStockDailyPages] date={} total={} pageSize={} pages={} inserted={}",
+                date, total, stockDailyPageSize, totalPages, inserted);
+        return inserted;
     }
 
     /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */
