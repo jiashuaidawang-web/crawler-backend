@@ -76,6 +76,44 @@ public class JobController {
         return r;
     }
 
+    /** 仅下发 3 种 board_daily 任务（地域/行业/概念），端到端测试用 */
+    @PostMapping("/seed-board-daily")
+    public Map<String, Object> seedBoardDaily(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedBoardDailyAll(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
+    /** 只跑单个板块的 STOCK_BY_BOARD（端到端测试用），boardCode 必传 */
+    @PostMapping("/seed-stock-by-board")
+    public Map<String, Object> seedStockByBoard(
+            @RequestParam String boardCode,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedSingleBoard(boardCode, source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("boardCode", boardCode);
+        r.put("inserted", inserted);
+        return r;
+    }
+
+    /** 批量跑所有板块的 STOCK_BY_BOARD（读 board_basic 表，逐板块探测 total → 按页拆任务） */
+    @PostMapping("/seed-stock-by-board-all")
+    public Map<String, Object> seedStockByBoardAll(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedByBoard(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
     @PostMapping("/backfill")
     public Map<String, Object> backfill(
             @RequestParam String start,

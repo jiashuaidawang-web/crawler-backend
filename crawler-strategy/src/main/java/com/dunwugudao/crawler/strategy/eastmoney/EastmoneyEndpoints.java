@@ -10,8 +10,8 @@ import java.util.Random;
  * 以及构建 URL 的方法。未实现的 taskType 在 {@link #get(String)} 抛
  * {@link UnsupportedOperationException} 并留 TODO。</p>
  *
- * <p>覆盖：LIMIT_POOL / STOCK_DAILY / STOCK_WEEKLY / INDEX_DAILY / BOARD_DAILY /
- * MAIN_FUND_STOCK / MAIN_FUND_BOARD / DRAGON_TIGER / DRAGON_TIGER_DETAIL。</p>
+ * <p>覆盖：LIMIT_POOL / STOCK_DAILY / STOCK_WEEKLY / INDEX_DAILY / REGION_DAILY /
+ * INDUSTRY_DAILY / CONCEPT_DAILY / MAIN_FUND_STOCK / MAIN_FUND_BOARD / DRAGON_TIGER / DRAGON_TIGER_DETAIL。</p>
  */
 public final class EastmoneyEndpoints {
 
@@ -33,32 +33,14 @@ public final class EastmoneyEndpoints {
         String dcType;    // DATACENTER 的 type 参数
         String poolDefaultLimitType; // ZT_POOL 默认 limit_type 列值（可被 params.limitType 覆盖）
 
-        // ========================================================================
-        // 公共参数生成（cb / 时间戳）—— 所有 buildUrl 分支统一调用，避免散落各处
-        // ========================================================================
-
-        /**
-         * 生成东财 JSONP 回调名：{@code jQuery + 随机数 + _ + 时间戳}。
-         * <p>示例：{@code jQuery1124064700148312436964_1754288369534}。
-         * 每次请求生成新值，避免 CDN 缓存命中同一响应。</p>
-         */
-        public static String generateCb() {
-            return "jQuery" + new Random().nextLong() + "_" + System.currentTimeMillis();
-        }
-
-        /** 当前 13 位毫秒时间戳（东财 _ 参数，防缓存）。 */
-        public static long generateTs() {
-            return System.currentTimeMillis();
-        }
-
         /** 构建请求 URL（page 对 CLIST/池有意义，DATACENTER 忽略）。 */
-        public String buildUrl(Map<String, Object> params, int page) {
+    public String buildUrl(Map<String, Object> params, int page) {
             switch (parserType) {
                 case ZT_POOL: {
                     // 涨停/跌停/强势/次新池：按页拆任务，Pageindex/pagesize 由种子注入（Pageindex 从 0 开始，每页 100 条）
                     // 排序：涨停/炸板 fbt asc；跌停用 fund asc；强势/次新用 zdp desc（用户实测 2026-08-02/03）
                     String d = tradeDate(params).replace("-", "");
-                    long ts = System.currentTimeMillis();
+                    long ts = generateTs();
                     int pageindex = parseInt(params.getOrDefault("Pageindex", 0), 0);
                     int pagesize = parseInt(params.getOrDefault("pagesize", 100), 100);
                     // limitType 兼容两套命名：种子传 taskType 大写（LIMIT_DOWN/STRONG_POOL），spec 默认小写（down/strong）
@@ -88,7 +70,7 @@ public final class EastmoneyEndpoints {
                     // Proxy-Authorization 加不上，会触发 407 认证失败（10 个 IP 全失败）。
                     // 改 HTTP 后无 CONNECT 隧道，应用拦截器的 Proxy-Authorization 头生效。
                     return "http://push2ex.eastmoney.com/" + path
-                            + "?cb=callbackdata6233583&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
+                            + "?cb=" + generateCb() + "&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
                             + "&date=" + d + "&Pageindex=" + pageindex + "&pagesize=" + pagesize
                             + "&sort=" + sort + "&_=" + ts;
                 }
@@ -122,8 +104,8 @@ public final class EastmoneyEndpoints {
                         pn = page;
                     }
                     // 完整 push2 模板(用户实测 2026-08-04)：域名/协议/参数一个不少,避免被识别为爬虫
-                    long ts = System.currentTimeMillis();
-                    String cb = "jQuery" + new Random().nextLong() + "_" + ts;
+                    long ts = generateTs();
+                    String cb = generateCb();
                     return "http://83.push2.eastmoney.com/api/qt/clist/get"
                             + "?cb=" + cb
                             + "&pn=" + pn + "&pz=100&po=1&np=1"
@@ -151,6 +133,24 @@ public final class EastmoneyEndpoints {
                     throw new UnsupportedOperationException("buildUrl unsupported parserType for " + taskType);
             }
         }
+    }
+
+    // ========================================================================
+    // 公共参数生成（cb / 时间戳）—— 所有 buildUrl 分支统一调用，避免散落各处
+    // ========================================================================
+
+    /**
+     * 生成东财 JSONP 回调名：{@code jQuery + 随机数 + _ + 时间戳}。
+     * <p>示例：{@code jQuery1124064700148312436964_1754288369534}。
+     * 每次请求生成新值，避免 CDN 缓存命中同一响应。</p>
+     */
+    public static String generateCb() {
+        return "jQuery" + new Random().nextLong() + "_" + System.currentTimeMillis();
+    }
+
+    /** 当前 13 位毫秒时间戳（东财 _ 参数，防缓存）。 */
+    public static long generateTs() {
+        return System.currentTimeMillis();
     }
 
     private static final Map<String, EndpointSpec> SPEC_BY_TYPE = new HashMap<>();
@@ -191,21 +191,17 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("INDEX_DAILY", new EndpointSpec(
                 "INDEX_DAILY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
                 ParserType.KLINE, null, null, null));
-        // 板块日线（行业+概念+地域）
-        SPEC_BY_TYPE.put("BOARD_DAILY", new EndpointSpec(
-                "BOARD_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
-                ParserType.CLIST, "m:90+t:2,m:90+t:3,m:90+t:1", null, null));
         // 地域板块日线（board_type=1）
         SPEC_BY_TYPE.put("REGION_DAILY", new EndpointSpec(
-                "REGION_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                "REGION_DAILY", "http://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:1+f:!50", null, null));
         // 行业板块日线（board_type=2）
         SPEC_BY_TYPE.put("INDUSTRY_DAILY", new EndpointSpec(
-                "INDUSTRY_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                "INDUSTRY_DAILY", "http://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:2+f:!50", null, null));
         // 概念板块日线（board_type=3）
         SPEC_BY_TYPE.put("CONCEPT_DAILY", new EndpointSpec(
-                "CONCEPT_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                "CONCEPT_DAILY", "http://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:3+f:!50", null, null));
         // 地域板块基础维表（board_basic，board_type=1）—— 独立抓取，fs 与 REGION_DAILY 一致
         SPEC_BY_TYPE.put("REGION_BOARD", new EndpointSpec(
@@ -279,15 +275,10 @@ public final class EastmoneyEndpoints {
     /** CLIST 各类默认的 fields 投影。 */
     static String defaultFields(String taskType) {
         switch (taskType) {
-            case "BOARD_DAILY":
-                // 含行情明细：f2 价格/f4 涨跌额/f5 成交量/f6 成交额/f7 振幅/f8 换手/f10 量比
-                // f15 最高/f16 最低/f17 今开/f18 昨收/f20 总市值/f21 流通市值
-                // f140 领涨股代码 / f128 领涨股名称
-                return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f140,f128";
             case "REGION_DAILY":
             case "INDUSTRY_DAILY":
             case "CONCEPT_DAILY":
-                // 单类型板块行情投影（和 BOARD_DAILY 一致，含领涨股）
+                // 板块行情投影（含行情明细 + 领涨股）
                 return "f12,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f21,f62,f104,f105,f140,f128";
             case "MAIN_FUND_STOCK":
                 // 含 f13 以便补 ts_code 后缀

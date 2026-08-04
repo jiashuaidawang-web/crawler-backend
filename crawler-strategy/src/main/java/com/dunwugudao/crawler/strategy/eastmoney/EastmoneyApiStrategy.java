@@ -138,7 +138,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         };
     }
 
-    /** CLIST 类型单独处理:STOCK_DAILY/BOARD_DAILY/MAIN_FUND_* 等 */
+    /** CLIST 类型单独处理:STOCK_DAILY/board_daily/MAIN_FUND_* 等 */
     private CrawlResult fetchClist(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
         String td = EastmoneyEndpoints.requireTradeDate(params);
         int pn = EastmoneyEndpoints.parseInt(params.get("pn"), 1);

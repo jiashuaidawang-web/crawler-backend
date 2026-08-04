@@ -15,7 +15,7 @@ import java.time.Duration;
 /**
  * 青果长效 IP（住宅隧道）代理提供者。
  *
- * <p>提取 API：{@code https://share.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=json&distinct=false}</p>
+ * <p>提取 API：{@code https://share.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=json&distinct=true}</p>
  * <ul>
  *   <li>长效 IP：每 30 分钟自动换一次 IP，不限流量</li>
  *   <li>返回 JSON：{@code {"code":"SUCCESS","data":[{"server":"ip:port",...}]}}</li>
@@ -46,7 +46,7 @@ public class QgLongTermProxyProvider implements ProxyProvider {
 
     private String apiUrl() {
         return "https://share.proxy.qg.net/get?key=" + apiKey
-                + "&num=1&area=&isp=0&format=json&distinct=false";
+                + "&num=1&area=&isp=0&format=json&distinct=true";
     }
 
     /**

@@ -17,7 +17,7 @@ public class SeedStrategyBeans {
     /** 青果长效 IP 提供者。 */
     @Bean
     public ProxyProvider qgProxyProvider() {
-        return new QgLongTermProxyProvider("D7A19F5D", "EC00F1DB9AAC");
+        return new QgLongTermProxyProvider("C33FFE74", "1B74890795DB");
     }
 
     @Bean

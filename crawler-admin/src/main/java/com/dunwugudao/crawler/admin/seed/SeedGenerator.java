@@ -8,6 +8,7 @@ import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +23,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 /**
@@ -98,7 +98,6 @@ public class SeedGenerator {
         n += seedRegionDaily(source, date);
         n += seedIndustryDaily(source, date);
         n += seedConceptDaily(source, date);
-        n += seedBoardDaily(source, date);
         n += seedMainFundStock(source, date);
         n += seedMainFundBoard(source, date);
         n += seedStrongPool(source, date);
@@ -148,24 +147,35 @@ public class SeedGenerator {
         return inserted;
     }
 
-    /** REGION_DAILY 单独处理 */
+    /** REGION_DAILY 单独处理（地域板块日线，board_type=1） */
     public int seedRegionDaily(int source, String date) {
-        return seedClistTypeSingle("REGION_DAILY", source, date, 1);
+        return seedClistTypeSingle("REGION_DAILY", source, date, null, 10);
     }
 
-    /** INDUSTRY_DAILY 单独处理 */
+    /** INDUSTRY_DAILY 单独处理（行业板块日线，board_type=2） */
     public int seedIndustryDaily(int source, String date) {
-        return seedClistTypeSingle("INDUSTRY_DAILY", source, date, 2);
+        return seedClistTypeSingle("INDUSTRY_DAILY", source, date, null, 10);
     }
 
-    /** CONCEPT_DAILY 单独处理 */
+    /** CONCEPT_DAILY 单独处理（概念板块日线，board_type=3） */
     public int seedConceptDaily(int source, String date) {
-        return seedClistTypeSingle("CONCEPT_DAILY", source, date, 3);
+        return seedClistTypeSingle("CONCEPT_DAILY", source, date, null, 10);
     }
 
-    /** BOARD_DAILY 单独处理 */
-    public int seedBoardDaily(int source, String date) {
-        return seedClistTypeSingle("BOARD_DAILY", source, date, null);
+    // ========================================================================
+    // 板块日线（board_daily）—— 地域/行业/概念，跟 stockDaily 对齐
+    // ========================================================================
+
+    /**
+     * 一次性下发 3 种 board_daily 任务（地域/行业/概念），端到端测试用。
+     */
+    public int seedBoardDailyAll(int source, String date) {
+        int n = 0;
+        n += seedRegionDaily(source, date);
+        n += seedIndustryDaily(source, date);
+        n += seedConceptDaily(source, date);
+        log.info("[seedBoardDailyAll] date={} source={} inserted={}", date, source, n);
+        return n;
     }
 
     /** MAIN_FUND_STOCK 单独处理 */
@@ -273,7 +283,7 @@ public class SeedGenerator {
     }
 
     /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */
-    private int seedByBoard(int source, String date) {
+    public int seedByBoard(int source, String date) {
         List<BoardBasic> boards = boardBasicMapper.selectList(null);
         // 按 boardCode 去重（保留首位）
         Set<String> seen = new LinkedHashSet<>();
@@ -302,6 +312,42 @@ public class SeedGenerator {
         }
         log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
         return total;
+    }
+
+    /**
+     * 只跑单个板块的 STOCK_BY_BOARD（端到端测试用）。
+     * <p>从 board_basic 表读指定 boardCode 的信息，探测 total → 按页拆任务。</p>
+     *
+     * @param boardCode 板块代号（如 BK0450）
+     * @param source    数据源
+     * @param date      交易日
+     * @return 插入的 task 数
+     */
+    public int seedSingleBoard(String boardCode, int source, String date) {
+        // 从 board_basic 表查该板块信息
+        QueryWrapper<BoardBasic> qw = new QueryWrapper<>();
+        qw.eq("board_code", boardCode).last("LIMIT 1");
+        BoardBasic board = boardBasicMapper.selectOne(qw);
+        if (board == null) {
+            log.warn("[seedSingleBoard] boardCode={} 在 board_basic 表中不存在", boardCode);
+            return 0;
+        }
+        // 探测 total
+        int totalCount = fetchBoardStockTotal(board.getBoardCode(), date);
+        int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
+        int inserted = 0;
+        for (int pn = 1; pn <= totalPages; pn++) {
+            String params = TaskTypeCatalog.buildParams(
+                    "STOCK_BY_BOARD", date, null, null,
+                    board.getBoardCode(), board.getBoardName(), board.getBoardType());
+            String paramsWithPn = appendPnToParams(params, pn);
+            CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + board.getBoardCode());
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedSingleBoard] boardCode={} boardName={} total={} pages={} inserted={}",
+                board.getBoardCode(), board.getBoardName(), totalCount, totalPages, inserted);
+        return inserted;
     }
 
     /** 请求某板块下股票总数（pz=1，只拿 total）。 */
@@ -409,8 +455,7 @@ public class SeedGenerator {
      */
     private int fetchClistTotal(EastmoneyEndpoints.EndpointSpec spec, String date) {
         // 完整参数模板(用户实测 2026-08-04),只改 pz=1 做最小探测
-        long ts = System.currentTimeMillis();
-        String cb = "jQuery" + new Random().nextLong() + "_" + ts;
+        String cb = EastmoneyEndpoints.generateCb();
         String fsVal = spec.getFs() != null ? spec.getFs() : "";
         String url = "http://83.push2.eastmoney.com/api/qt/clist/get"
                 + "?cb=" + cb
@@ -419,8 +464,7 @@ public class SeedGenerator {
                 + "&fltt=2&invt=2"
                 + "&fid=f3"
                 + "&fs=" + fsVal
-                + "&fields=f12"
-                + "&_=" + ts;
+                + "&fields=f12";
         try {
             String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);
@@ -486,8 +530,7 @@ public class SeedGenerator {
 
     /** 构建探测total的URL */
     private String buildClistTotalUrl(EastmoneyEndpoints.EndpointSpec spec, String date) {
-        long ts = System.currentTimeMillis();
-        String cb = "jQuery" + new Random().nextLong() + "_" + ts;
+        String cb = EastmoneyEndpoints.generateCb();
         String fsVal = spec.getFs() != null ? spec.getFs() : "";
         return "http://83.push2.eastmoney.com/api/qt/clist/get"
                 + "?cb=" + cb
@@ -496,12 +539,22 @@ public class SeedGenerator {
                 + "&fltt=2&invt=2"
                 + "&fid=f3"
                 + "&fs=" + fsVal
-                + "&fields=f12"
-                + "&_=" + ts;
+                + "&fields=f12";
     }
 
     /** 单个CLIST任务类型处理(独立获取IP) */
-    private int seedClistTypeSingle(String taskType, int source, String date, Integer boardType) {
+    /**
+     * CLIST 类型按页拆任务（通用）：探测 data.total → 按页拆分。
+     * <p>与 STOCK_DAILY 同模式：params={tradeDate,pn}（不带 boardType，board_type 由 worker 从 taskType 映射）。
+     * 页数上限 maxPages（STOCK_DAILY 传 100，board_daily 传 10）。</p>
+     *
+     * @param taskType  任务类型
+     * @param source    数据源
+     * @param date      交易日
+     * @param boardType 兼容旧调用传 null（不再写入 params）
+     * @param maxPages  页数上限（0 或负数表示不限）
+     */
+    private int seedClistTypeSingle(String taskType, int source, String date, Integer boardType, int maxPages) {
         EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
         int total = fetchClistTotalByProxy(spec, date);
         if (total <= 0) {
@@ -510,21 +563,25 @@ public class SeedGenerator {
         }
         int pageSize = 100;
         int totalPages = (total + pageSize - 1) / pageSize;
+        if (maxPages > 0 && totalPages > maxPages) {
+            log.info("[seedClistTypeSingle] taskType={} total={} pages={} → cap {}", taskType, total, totalPages, maxPages);
+            totalPages = maxPages;
+        }
         int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
-            String params;
-            if (boardType != null) {
-                params = TaskTypeCatalog.buildParams(taskType, date, boardType);
-            } else {
-                params = TaskTypeCatalog.buildParams(taskType, date, (String) null);
-            }
-            params = appendPnToParams(params, pn);
+            // params 格式与 STOCK_DAILY 一致：{"tradeDate":date,"pn":pn}（board_type 由 worker 从 taskType 映射）
+            String params = TaskTypeCatalog.buildPageParams(date, pn);
             CrawlTask task = buildTask(taskType, source, date, null, null, params);
             task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn));
             inserted += mapper.insertIfAbsent(task);
         }
         log.info("[seedClistTypeSingle] taskType={} total={} pages={} inserted={}", taskType, total, totalPages, inserted);
         return inserted;
+    }
+
+    /** 兼容旧调用（无 cap）。 */
+    private int seedClistTypeSingle(String taskType, int source, String date, Integer boardType) {
+        return seedClistTypeSingle(taskType, source, date, boardType, 0);
     }
 
     /** 单个池子任务处理(独立获取IP) */
@@ -651,7 +708,7 @@ public class SeedGenerator {
             } else if ("CONCEPT_DAILY".equals(spec.taskType())) {
                 inserted += seedClistType(spec.taskType(), source, date, 3);
             } else {
-                // BOARD_DAILY / MAIN_FUND_STOCK / MAIN_FUND_BOARD 等 CLIST 类型
+                // board_daily / MAIN_FUND_STOCK / MAIN_FUND_BOARD 等 CLIST 类型
                 inserted += seedClistType(spec.taskType(), source, date, null);
             }
         }

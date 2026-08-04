@@ -197,6 +197,7 @@ public class DedupWriter {
             entity.setBoardCode(boardCode);
             entity.setTsCode(tsCode);
             entity.setBoardName(str(r.get("board_name")));
+            entity.setStockName(str(r.get("stock_name")));
             entity.setBoardType(boardType);
             entity.setIsLeader(intVal(r.get("is_leader")));
             entity.setIsMidarm(intVal(r.get("is_midarm")));
@@ -206,7 +207,12 @@ public class DedupWriter {
             entity.setSrcDetail(srcDetail);
             entity.setCreateDate(today);
             entity.setUpdateDate(now);
-            stockBoardRelMapper.insertOrUpdate(entity);
+            // openGauss 兼容：拆成 updateRow / insertIfAbsent（不用 ON CONFLICT）
+            if (existing != null) {
+                stockBoardRelMapper.updateRow(entity);
+            } else {
+                stockBoardRelMapper.insertIfAbsent(entity);
+            }
         }
     }
 
@@ -461,7 +467,7 @@ public class DedupWriter {
             case "STOCK_DAILY" -> writeStockDaily(rows, source, srcDetail);
             case "STOCK_WEEKLY" -> writeStockWeekly(rows, source, srcDetail);
             case "INDEX_DAILY" -> writeIndexDaily(rows, source, srcDetail);
-            case "BOARD_DAILY", "REGION_DAILY", "INDUSTRY_DAILY", "CONCEPT_DAILY" ->
+            case "REGION_DAILY", "INDUSTRY_DAILY", "CONCEPT_DAILY" ->
                     writeBoardDaily(rows, source, srcDetail);
             case "MAIN_FUND_STOCK", "MAIN_FUND_BOARD" -> writeMainFundFlow(rows, source, srcDetail);
             case "DRAGON_TIGER" -> writeDragonTiger(rows, source, srcDetail);

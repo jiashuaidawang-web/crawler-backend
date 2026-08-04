@@ -29,7 +29,6 @@ public final class EastmoneyParsers {
         for (JsonNode n : diff) {
             Map<String, Object> row = new HashMap<>();
             switch (spec.getTaskType()) {
-                case "BOARD_DAILY":
                 case "REGION_DAILY":
                 case "INDUSTRY_DAILY":
                 case "CONCEPT_DAILY":
@@ -97,6 +96,7 @@ public final class EastmoneyParsers {
                     row.put("board_type", parseInt(params.get("boardType")));
                     // ts_code 直接取 f12（接口返回的就是带后缀的代码，如 600000.SH）
                     row.put("ts_code", txt(n, "f12"));
+                    row.put("stock_name", txt(n, "f14"));          // f14 股票名称
                     row.put("weight", num(n, "f2"));              // f2 权重
                     row.put("is_leader", null);                  // TODO M6
                     row.put("is_midarm", null);                  // TODO M6
@@ -342,7 +342,7 @@ public final class EastmoneyParsers {
             return 0;
         }
         return switch (taskType) {
-            case "BOARD_DAILY", "REGION_DAILY", "REGION_BOARD" -> 1;
+            case "REGION_DAILY", "REGION_BOARD" -> 1;
             case "INDUSTRY_DAILY", "INDUSTRY_BOARD" -> 2;
             case "CONCEPT_DAILY", "CONCEPT_BOARD" -> 3;
             default -> 0;

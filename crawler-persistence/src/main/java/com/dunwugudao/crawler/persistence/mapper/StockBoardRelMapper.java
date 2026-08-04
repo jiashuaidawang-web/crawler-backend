@@ -6,45 +6,17 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
 
 /**
  * 板块-个股关联关系 Mapper。
- * <p>主键 (board_code, ts_code, board_type, data_source) 由数据库唯一约束兜底防重。</p>
+ * <p>主键 (board_code, ts_code, board_type, data_source)，openGauss 兼容（无 ON CONFLICT）。</p>
  */
 @Mapper
 public interface StockBoardRelMapper extends BaseMapper<StockBoardRel> {
 
-    /**
-     * 幂等写入：以 (board_code, ts_code, board_type, data_source) 为主键，冲突时更新业务列。
-     */
-    @Insert("""
-            INSERT INTO stock_board_rel
-              (ts_code, board_code, board_name, board_type, is_leader, is_midarm, weight,
-               effective_date, data_source, src_detail, create_date, update_date)
-            VALUES
-              (#{tsCode}, #{boardCode}, #{boardName}, #{boardType}, #{isLeader}, #{isMidarm}, #{weight},
-               #{effectiveDate}, #{dataSource}, #{srcDetail}, #{createDate}, #{updateDate})
-            ON CONFLICT (board_code, ts_code, board_type, data_source) DO UPDATE SET
-              board_name    = EXCLUDED.board_name,
-              is_leader     = EXCLUDED.is_leader,
-              is_midarm     = EXCLUDED.is_midarm,
-              weight        = EXCLUDED.weight,
-              effective_date = EXCLUDED.effective_date,
-              data_source   = EXCLUDED.data_source,
-              src_detail    = EXCLUDED.src_detail,
-              update_date   = EXCLUDED.update_date
-            """)
-    int insertOrUpdate(StockBoardRel row);
-
-    /**
-     * 读取某自然键已存在的最小 data_source，供优先级覆写裁决使用。
-     * <p>按 (board_code, ts_code, board_type) 查，不加 data_source 条件——
-     * 这样才能发现「异源旧行」，让高优先级源（代码小）能覆盖低优先级源。
-     * 返回多行时取最小 source（最高优先级）。</p>
-     * @return 已存在行最小优先级代码；无记录返回 null
-     */
     @Select("""
             SELECT MIN(data_source) FROM stock_board_rel
             WHERE board_code = #{boardCode} AND ts_code = #{tsCode} AND board_type = #{boardType}
@@ -52,4 +24,30 @@ public interface StockBoardRelMapper extends BaseMapper<StockBoardRel> {
     Integer selectDataSource(@Param("boardCode") String boardCode,
                              @Param("tsCode") String tsCode,
                              @Param("boardType") Integer boardType);
+
+    @Update("""
+            UPDATE stock_board_rel SET
+              board_name     = #{boardName},
+              stock_name     = #{stockName},
+              is_leader      = #{isLeader},
+              is_midarm      = #{isMidarm},
+              weight         = #{weight},
+              effective_date = #{effectiveDate},
+              data_source    = #{dataSource},
+              src_detail     = #{srcDetail},
+              update_date    = #{updateDate}
+            WHERE board_code = #{boardCode} AND ts_code = #{tsCode}
+              AND board_type = #{boardType} AND data_source = #{dataSource}
+            """)
+    int updateRow(StockBoardRel row);
+
+    @Insert("""
+            INSERT INTO stock_board_rel
+              (ts_code, board_code, board_name, stock_name, board_type, is_leader, is_midarm, weight,
+               effective_date, data_source, src_detail, create_date, update_date)
+            VALUES
+              (#{tsCode}, #{boardCode}, #{boardName}, #{stockName}, #{boardType}, #{isLeader}, #{isMidarm}, #{weight},
+               #{effectiveDate}, #{dataSource}, #{srcDetail}, #{createDate}, #{updateDate})
+            """)
+    int insertIfAbsent(StockBoardRel row);
 }

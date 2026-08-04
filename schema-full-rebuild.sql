@@ -647,39 +647,38 @@ COMMENT ON TABLE index_daily IS '指数日线（INDEX_DAILY 任务产出）';
 -- 4. 板块日线（主键 board_code + trade_date）
 --    board_type: 1地域 2行业 3概念（来自 taskType 映射，响应无区分字段）
 CREATE TABLE IF NOT EXISTS board_daily (
-    trade_date              DATE NOT NULL,
-    board_code              VARCHAR(32) NOT NULL,
-    board_name              VARCHAR(128),
-    board_type              SMALLINT,            -- 1地域 2行业 3概念
-    pct_chg                 NUMERIC(10,4),
-    amount                  NUMERIC(20,4),
-    up_count                INTEGER,
-    down_count              INTEGER,
-    limit_up_count          INTEGER,             -- TODO M6：clist 无直接字段
-    leading_code            VARCHAR(32),         -- f140 领涨股代码
-    leading_name            VARCHAR(64),         -- f128 领涨股名称
-    main_net                NUMERIC(20,4),       -- f62  主力净流入
-    board_code2             VARCHAR(32),         -- TODO M6：接口未返回
-    data_source             SMALLINT NOT NULL DEFAULT 0,
-    src_detail              TEXT,
-    price                   NUMERIC(10,4),       -- f2  板块最新价
-    rise_fall               NUMERIC(10,4),       -- f4  涨跌额
-    volume                  NUMERIC(20,4),       -- f5  成交量(手)
-    amplitude               NUMERIC(10,4),       -- f7  振幅%
-    high_price              NUMERIC(10,4),       -- f15 最高价
-    low_price               NUMERIC(10,4),       -- f16 最低价
-    today_open_price        NUMERIC(10,4),       -- f17 今开
-    yesterday_received_price NUMERIC(10,4),      -- f18 昨收
-    volume_ratio            NUMERIC(10,4),       -- f10 量比
-    turnover_ratio          NUMERIC(10,4),       -- f8  换手率%
-    total_market_value      NUMERIC(20,4),       -- f20 总市值
-    circulation_market_value NUMERIC(20,4),      -- f21 流通市值
-    create_date             DATE,
-    update_date             TIMESTAMP,
+    trade_date              DATE NOT NULL,           -- 交易日期
+    board_code              VARCHAR(32) NOT NULL,    -- 板块代号
+    board_name              VARCHAR(128),            -- 板块名称
+    board_type              SMALLINT,                -- 1地域 2行业 3概念（来自 taskType 映射）
+    pct_chg                 NUMERIC(10,4),           -- 涨跌幅%
+    amount                  NUMERIC(20,4),           -- 成交额(元)
+    up_count                INTEGER,                 -- 上涨家数
+    down_count              INTEGER,                 -- 下跌家数
+    limit_up_count          INTEGER,                 -- 板块内涨停家数（TODO：clist 无直接字段）
+    leading_code            VARCHAR(32),             -- f140 领涨股代码
+    leading_name            VARCHAR(64),             -- f128 领涨股名称
+    main_net                NUMERIC(20,4),           -- f62 主力净流入(元)
+    board_code2             VARCHAR(32),             -- 行业代码（TODO：接口未返回）
+    data_source             SMALLINT NOT NULL DEFAULT 0, -- 来源：0=东财 1=同花顺
+    src_detail              TEXT,                    -- 来源URL/接口/备注
+    price                   NUMERIC(10,4),           -- f2  板块最新价(元)
+    rise_fall               NUMERIC(10,4),           -- f4  涨跌额(元)
+    volume                  NUMERIC(20,4),           -- f5  成交量(手)
+    amplitude               NUMERIC(10,4),           -- f7  振幅%
+    high_price              NUMERIC(10,4),           -- f15 最高价(元)
+    low_price               NUMERIC(10,4),           -- f16 最低价(元)
+    today_open_price        NUMERIC(10,4),           -- f17 今开(元)
+    yesterday_received_price NUMERIC(10,4),          -- f18 昨收(元)
+    volume_ratio            NUMERIC(10,4),           -- f10 量比
+    turnover_ratio          NUMERIC(10,4),           -- f8  换手率%
+    total_market_value      NUMERIC(20,4),           -- f20 总市值(元)
+    circulation_market_value NUMERIC(20,4),          -- f21 流通市值(元)
+    create_date             DATE,                    -- 创建日期
+    update_date             TIMESTAMP,               -- 修改日期
     PRIMARY KEY (board_code, trade_date)
 );
 COMMENT ON TABLE board_daily IS '板块日线（REGION/INDUSTRY/CONCEPT_DAILY 任务产出）';
-COMMENT ON COLUMN board_daily.board_type IS '1地域 2行业 3概念（来自 taskType 映射）';
 
 -- 5. 板块基础数据（维表，主键 id；唯一校验 board_type+board_code+data_source）
 CREATE TABLE IF NOT EXISTS board_basic (

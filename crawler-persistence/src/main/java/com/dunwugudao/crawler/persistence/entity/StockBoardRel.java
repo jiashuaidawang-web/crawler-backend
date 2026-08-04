@@ -18,6 +18,7 @@ public class StockBoardRel {
     private String tsCode;
     private String boardCode;
     private String boardName;
+    private String stockName;        // 股票名称（f14）
     private Integer boardType;       // NOT NULL（1=地域 2=行业 3=概念）
     private Integer isLeader;        // 0/1
     private Integer isMidarm;        // 0/1
