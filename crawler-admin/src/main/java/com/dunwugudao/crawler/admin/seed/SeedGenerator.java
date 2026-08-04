@@ -178,6 +178,68 @@ public class SeedGenerator {
         return seedClistTypeSingle("MAIN_FUND_BOARD", source, date, null);
     }
 
+    // ========================================================================
+    // 板块基础维表（board_basic）—— 独立抓取，不依赖 board_daily 副作用
+    // 模式与 STOCK_DAILY 一致：探测 total → 按页拆分（cap 10 页）→ params={tradeDate,pn}
+    // ========================================================================
+
+    /** REGION_BOARD 单独处理（地域板块基础维表，board_type=1） */
+    public int seedRegionBoard(int source, String date) {
+        return seedBoardBasic("REGION_BOARD", source, date);
+    }
+
+    /** INDUSTRY_BOARD 单独处理（行业板块基础维表，board_type=2） */
+    public int seedIndustryBoard(int source, String date) {
+        return seedBoardBasic("INDUSTRY_BOARD", source, date);
+    }
+
+    /** CONCEPT_BOARD 单独处理（概念板块基础维表，board_type=3） */
+    public int seedConceptBoard(int source, String date) {
+        return seedBoardBasic("CONCEPT_BOARD", source, date);
+    }
+
+    /**
+     * 板块基础维表通用 seed：与 STOCK_DAILY 同模式。
+     * <p>探测 total → ceil(total/100) → cap 10 页 → params={tradeDate,pn}。
+     * params 不带 boardType（board_type 由 worker 按 taskType 映射）。</p>
+     */
+    private int seedBoardBasic(String taskType, int source, String date) {
+        EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
+        int total = fetchClistTotalByProxy(spec, date);
+        if (total <= 0) {
+            log.warn("[seedBoardBasic] taskType={} 探测无数据({})，跳过", taskType, total);
+            return 0;
+        }
+        int pageSize = 100;
+        int totalPages = (total + pageSize - 1) / pageSize;
+        int maxPages = 10;                                  // 板块基础 cap 10 页
+        if (totalPages > maxPages) {
+            log.info("[seedBoardBasic] taskType={} total={} pages={} → cap {}", taskType, total, totalPages, maxPages);
+            totalPages = maxPages;
+        }
+        int inserted = 0;
+        for (int pn = 1; pn <= totalPages; pn++) {
+            String params = TaskTypeCatalog.buildPageParams(date, pn);   // {"tradeDate":date,"pn":pn}
+            CrawlTask task = buildTask(taskType, source, date, null, null, params);
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn));
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedBoardBasic] taskType={} total={} pages={} inserted={}", taskType, total, totalPages, inserted);
+        return inserted;
+    }
+
+    /**
+     * 一次性下发 3 种 board_basic 任务（地域/行业/概念板块基础维表），端到端测试用。
+     */
+    public int seedBoardBasicAll(int source, String date) {
+        int n = 0;
+        n += seedRegionBoard(source, date);
+        n += seedIndustryBoard(source, date);
+        n += seedConceptBoard(source, date);
+        log.info("[seedBoardBasicAll] date={} source={} inserted={}", date, source, n);
+        return n;
+    }
+
     /**
      * 仅下发 5 个池子任务（涨停/跌停/炸板/强势/次新），用于端到端测试。
      * <p>不包含 STOCK_DAILY / REGION_DAILY 等其他任务类型，避免 daily-seed 里一堆无关任务。</p>

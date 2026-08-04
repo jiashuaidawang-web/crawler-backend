@@ -28,6 +28,11 @@ public final class TaskTypeCatalog {
     public static final String LIMIT_DOWN = "LIMIT_DOWN";
     public static final String LIMIT_ZHABAN = "LIMIT_ZHABAN";
 
+    /** 板块基础维表任务类型（独立抓取 board_basic，不依赖 board_daily 副作用）。 */
+    public static final String REGION_BOARD = "REGION_BOARD";
+    public static final String INDUSTRY_BOARD = "INDUSTRY_BOARD";
+    public static final String CONCEPT_BOARD = "CONCEPT_BOARD";
+
     /** 集中任务规格。sourceCode 默认 1（东方财富），实际 seed 时由入参 source 覆盖。 */
     public record TaskSpec(
             String taskType,
@@ -46,6 +51,9 @@ public final class TaskTypeCatalog {
             new TaskSpec("REGION_DAILY", 1, true, false, null, "地域板块每日行情（市场级，board_type=1）"),
             new TaskSpec("INDUSTRY_DAILY", 1, true, false, null, "行业板块每日行情（市场级，board_type=2）"),
             new TaskSpec("CONCEPT_DAILY", 1, true, false, null, "概念板块每日行情（市场级，board_type=3）"),
+            new TaskSpec(REGION_BOARD, 1, true, false, null, "地域板块基础维表（board_basic，board_type=1）"),
+            new TaskSpec(INDUSTRY_BOARD, 1, true, false, null, "行业板块基础维表（board_basic，board_type=2）"),
+            new TaskSpec(CONCEPT_BOARD, 1, true, false, null, "概念板块基础维表（board_basic，board_type=3）"),
             new TaskSpec("MAIN_FUND_STOCK", 1, true, false, null, "个股主力资金流（市场级）"),
             new TaskSpec("MAIN_FUND_BOARD", 1, true, false, null, "板块主力资金流（市场级）"),
             new TaskSpec("DRAGON_TIGER", 1, true, false, null, "龙虎榜（市场级）"),

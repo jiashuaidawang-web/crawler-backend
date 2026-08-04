@@ -33,6 +33,24 @@ public final class EastmoneyEndpoints {
         String dcType;    // DATACENTER 的 type 参数
         String poolDefaultLimitType; // ZT_POOL 默认 limit_type 列值（可被 params.limitType 覆盖）
 
+        // ========================================================================
+        // 公共参数生成（cb / 时间戳）—— 所有 buildUrl 分支统一调用，避免散落各处
+        // ========================================================================
+
+        /**
+         * 生成东财 JSONP 回调名：{@code jQuery + 随机数 + _ + 时间戳}。
+         * <p>示例：{@code jQuery1124064700148312436964_1754288369534}。
+         * 每次请求生成新值，避免 CDN 缓存命中同一响应。</p>
+         */
+        public static String generateCb() {
+            return "jQuery" + new Random().nextLong() + "_" + System.currentTimeMillis();
+        }
+
+        /** 当前 13 位毫秒时间戳（东财 _ 参数，防缓存）。 */
+        public static long generateTs() {
+            return System.currentTimeMillis();
+        }
+
         /** 构建请求 URL（page 对 CLIST/池有意义，DATACENTER 忽略）。 */
         public String buildUrl(Map<String, Object> params, int page) {
             switch (parserType) {
@@ -188,6 +206,18 @@ public final class EastmoneyEndpoints {
         // 概念板块日线（board_type=3）
         SPEC_BY_TYPE.put("CONCEPT_DAILY", new EndpointSpec(
                 "CONCEPT_DAILY", "https://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:3+f:!50", null, null));
+        // 地域板块基础维表（board_basic，board_type=1）—— 独立抓取，fs 与 REGION_DAILY 一致
+        SPEC_BY_TYPE.put("REGION_BOARD", new EndpointSpec(
+                "REGION_BOARD", "http://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:1+f:!50", null, null));
+        // 行业板块基础维表（board_basic，board_type=2）
+        SPEC_BY_TYPE.put("INDUSTRY_BOARD", new EndpointSpec(
+                "INDUSTRY_BOARD", "http://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "m:90+t:2+f:!50", null, null));
+        // 概念板块基础维表（board_basic，board_type=3）
+        SPEC_BY_TYPE.put("CONCEPT_BOARD", new EndpointSpec(
+                "CONCEPT_BOARD", "http://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:3+f:!50", null, null));
         // 个股主力资金流
         SPEC_BY_TYPE.put("MAIN_FUND_STOCK", new EndpointSpec(

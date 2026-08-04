@@ -64,6 +64,18 @@ public class JobController {
         return r;
     }
 
+    /** 仅下发 3 种 board_basic 任务（地域/行业/概念板块基础维表），端到端测试用 */
+    @PostMapping("/seed-board-basic")
+    public Map<String, Object> seedBoardBasic(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedBoardBasicAll(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
     @PostMapping("/backfill")
     public Map<String, Object> backfill(
             @RequestParam String start,

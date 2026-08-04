@@ -60,6 +60,14 @@ public final class EastmoneyParsers {
                     row.put("limit_up_count", null);
                     row.put("board_code2", null);
                     break;
+                // 板块基础维表（board_basic）—— 仅取 3 字段，board_type 由 taskType 映射
+                case "REGION_BOARD":
+                case "INDUSTRY_BOARD":
+                case "CONCEPT_BOARD":
+                    row.put("board_code", txt(n, "f12"));
+                    row.put("board_name", txt(n, "f14"));
+                    row.put("board_type", taskTypeToBoardType(spec.getTaskType()));
+                    break;
                 case "MAIN_FUND_STOCK":
                     row.put("obj_type", "stock");
                     row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "f12"), txt(n, "f13")));
@@ -334,9 +342,9 @@ public final class EastmoneyParsers {
             return 0;
         }
         return switch (taskType) {
-            case "BOARD_DAILY", "REGION_DAILY" -> 1;
-            case "INDUSTRY_DAILY" -> 2;
-            case "CONCEPT_DAILY" -> 3;
+            case "BOARD_DAILY", "REGION_DAILY", "REGION_BOARD" -> 1;
+            case "INDUSTRY_DAILY", "INDUSTRY_BOARD" -> 2;
+            case "CONCEPT_DAILY", "CONCEPT_BOARD" -> 3;
             default -> 0;
         };
     }

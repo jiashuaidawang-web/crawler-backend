@@ -467,9 +467,44 @@ public class DedupWriter {
             case "DRAGON_TIGER" -> writeDragonTiger(rows, source, srcDetail);
             case "DRAGON_TIGER_DETAIL" -> writeDtDetail(rows, source, srcDetail);
             case "STOCK_BY_BOARD" -> writeStockBoardRel(rows, source, srcDetail);
+            // 板块基础维表（board_basic）—— 独立抓取，幂等写入
+            case "REGION_BOARD", "INDUSTRY_BOARD", "CONCEPT_BOARD" ->
+                    writeBoardBasic(rows, source, srcDetail);
             default ->
                     log.warn("DedupWriter.write: 未路由的 taskType={}, 跳过 {} 行（避免静默写错表）", taskType, rows.size());
         }
+    }
+
+    /**
+     * 写入板块基础维表（board_basic）。
+     * <p>唯一键 (board_type, board_code, data_source)，幂等：已存在则跳过（名称变化不追）。
+     * 复用 BoardBasicSyncService.syncBoard() —— 与 board_daily 副作用同步同逻辑。</p>
+     */
+    public void writeBoardBasic(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        int dataSource = source.getCode();
+        int processed = 0, skipped = 0;
+        for (Map<String, Object> r : rows) {
+            try {
+                String boardCode = (String) r.get("board_code");
+                String boardName = (String) r.get("board_name");
+                Integer boardType = (Integer) r.get("board_type");
+                if (boardType == null || boardType <= 0) {
+                    skipped++;
+                    continue;
+                }
+                // syncBoard 内部幂等：按 (board_type, board_code, data_source) 查，有则跳过无则新增
+                boardBasicSyncService.syncBoard(boardCode, boardName, boardType, dataSource);
+                processed++;
+            } catch (Exception e) {
+                log.warn("DedupWriter.writeBoardBasic 行写入失败(source={}, board_code={}): {}",
+                        dataSource, r.get("board_code"), e.getMessage());
+            }
+        }
+        log.info("DedupWriter.writeBoardBasic 写入完成: source={}, total={}, processed={}, skipped={}",
+                dataSource, rows.size(), processed, skipped);
     }
 
     // ----------------------------------------------------------------------
