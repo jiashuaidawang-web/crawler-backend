@@ -31,6 +31,7 @@ public class JuliangProxyProvider implements ProxyProvider {
 
     private final String tradeNo;
     private final String sign;
+    private final String city;
     private final String username;
     private final String password;
 
@@ -45,9 +46,10 @@ public class JuliangProxyProvider implements ProxyProvider {
      *
      * @param tradeNo 巨量代理 trade_no
      * @param sign    签名（按巨量文档对请求参数签名）
+     * @param city    提取城市(可选,null=不限)
      */
-    public JuliangProxyProvider(String tradeNo, String sign) {
-        this(tradeNo, sign, null, null);
+    public JuliangProxyProvider(String tradeNo, String sign, String city) {
+        this(tradeNo, sign, city, null, null);
     }
 
     /**
@@ -55,19 +57,23 @@ public class JuliangProxyProvider implements ProxyProvider {
      *
      * @param tradeNo  巨量代理 trade_no
      * @param sign     签名
+     * @param city     提取城市(可选,null=不限)
      * @param username 代理用户名
      * @param password 代理密码
      */
-    public JuliangProxyProvider(String tradeNo, String sign, String username, String password) {
+    public JuliangProxyProvider(String tradeNo, String sign, String city, String username, String password) {
         this.tradeNo = tradeNo;
         this.sign = sign;
+        this.city = city;
         this.username = username;
         this.password = password;
     }
 
-    /** 拼提取 URL（trade_no + sign 由调用方预计算好传入）。 */
+    /**
+     * 拼提取 URL（auth_type=2:用户名密码模式,返回 ip:port:user:pass）。
+     */
     private String apiUrl() {
-        return "http://v2.api.juliangip.com/company/dynamic/getips?auto_white=1&filter=1&num=1&pt=1&result_type=json"
+        return "http://v2.api.juliangip.com/company/dynamic/getips?auth_type=2&auto_white=1&filter=1&num=1&pt=1&result_type=json"
                 + "&trade_no=" + tradeNo + "&sign=" + sign;
     }
 
@@ -104,20 +110,41 @@ public class JuliangProxyProvider implements ProxyProvider {
                 log.warn("[Juliang] API proxy_list empty: {}", text);
                 return null;
             }
-            String ipPort = list.get(0).asText().trim();
-            if (ipPort.isEmpty() || !ipPort.contains(":")) {
-                log.warn("[Juliang] unexpected proxy: {}", ipPort);
+            String raw = list.get(0).asText().trim();
+            // raw = "ip:port:user:pass" → "http://user:pass@ip:port"
+            String proxy = parseProxy(raw);
+            if (proxy == null) {
+                log.warn("[Juliang] unexpected proxy format: {}", raw);
                 return null;
             }
-            // 有用户名密码 → 带鉴权；否则纯白名单模式
-            String proxy = (username != null && !username.isBlank() && password != null)
-                    ? "http://" + username + ":" + password + "@" + ipPort
-                    : "http://" + ipPort;
-            log.info("[Juliang] acquire success: {} (surplus={})", ipPort, root.path("data").path("surplus_quantity").asInt(-1));
+            log.info("[Juliang] acquire success: {} (surplus={})", proxy, root.path("data").path("surplus_quantity").asInt(-1));
             return proxy;
         } catch (IOException e) {
             log.warn("[Juliang] acquire failed: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 解析巨量代理字符串。
+     * <p>格式: {@code ip:port:user:pass} → {@code http://user:pass@ip:port}</p>
+     *
+     * @param raw 原始代理字符串
+     * @return 标准代理字符串；格式错误返回 null
+     */
+    private String parseProxy(String raw) {
+        if (raw == null || raw.isEmpty() || !raw.contains(":")) {
+            return null;
+        }
+        // ip:port:user:pass
+        String[] parts = raw.split(":");
+        if (parts.length != 4) {
+            return null;
+        }
+        String ip = parts[0];
+        String port = parts[1];
+        String user = parts[2];
+        String pass = parts[3];
+        return "http://" + user + ":" + pass + "@" + ip + ":" + port;
     }
 }

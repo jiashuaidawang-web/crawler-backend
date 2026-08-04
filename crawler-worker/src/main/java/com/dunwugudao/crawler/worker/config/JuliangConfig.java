@@ -15,6 +15,9 @@ public class JuliangConfig {
     /** 巨量代理签名（对提取请求参数预计算）。 */
     private String sign;
 
+    /** 提取城市(如 北京/上海/广州,可选,空=不限)。 */
+    private String city;
+
     /** 代理用户名（账号密码鉴权时填写；纯白名单鉴权留空）。 */
     private String username;
 
@@ -37,6 +40,14 @@ public class JuliangConfig {
         this.sign = sign;
     }
 
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
     public String getUsername() {
         return username;
     }
@@ -53,7 +64,7 @@ public class JuliangConfig {
         this.password = password;
     }
 
-    /** trade_no + sign 完整即视为已配置（username/password 可选）。 */
+    /** trade_no + sign 完整即视为已配置（username/password/city 可选）。 */
     public boolean isConfigured() {
         return tradeNo != null && !tradeNo.isBlank()
                 && sign != null && !sign.isBlank();

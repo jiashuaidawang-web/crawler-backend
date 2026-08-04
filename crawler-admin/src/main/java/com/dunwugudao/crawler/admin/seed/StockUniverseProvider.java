@@ -27,7 +27,11 @@ public class StockUniverseProvider {
     );
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ProxyManager proxyManager = new ProxyManager();
+    private final ProxyManager proxyManager;
+
+    public StockUniverseProvider(ProxyManager proxyManager) {
+        this.proxyManager = proxyManager;
+    }
 
     /**
      * 获取全市场股票代码列表（分页迭代，失败重试）。

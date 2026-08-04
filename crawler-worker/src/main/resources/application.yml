@@ -44,23 +44,10 @@ anti-crawl:
   # cloak-serve-script: scripts/cloak_serve.py
   # cloak-cdp-url: ""                    # 显式 CDP URL；空则按 cloak-local-port 拼 http://127.0.0.1:{port}
 
-# 代理配置（三个子键，OkHttp 路径优先顺序：juliang > kuaidaili > 兜底硬编码）
+# 代理配置(统一用巨量,用户名密码鉴权 auth_type=2)
+# 巨量提取 API: http://v2.api.juliangip.com/company/dynamic/getips?auth_type=2&auto_white=1&filter=1&num=1&pt=1&result_type=json&trade_no=...&sign=...
+# 返回: {"code":200,"msg":"成功","data":{"count":1,"surplus_quantity":N,"proxy_list":["ip:port:user:pass"]}}
 proxy:
-  # 巨量（juliangip）动态代理：OkHttp 路径首选。auto_white=1 自动白名单鉴权（无需账号密码）。
   juliang:
-    trade-no: 1072663527266511
-    sign: 79c84c7d9e9c02126871f39872f4624a
-    # username: ""   # 账号密码鉴权时填写；白名单鉴权留空
-    # password: ""
-  # 青果长效 IP（住宅隧道）：每 30 分钟换一次 IP，不限流量。
-  # 提取 API：https://longterm.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=txt&seq=%0D%0A&distinct=false
-  # 返回纯文本：ip:port（每行一个）；认证：username=api-key, password=AuthPwd
-  qg:
-    api-key: 8A9D6CC5
-    password: 742290397356
-  # 快代理（kuaidaili）私密代理：巨量未配置时的回退。密钥外置。
-  kuaidaili:
-    secret-id: o3icyopd76ugn5hcya8g
-    signature: 7dz6v5e9ba1bkejun2q9eobgdhrovfjm
-    username: d2383368918
-    password: tft4pvct
+    trade_no: 1197466623622927
+    sign: 28657a86eb21269ec97587a7333ac652

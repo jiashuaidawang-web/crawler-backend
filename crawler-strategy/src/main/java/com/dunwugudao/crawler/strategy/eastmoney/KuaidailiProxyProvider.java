@@ -60,13 +60,16 @@ public class KuaidailiProxyProvider implements ProxyProvider {
 
     /** 按实例字段拼 URL（URL 非常量，因为密钥来自注入）。 */
     private String apiUrl() {
+        // 用户实测 2026-08-04:format=json + dedup=1(去重),返回 {"data":{"proxy_list":["ip:port",...]}}
         return "https://dps.kdlapi.com/api/getdps/?secret_id=" + secretId
                 + "&signature=" + signature
-                + "&num=1&format=text&sep=1";
+                + "&num=1&format=json&sep=1&dedup=1";
     }
 
     /**
      * 从快代理提取 1 个 IP，返回 {@code http://user:pass@ip:port}。
+     * <p>返回 JSON 格式: {@code {"code":0,"data":{"count":10,"proxy_list":["ip:port",...]}}}，
+     * 取 {@code data.proxy_list[0]}。</p>
      *
      * @return 代理字符串；提取失败返回 null（WorkerProxyManager 会稍后重试）
      */
@@ -87,17 +90,43 @@ public class KuaidailiProxyProvider implements ProxyProvider {
                 return null;
             }
             String text = body.string().trim();
-            if (text.isEmpty() || !text.contains(":")) {
+            if (text.isEmpty()) {
+                log.warn("[Kuaidaili] empty response（提取失败，返回 null）");
+                return null;
+            }
+            // JSON 解析: {"code":0,"data":{"count":10,"proxy_list":["ip:port",...]}} → 取 proxy_list[0]
+            String firstProxy = parseProxyList(text);
+            if (firstProxy == null || !firstProxy.contains(":")) {
                 log.warn("[Kuaidaili] unexpected response: {}（提取失败，返回 null）", text);
                 return null;
             }
-            // text = "ip:port" → "http://user:pass@ip:port"
-            String proxy = "http://" + username + ":" + password + "@" + text;
-            log.info("[Kuaidaili] acquire success: {} (proxy={})", text, proxy);
+            // firstProxy = "ip:port" → "http://user:pass@ip:port"
+            String proxy = "http://" + username + ":" + password + "@" + firstProxy;
+            log.info("[Kuaidaili] acquire success: {} (proxy={})", firstProxy, proxy);
             return proxy;
         } catch (IOException e) {
             log.warn("[Kuaidaili] acquire failed: {}（提取失败，返回 null）", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 从快代理 JSON 响应提取 proxy_list[0]。
+     * <p>格式: {@code {"code":0,"data":{"count":10,"proxy_list":["218.95.37.11:25152",...]}}}</p>
+     *
+     * @return proxy_list 第一个元素；解析失败返回 null
+     */
+    private String parseProxyList(String json) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            com.fasterxml.jackson.databind.JsonNode proxyList = root.path("data").path("proxy_list");
+            if (proxyList.isArray() && !proxyList.isEmpty()) {
+                return proxyList.get(0).asText();
+            }
+        } catch (Exception e) {
+            log.warn("[Kuaidaili] JSON parse failed: {}", e.getMessage());
+        }
+        return null;
     }
 }

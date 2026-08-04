@@ -19,10 +19,19 @@ mybatis-plus:
 
 # ---------------------- STOCK_DAILY 拆页种子配置 ----------------------
 # 全市场股票总数（用于计算总页数 = ceil(nowStockSize / pageSize)）。
-# 市场扩容时调大此值（如 5545 → 6000），可从东财 clist total 字段或交易所官网获取。
+# 探测失败时用 now-stock-size 兜底,保证 task 数。
 stock-daily:
   now-stock-size: 5545
   page-size: 100   # 东财 clist 每页最多 100 条（pz 参数）
+
+# ---------------------- 巨量代理配置(用户实测 2026-08-04) ----------------------
+# 统一用巨量,用户名密码鉴权(auth_type=2),返回 ip:port:user:pass。
+# 提取 API: http://v2.api.juliangip.com/company/dynamic/getips?auth_type=2&auto_white=1&filter=1&num=1&pt=1&result_type=json&trade_no=...&sign=...
+# 返回: {"code":200,"msg":"成功","data":{"count":1,"surplus_quantity":N,"proxy_list":["ip:port:user:pass"]}}
+proxy:
+  juliang:
+    trade_no: 1197466623622927
+    sign: 28657a86eb21269ec97587a7333ac652
 
 # ---------------------- XXL-JOB 执行器（调度接入 M3） ----------------------
 # 执行器挂在 admin（控制面）：worker 只认领、不调度。

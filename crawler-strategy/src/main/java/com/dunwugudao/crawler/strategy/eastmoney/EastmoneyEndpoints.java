@@ -2,6 +2,7 @@ package com.dunwugudao.crawler.strategy.eastmoney;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 /**
  * 按 taskType 路由的东财端点表（M2 深化）。
@@ -99,9 +100,18 @@ public final class EastmoneyEndpoints {
                     } else {
                         pn = page;
                     }
-                    return baseUrl
-                            + "?pn=" + pn + "&pz=100&po=1&np=1&fltt=2&invt=2"
-                            + "&fs=" + fsVal + "&fields=" + fields;
+                    // 完整 push2 模板(用户实测 2026-08-04)：域名/协议/参数一个不少,避免被识别为爬虫
+                    long ts = System.currentTimeMillis();
+                    String cb = "jQuery" + new Random().nextLong() + "_" + ts;
+                    return "http://83.push2.eastmoney.com/api/qt/clist/get"
+                            + "?cb=" + cb
+                            + "&pn=" + pn + "&pz=100&po=1&np=1"
+                            + "&ut=bd1d9ddb04089700cf9c27f6f7426281"
+                            + "&fltt=2&invt=2"
+                            + "&fid=f3"
+                            + "&fs=" + fsVal
+                            + "&fields=" + fields
+                            + "&_=" + ts;
                 }
                 case DATACENTER: {
                     String td = tradeDate(params);

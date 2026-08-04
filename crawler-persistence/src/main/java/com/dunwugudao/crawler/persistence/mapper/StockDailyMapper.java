@@ -27,11 +27,8 @@ public interface StockDailyMapper extends BaseMapper<StockDaily> {
               turnover = #{turnover}, total_mv = #{totalMv}, circ_mv = #{circMv}, pe = #{pe},
               is_limit_up = #{isLimitUp}, is_limit_down = #{isLimitDown}, data_source = #{dataSource},
               src_detail = #{srcDetail}, chg_amount = #{chgAmount}, amplitude = #{amplitude},
-              volume_ratio = #{volumeRatio}, avg_price = #{avgPrice}, main_net = #{mainNet},
-              pe_static = #{peStatic}, leader_code = #{leaderCode}, industry_code = #{industryCode},
-              concept_code = #{conceptCode}, market_code = #{marketCode}, reserved_f24 = #{reservedF24},
-              reserved_f25 = #{reservedF25}, reserved_f107 = #{reservedF107}, reserved_f136 = #{reservedF136},
-              reserved_f173 = #{reservedF173}, update_date = #{updateDate}
+              volume_ratio = #{volumeRatio}, chg_60d = #{chg60d}, market_code = #{marketCode},
+              update_date = #{updateDate}
             WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
             """)
     int updateRow(StockDaily row);

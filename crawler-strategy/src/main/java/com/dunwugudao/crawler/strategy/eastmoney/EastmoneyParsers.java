@@ -94,38 +94,27 @@ public final class EastmoneyParsers {
                     row.put("is_midarm", null);                  // TODO M6
                     break;
                 case "STOCK_DAILY":
-                    // 全市场快照（push2 clist）：f1-f173 完整投影 → stock_daily 表
-                    // 价格类（接口单位是分，转元 ÷100）
+                    // 全市场快照（push2 clist）：18 字段精简版(用户终稿 2026-08-04)
+                    // 价格类接口单位已是元,直接取(不÷100)
                     row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "f12"), txt(n, "f13")));
                     row.put("stock_name", txt(n, "f14"));
-                    row.put("close", halve(num(n, "f2")));           // f2  最新价
-                    row.put("pct_chg", num(n, "f3"));               // f3  涨跌幅%
-                    row.put("chg_amount", halve(num(n, "f4")));      // f4  涨跌额
-                    row.put("vol", num(n, "f5"));                   // f5  成交量(手)
-                    row.put("amount", num(n, "f6"));                // f6  成交额(元)
-                    row.put("amplitude", num(n, "f7"));             // f7  振幅%
-                    row.put("turnover", num(n, "f8"));              // f8  换手率%
-                    row.put("pe", num(n, "f9"));                    // f9  动态市盈率
-                    row.put("volume_ratio", num(n, "f10"));         // f10 量比
-                    row.put("velocity", num(n, "f11"));             // f11 涨速%（本身是百分比，不÷100）
-                    row.put("high", halve(num(n, "f15")));          // f15 最高价
-                    row.put("low", halve(num(n, "f16")));           // f16 最低价
-                    row.put("open", halve(num(n, "f17")));          // f17 开盘价
-                    row.put("pre_close", halve(num(n, "f18")));     // f18 昨收
-                    row.put("total_mv", num(n, "f20"));             // f20 总市值(元)
-                    row.put("circ_mv", num(n, "f21"));              // f21 流通市值(元)
-                    row.put("is_new_high", toInt(num(n, "f22")));   // f22 是否新高 1/0
-                    row.put("chg_60d", num(n, "f23"));              // f23 60日涨跌幅%
-                    row.put("reserved_f24", num(n, "f24"));          // f24 年初至今涨跌幅%
-                    row.put("reserved_f25", halve(num(n, "f25")));  // f25 涨停价(分→元)
-                    row.put("seal_fund", num(n, "f62"));            // f62 封单资金(元)
-                    row.put("board_days", toInt(num(n, "f115")));   // f115 连板天数
-                    row.put("board_stat", txt(n, "f128"));           // f128 涨停统计("3/2")
-                    row.put("first_seal_time", hhmmssToTime(txt(n, "f140"))); // f140 首次封板
-                    row.put("last_seal_time", hhmmssToTime(txt(n, "f141")));  // f141 最后封板
-                    row.put("reserved_f136", num(n, "f136"));        // f136 炸板次数
-                    row.put("limit_type", toInt(num(n, "f152")));   // f152 涨停类型
-                    row.put("reserved_f173", num(n, "f173"));        // f173 涨速%
+                    row.put("close", num(n, "f2"));           // f2  收盘价(元)
+                    row.put("pct_chg", num(n, "f3"));        // f3  涨跌幅%
+                    row.put("chg_amount", num(n, "f4"));     // f4  涨跌额(元)
+                    row.put("vol", num(n, "f5"));            // f5  成交量(手)
+                    row.put("amount", num(n, "f6"));         // f6  成交额(元)
+                    row.put("amplitude", num(n, "f7"));      // f7  振幅%
+                    row.put("turnover", num(n, "f8"));       // f8  换手率%
+                    row.put("pe", num(n, "f9"));             // f9  市盈率(TTM)
+                    row.put("volume_ratio", num(n, "f10"));  // f10 量比
+                    row.put("high", num(n, "f15"));          // f15 最高价(元)
+                    row.put("low", num(n, "f16"));           // f16 最低价(元)
+                    row.put("open", num(n, "f17"));          // f17 开盘价(元)
+                    row.put("pre_close", num(n, "f18"));     // f18 昨收(元)
+                    row.put("total_mv", num(n, "f20"));      // f20 总市值(元)
+                    row.put("circ_mv", num(n, "f21"));       // f21 流通市值(元)
+                    row.put("chg_60d", num(n, "f23"));       // f23 60日涨跌幅%
+                    row.put("market_code", num(n, "f152"));  // f152 市场码(0深/1沪/2京)
                     // 涨跌停标记（pct_chg 近似判定，创业板/科创板 20% 与主板 10% 统一阈值，TODO M6 精确）
                     Double pct = num(n, "f3");
                     row.put("is_limit_up", (pct != null && pct >= 9.8) ? 1 : 0);
@@ -350,11 +339,6 @@ public final class EastmoneyParsers {
             case "CONCEPT_DAILY" -> 3;
             default -> 0;
         };
-    }
-
-    /** 接口价格单位是分，转元 ÷100（null 透传）。 */
-    public static Double halve(Double d) {
-        return d == null ? null : d / 100.0;
     }
 
     /** 东财 HHMMSS（如 92500 = 09:25:00）转 HH:mm:ss；非数字（"-"）返回 null。 */

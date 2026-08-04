@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -57,6 +58,8 @@ public class SeedGenerator {
 
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
     private final int stockDailyPageSize;
+    /** STOCK_DAILY 探测失败兜底全市场股票数(保证 task 数)。 */
+    private final int stockDailyNowStockSize;
     /** STOCK_BY_BOARD 每页条数。 */
     private static final int BOARD_BY_BOARD_PAGE_SIZE = 100;
 
@@ -74,6 +77,8 @@ public class SeedGenerator {
         this.eastmoneyClient = eastmoneyClient;
         // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
+        // 探测失败兜底全市场股票数(默认 5545,保证 task 数)
+        this.stockDailyNowStockSize = Integer.parseInt(env.getProperty("stock-daily.now-stock-size", "5545"));
     }
 
     /**
@@ -149,9 +154,11 @@ public class SeedGenerator {
         int total = fetchClistTotal(spec, date);
         int totalPages;
         if (total <= 0) {
-            // 探测失败或无数据：仍下发 1 个 task（兜底，避免漏跑）
-            totalPages = 1;
-            log.warn("[seedStockDailyPages] date={} 探测无数据(total={})，下发 1 个兜底 task", date, total);
+            // 探测失败或无数据：用配置文件的 now-stock-size 兜底,保证 task 数
+            total = stockDailyNowStockSize;
+            totalPages = (total + stockDailyPageSize - 1) / stockDailyPageSize;  // ceil(5545/100)=56
+            log.warn("[seedStockDailyPages] date={} 探测无数据(total<=0),兜底 now-stock-size={}, pages={}",
+                     date, total, totalPages);
         } else {
             totalPages = (total + stockDailyPageSize - 1) / stockDailyPageSize;
         }
@@ -306,11 +313,22 @@ public class SeedGenerator {
 
     /**
      * 探测 CLIST 类型（push2 clist）当日总数。
-     * <p>用 spec 的 fs 拼最小请求（pz=1, fields=f12），解析 data.total。</p>
+     * <p>用完整 push2 模板(只改 pz=1),避免被识别为爬虫。解析 data.total。</p>
      */
     private int fetchClistTotal(EastmoneyEndpoints.EndpointSpec spec, String date) {
-        String url = spec.getBaseUrl() + "?pn=1&pz=1&po=1&np=1&fltt=2&invt=2"
-                + "&fs=" + (spec.getFs() != null ? spec.getFs() : "") + "&fields=f12";
+        // 完整参数模板(用户实测 2026-08-04),只改 pz=1 做最小探测
+        long ts = System.currentTimeMillis();
+        String cb = "jQuery" + new Random().nextLong() + "_" + ts;
+        String fsVal = spec.getFs() != null ? spec.getFs() : "";
+        String url = "http://83.push2.eastmoney.com/api/qt/clist/get"
+                + "?cb=" + cb
+                + "&pn=1&pz=1&po=1&np=1"
+                + "&ut=bd1d9ddb04089700cf9c27f6f7426281"
+                + "&fltt=2&invt=2"
+                + "&fid=f3"
+                + "&fs=" + fsVal
+                + "&fields=f12"
+                + "&_=" + ts;
         try {
             String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);

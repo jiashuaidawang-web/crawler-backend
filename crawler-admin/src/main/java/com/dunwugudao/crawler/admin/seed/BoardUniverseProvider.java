@@ -24,7 +24,11 @@ public class BoardUniverseProvider {
     );
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ProxyManager proxyManager = new ProxyManager();
+    private final ProxyManager proxyManager;
+
+    public BoardUniverseProvider(ProxyManager proxyManager) {
+        this.proxyManager = proxyManager;
+    }
 
     /**
      * 获取全市场板块代码列表（分页迭代，失败重试）。
