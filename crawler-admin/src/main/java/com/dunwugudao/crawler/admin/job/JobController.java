@@ -52,6 +52,18 @@ public class JobController {
         return r;
     }
 
+    /** 仅下发 5 个池子任务（涨停/跌停/炸板/强势/次新），端到端测试用 */
+    @PostMapping("/seed-pools-only")
+    public Map<String, Object> seedPoolsOnly(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.dailySeedPoolsOnly(d, source);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
     @PostMapping("/backfill")
     public Map<String, Object> backfill(
             @RequestParam String start,

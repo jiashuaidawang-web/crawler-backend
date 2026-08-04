@@ -7,7 +7,8 @@ spring:
   datasource:
     # openGaussDB 兼容 PostgreSQL 协议，使用 PG 驱动即可
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://100.92.86.64:15432/postgres
+#    url: jdbc:postgresql://100.92.86.64:15432/postgres
+    url: jdbc:postgresql://127.0.0.1:15432/postgres
     username: dbuser
     password: OpenGauss@2026
 

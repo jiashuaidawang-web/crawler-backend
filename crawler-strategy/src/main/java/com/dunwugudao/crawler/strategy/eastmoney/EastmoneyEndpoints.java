@@ -66,7 +66,10 @@ public final class EastmoneyEndpoints {
                     } else {
                         sort = "fbt%3Aasc";
                     }
-                    return "https://push2ex.eastmoney.com/" + path
+                    // 协议用 HTTP（与 stockDaily 一致）：HTTPS 经代理时 CONNECT 隧道阶段
+                    // Proxy-Authorization 加不上，会触发 407 认证失败（10 个 IP 全失败）。
+                    // 改 HTTP 后无 CONNECT 隧道，应用拦截器的 Proxy-Authorization 头生效。
+                    return "http://push2ex.eastmoney.com/" + path
                             + "?cb=callbackdata6233583&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt"
                             + "&date=" + d + "&Pageindex=" + pageindex + "&pagesize=" + pagesize
                             + "&sort=" + sort + "&_=" + ts;
@@ -136,26 +139,27 @@ public final class EastmoneyEndpoints {
 
     static {
         // 涨停/跌停/炸板池（LIMIT_POOL 会被 SeedGenerator 展开成以下 3 个子任务）
+        // 协议用 HTTP（与 stockDaily 一致）：HTTPS 经代理 CONNECT 隧道时 Proxy-Authorization 加不上会 407。
         SPEC_BY_TYPE.put("LIMIT_UP", new EndpointSpec(
-                "LIMIT_UP", "https://push2ex.eastmoney.com/getTopicZTPool",
+                "LIMIT_UP", "http://push2ex.eastmoney.com/getTopicZTPool",
                 ParserType.ZT_POOL, null, null, "limit_up"));
         SPEC_BY_TYPE.put("LIMIT_DOWN", new EndpointSpec(
-                "LIMIT_DOWN", "https://push2ex.eastmoney.com/getTopicDTPool",
+                "LIMIT_DOWN", "http://push2ex.eastmoney.com/getTopicDTPool",
                 ParserType.ZT_POOL, null, null, "limit_down"));
         SPEC_BY_TYPE.put("LIMIT_ZHABAN", new EndpointSpec(
-                "LIMIT_ZHABAN", "https://push2ex.eastmoney.com/getTopicZBPool",
+                "LIMIT_ZHABAN", "http://push2ex.eastmoney.com/getTopicZBPool",
                 ParserType.ZT_POOL, null, null, "zhaban"));
         // 兼容：LIMIT_POOL 直接作为 taskType 时也映射到涨停池（兜底）
         SPEC_BY_TYPE.put("LIMIT_POOL", new EndpointSpec(
-                "LIMIT_POOL", "https://push2ex.eastmoney.com/getTopicZTPool",
+                "LIMIT_POOL", "http://push2ex.eastmoney.com/getTopicZTPool",
                 ParserType.ZT_POOL, null, null, "limit_up"));
         // 强势股池
         SPEC_BY_TYPE.put("STRONG_POOL", new EndpointSpec(
-                "STRONG_POOL", "https://push2ex.eastmoney.com/getTopicQSPool",
+                "STRONG_POOL", "http://push2ex.eastmoney.com/getTopicQSPool",
                 ParserType.ZT_POOL, null, null, "strong"));
         // 次新股池
         SPEC_BY_TYPE.put("CIXIN_POOL", new EndpointSpec(
-                "CIXIN_POOL", "https://push2ex.eastmoney.com/getTopicCXPooll",
+                "CIXIN_POOL", "http://push2ex.eastmoney.com/getTopicCXPooll",
                 ParserType.ZT_POOL, null, null, "cixin"));
         // 个股日线（push2 clist 全市场快照，按页拆任务；fs 含沪深主板+创业板+科创板）
         SPEC_BY_TYPE.put("STOCK_DAILY", new EndpointSpec(

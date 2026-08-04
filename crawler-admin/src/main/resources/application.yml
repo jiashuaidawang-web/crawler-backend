@@ -6,7 +6,8 @@ spring:
     name: crawler-admin
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://100.92.86.64:15432/postgres
+#    url: jdbc:postgresql://100.92.86.64:15432/postgres
+    url: jdbc:postgresql://127.0.0.1:15432/postgres
     username: dbuser
     password: OpenGauss@2026
 

@@ -5,9 +5,18 @@ import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.function.Predicate;
 
 /**
  * 代理管理器：获取代理 + 构建请求 + 失败重试。
+ *
+ * <h3>响应验证</h3>
+ * 不同接口成功响应的数据字段不同：
+ * <ul>
+ *   <li>clist 类（stockDaily / stockUniverse / boardUniverse）：响应含 {@code "total":}</li>
+ *   <li>池子类（push2ex 涨跌停/强势/次新）：响应含 {@code "tc":}</li>
+ * </ul>
+ * 通过 {@link #CLIST_VALIDATOR} / {@link #POOL_VALIDATOR} 区分，避免池子响应被误判为"502 无有效数据"。
  *
  * <h3>职责</h3>
  * <ul>
@@ -34,6 +43,14 @@ public class ProxyManager {
     /** 单任务最大重试次数(获取新 IP 重试) — 40% 成功率下,10 次期望 4 次成功 */
     private static final int MAX_RETRIES = 10;
 
+    /** clist 类接口响应验证：rc=0 且含 total 字段 */
+    public static final Predicate<String> CLIST_VALIDATOR =
+            resp -> resp.contains("\"rc\":0") && resp.contains("\"total\":");
+
+    /** 池子类接口响应验证：rc=0 且含 tc 字段 */
+    public static final Predicate<String> POOL_VALIDATOR =
+            resp -> resp.contains("\"rc\":0") && resp.contains("\"tc\":");
+
     /** 代理提供者(青果) */
     private final ProxyProvider proxyProvider;
 
@@ -49,19 +66,32 @@ public class ProxyManager {
 
     /**
      * 执行带代理的 HTTP GET 请求,失败自动重试。
-     *
-     * <h4>重试逻辑</h4>
-     * <ol>
-     *   <li>从 provider 获取一个新代理</li>
-     *   <li>用 {@link EastmoneyClient} 发送请求(自动处理代理认证)</li>
-     *   <li>成功 → 返回响应</li>
-     *   <li>失败(407/502/IO 异常/空响应) → 换下一个代理重试</li>
-     * </ol>
+     * <p>响应验证使用 {@link #CLIST_VALIDATOR}（rc=0 且含 total）。
+     * 池子类接口请用 {@link #executeWithRetry(String, Predicate)} 传入 {@link #POOL_VALIDATOR}。</p>
      *
      * @param url 目标 URL(完整 URL,含参数)
      * @return 响应体文本;所有重试失败返回 null
      */
     public String executeWithRetry(String url) {
+        return executeWithRetry(url, CLIST_VALIDATOR);
+    }
+
+    /**
+     * 执行带代理的 HTTP GET 请求,失败自动重试。
+     *
+     * <h4>重试逻辑</h4>
+     * <ol>
+     *   <li>从 provider 获取一个新代理</li>
+     *   <li>用 {@link EastmoneyClient} 发送请求(自动处理代理认证)</li>
+     *   <li>按 responseValidator 验证响应 → 成功返回</li>
+     *   <li>失败(407/502/IO 异常/空响应/数据无效) → 换下一个代理重试</li>
+     * </ol>
+     *
+     * @param url               目标 URL(完整 URL,含参数)
+     * @param responseValidator 响应有效性校验（clist 用 {@link #CLIST_VALIDATOR}，池子用 {@link #POOL_VALIDATOR}）
+     * @return 响应体文本;所有重试失败返回 null
+     */
+    public String executeWithRetry(String url, Predicate<String> responseValidator) {
         log.info("[ProxyManager] 开始请求, url={}, maxRetries={}", url, MAX_RETRIES);
 
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -85,8 +115,8 @@ public class ProxyManager {
                     continue;
                 }
 
-                // 东财 CDN 特殊行为:返回 502 但响应体是有效数据(rc=0 + data.total>0)
-                boolean hasValidData = resp.contains("\"rc\":0") && resp.contains("\"total\":");
+                // 东财 CDN 特殊行为:返回 502 但响应体是有效数据(rc=0 + 数据字段)
+                boolean hasValidData = responseValidator.test(resp);
                 if (!hasValidData && (resp.contains("502") || resp.contains("Bad Gateway"))) {
                     log.warn("[ProxyManager] attempt={}/{}, 502 错误(无有效数据), latency={}ms, resp={}, 换下一个代理",
                             attempt, MAX_RETRIES, latency, resp.substring(0, Math.min(200, resp.length())));

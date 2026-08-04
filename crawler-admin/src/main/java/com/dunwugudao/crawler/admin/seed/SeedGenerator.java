@@ -178,6 +178,19 @@ public class SeedGenerator {
         return seedClistTypeSingle("MAIN_FUND_BOARD", source, date, null);
     }
 
+    /**
+     * 仅下发 5 个池子任务（涨停/跌停/炸板/强势/次新），用于端到端测试。
+     * <p>不包含 STOCK_DAILY / REGION_DAILY 等其他任务类型，避免 daily-seed 里一堆无关任务。</p>
+     */
+    public int dailySeedPoolsOnly(String date, int source) {
+        int n = 0;
+        n += seedStrongPool(source, date);
+        n += seedCixinPool(source, date);
+        n += seedLimitPool(source, date);   // 展开成 LIMIT_UP + LIMIT_DOWN + LIMIT_ZHABAN
+        log.info("[dailySeedPoolsOnly] date={} source={} inserted={}", date, source, n);
+        return n;
+    }
+
     /** STRONG_POOL 单独处理 */
     public int seedStrongPool(int source, String date) {
         return seedPoolTasksSingle("STRONG_POOL", source, date);
@@ -487,7 +500,8 @@ public class SeedGenerator {
             String taskType = taskTypeForLimitType(limitType);
             EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
             String url = spec.buildUrl(probeParams, 0);
-            String resp = proxyManager.executeWithRetry(url);
+            // 池子响应用 data.tc（非 data.total），故用 POOL_VALIDATOR 识别"502 但数据有效"
+            String resp = proxyManager.executeWithRetry(url, ProxyManager.POOL_VALIDATOR);
             if (resp == null) {
                 return -1;
             }
