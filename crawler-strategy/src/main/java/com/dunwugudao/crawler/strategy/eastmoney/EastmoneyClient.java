@@ -117,18 +117,14 @@ public class EastmoneyClient {
                 .connectTimeout(Duration.ofSeconds(15))
                 .readTimeout(Duration.ofSeconds(30));
 
-        // 设置代理认证
+        // 设置代理认证(主动添加 Proxy-Authorization 头,不等 407 触发)
         if (username != null && password != null) {
-            final String user = username;
-            final String pass = password;
-            builder.authenticator(new Authenticator() {
-                @Override
-                public Request authenticate(Route route, Response response) {
-                    String credential = Credentials.basic(user, pass);
-                    return response.request().newBuilder()
-                            .header("Proxy-Authorization", credential)
-                            .build();
-                }
+            final String credential = Credentials.basic(username, password);
+            builder.addInterceptor(chain -> {
+                Request request = chain.request().newBuilder()
+                        .header("Proxy-Authorization", credential)
+                        .build();
+                return chain.proceed(request);
             });
         }
 

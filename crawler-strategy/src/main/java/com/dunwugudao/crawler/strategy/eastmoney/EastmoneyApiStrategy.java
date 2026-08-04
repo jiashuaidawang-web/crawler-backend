@@ -130,68 +130,73 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         Map<String, Object> params = JsonCheckpoint.deserialize(task.getParamsJson());
         EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
 
-        String ua = randomUa();
+        // 每个任务类型独立方法,边界清晰
+        return switch (spec.getParserType()) {
+            case CLIST -> fetchClist(ctx, taskType, params, spec);
+            case ZT_POOL, DATACENTER -> fetchZtPoolOrDatacenter(ctx, taskType, params, spec);
+            case KLINE -> fetchKline(ctx, taskType, params, spec);
+        };
+    }
 
+    /** CLIST 类型单独处理:STOCK_DAILY/BOARD_DAILY/MAIN_FUND_* 等 */
+    private CrawlResult fetchClist(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        String td = EastmoneyEndpoints.requireTradeDate(params);
+        int pn = EastmoneyEndpoints.parseInt(params.get("pn"), 1);
+        rateLimiter.acquire();
+        String url = spec.buildUrl(params, pn);
+        String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+        resp = cleanJsonp(resp);
+        JsonNode root = readTree(resp);
+        JsonNode data = root.path("data");
+        List<Map<String, Object>> allRows = EastmoneyParsers.parseClist(data, spec, td, params);
+        return buildResult(allRows, resp, url);
+    }
+
+    /** ZT_POOL/DATACENTER 单独处理:涨停池/跌停池/龙虎榜 */
+    private CrawlResult fetchZtPoolOrDatacenter(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        String td = EastmoneyEndpoints.requireTradeDate(params);
         List<Map<String, Object>> allRows = new ArrayList<>();
         String lastRaw = "";
         String lastUrl = "";
-
-        switch (spec.getParserType()) {
-            case CLIST: {
-                // CLIST 类型统一单请求：页码由种子注入 params.pn（从 1 开始），worker 不做分页
-                String td = EastmoneyEndpoints.requireTradeDate(params);
-                int pn = EastmoneyEndpoints.parseInt(params.get("pn"), 1);
-                rateLimiter.acquire();
-                String url = spec.buildUrl(params, pn);
-                String resp = fetchWithWorkerProxy(url, ua, ctx);
-                lastRaw = resp;
-                JsonNode root = readTree(resp);
-                JsonNode data = root.path("data");
-                allRows.addAll(EastmoneyParsers.parseClist(data, spec, td, params));
+        int pageIdx = 0;
+        while (pageIdx < POOL_MAX_PAGES) {
+            rateLimiter.acquire();
+            String url = spec.buildUrl(params, pageIdx);
+            String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+            lastRaw = resp;
+            lastUrl = url;
+            String cleaned = cleanJsonp(resp);
+            JsonNode root = readTree(cleaned);
+            List<Map<String, Object>> rows;
+            if (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL) {
+                rows = EastmoneyParsers.parseZtPool(root.path("data"), spec, params);
+                allRows.addAll(rows);
                 break;
-            }
-            case ZT_POOL:
-            case DATACENTER: {
-                String td = EastmoneyEndpoints.requireTradeDate(params);
-                int pageIdx = 0;
-                while (pageIdx < POOL_MAX_PAGES) {
-                    rateLimiter.acquire();
-                    String url = spec.buildUrl(params, pageIdx);
-                    String resp = fetchWithWorkerProxy(url, ua, ctx);
-                    lastRaw = resp;
-                    lastUrl = url;
-                    String cleaned = cleanJsonp(resp);
-                    JsonNode root = readTree(cleaned);
-                    List<Map<String, Object>> rows;
-                    if (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL) {
-                        rows = EastmoneyParsers.parseZtPool(root.path("data"), spec, params);
-                        // 涨停/跌停/强势/次新：一次取全量，无需翻页
-                        allRows.addAll(rows);
-                        break;
-                    } else {
-                        rows = EastmoneyParsers.parseDatacenter(root.path("data"), spec, params);
-                        if (rows.isEmpty()) {
-                            break;
-                        }
-                        allRows.addAll(rows);
-                        pageIdx++;
-                    }
+            } else {
+                rows = EastmoneyParsers.parseDatacenter(root.path("data"), spec, params);
+                if (rows.isEmpty()) {
+                    break;
                 }
-                break;
+                allRows.addAll(rows);
+                pageIdx++;
             }
-            case KLINE: {
-                rateLimiter.acquire();
-                String url = spec.buildUrl(params, 1);
-                String resp = fetchWithWorkerProxy(url, ua, ctx);
-                lastRaw = resp;
-                JsonNode root = readTree(resp);
-                allRows.addAll(EastmoneyParsers.parseKline(root.path("data"), spec, params));
-                break;
-            }
-            default:
-                throw new UnsupportedOperationException("parserType not handled: " + spec.getParserType());
         }
+        return buildResult(allRows, lastRaw, lastUrl);
+    }
 
+    /** KLINE 单独处理:个股/指数日周线 */
+    private CrawlResult fetchKline(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        rateLimiter.acquire();
+        String url = spec.buildUrl(params, 1);
+        String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+        resp = cleanJsonp(resp);
+        JsonNode root = readTree(resp);
+        List<Map<String, Object>> allRows = EastmoneyParsers.parseKline(root.path("data"), spec, params);
+        return buildResult(allRows, resp, url);
+    }
+
+    /** 构建 CrawlResult */
+    private CrawlResult buildResult(List<Map<String, Object>> allRows, String lastRaw, String lastUrl) {
         CrawlResult result = new CrawlResult();
         result.setSuccess(true);
         result.setData(allRows);

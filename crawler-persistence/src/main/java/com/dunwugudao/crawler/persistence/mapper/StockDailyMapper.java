@@ -37,15 +37,11 @@ public interface StockDailyMapper extends BaseMapper<StockDaily> {
             INSERT INTO stock_daily
               (trade_date, ts_code, stock_name, open, high, low, close, pre_close, pct_chg, vol, amount,
                turnover, total_mv, circ_mv, pe, is_limit_up, is_limit_down, data_source, src_detail,
-               create_date, update_date, chg_amount, amplitude, volume_ratio, avg_price, main_net,
-               pe_static, leader_code, industry_code, concept_code, market_code,
-               reserved_f24, reserved_f25, reserved_f107, reserved_f136, reserved_f173)
+               create_date, update_date, chg_amount, amplitude, volume_ratio, chg_60d, market_code)
             SELECT
               #{tradeDate}, #{tsCode}, #{stockName}, #{open}, #{high}, #{low}, #{close}, #{preClose}, #{pctChg}, #{vol}, #{amount},
                #{turnover}, #{totalMv}, #{circMv}, #{pe}, #{isLimitUp}, #{isLimitDown}, #{dataSource}, #{srcDetail},
-               #{createDate}, #{updateDate}, #{chgAmount}, #{amplitude}, #{volumeRatio}, #{avgPrice}, #{mainNet},
-               #{peStatic}, #{leaderCode}, #{industryCode}, #{conceptCode}, #{marketCode},
-               #{reservedF24}, #{reservedF25}, #{reservedF107}, #{reservedF136}, #{reservedF173}
+               #{createDate}, #{updateDate}, #{chgAmount}, #{amplitude}, #{volumeRatio}, #{chg60d}, #{marketCode}
             WHERE NOT EXISTS (
               SELECT 1 FROM stock_daily WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
             )
