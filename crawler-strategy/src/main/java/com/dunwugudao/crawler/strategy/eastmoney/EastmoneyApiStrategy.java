@@ -49,7 +49,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
      * <p>worker 接新任务时 {@link CrawlContext#proxyFetchCount} 重建归零，所以这是"每个任务"的额度，
      * 而非 worker 级总额度。每个 IP 失败后退避重试；用尽后不再换新 IP，直接失败交 worker 走 RETRY/DEAD。</p>
      */
-    public static final int MAX_PROXY_FETCH_ATTEMPTS_PER_TASK = 20;
+    public static final int MAX_PROXY_FETCH_ATTEMPTS_PER_TASK = 10;
 
     /** 换 IP 间的指数退避：base * 2^(used-1)，单位毫秒。第 1 次换 IP 等 2s，第 2 次 4s，第 3 次 8s…… */
     private static final long PROXY_BACKOFF_BASE_MS = 2000L;

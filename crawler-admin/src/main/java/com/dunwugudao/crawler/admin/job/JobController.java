@@ -40,6 +40,18 @@ public class JobController {
         return r;
     }
 
+    /** 单独下发 STOCK_DAILY 任务(测试用) */
+    @PostMapping("/seed-stock-daily")
+    public Map<String, Object> seedStockDaily(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedStockDailyPages(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
     @PostMapping("/backfill")
     public Map<String, Object> backfill(
             @RequestParam String start,

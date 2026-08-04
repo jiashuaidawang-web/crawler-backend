@@ -1,5 +1,7 @@
 package com.dunwugudao.crawler.strategy.eastmoney;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -13,23 +15,21 @@ import java.time.Duration;
 /**
  * 青果长效 IP（住宅隧道）代理提供者。
  *
- * <p>提取 API：{@code https://longterm.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=txt&seq=\r\n&distinct=false}</p>
+ * <p>提取 API：{@code https://share.proxy.qg.net/get?key=...&num=1&area=&isp=0&format=json&distinct=false}</p>
  * <ul>
  *   <li>长效 IP：每 30 分钟自动换一次 IP，不限流量</li>
- *   <li>返回纯文本：{@code ip:port}（每行一个）</li>
- *   <li>认证方式：用户名密码（隧道代理）</li>
+ *   <li>返回 JSON：{@code {"code":"SUCCESS","data":[{"server":"ip:port",...}]}}</li>
+ *   <li>认证方式：隧道代理(key 即用户名)</li>
  * </ul>
- *
- * <p>返回格式：{@code http://user:pass@ip:port}，可直接用于 EastmoneyClient / Playwright 代理。</p>
  */
 public class QgLongTermProxyProvider implements ProxyProvider {
 
     private static final Logger log = LoggerFactory.getLogger(QgLongTermProxyProvider.class);
 
     private final String apiKey;
-    private final String username;
     private final String password;
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(Duration.ofSeconds(10))
             .readTimeout(Duration.ofSeconds(15))
@@ -41,19 +41,18 @@ public class QgLongTermProxyProvider implements ProxyProvider {
      */
     public QgLongTermProxyProvider(String apiKey, String password) {
         this.apiKey = apiKey;
-        this.username = apiKey;  // 用户名 = key
         this.password = password;
     }
 
     private String apiUrl() {
-        return "https://longterm.proxy.qg.net/get?key=" + apiKey
-                + "&num=1&area=&isp=0&format=txt&seq=%0D%0A&distinct=false";
+        return "https://share.proxy.qg.net/get?key=" + apiKey
+                + "&num=1&area=&isp=0&format=json&distinct=false";
     }
 
     /**
-     * 从青果长效 IP 提取 1 个代理，返回 {@code http://user:pass@ip:port}。
+     * 从青果长效 IP 提取 1 个代理，返回 {@code http://key:pass@ip:port}。
      *
-     * @return 代理字符串；提取失败返回 null（WorkerProxyManager 会稍后重试）
+     * @return 代理字符串；提取失败返回 null
      */
     @Override
     public String acquire() {
@@ -71,14 +70,26 @@ public class QgLongTermProxyProvider implements ProxyProvider {
                 return null;
             }
             String text = body.string().trim();
-            if (text.isEmpty() || !text.contains(":")) {
-                log.warn("[QgLongTerm] unexpected response: {}", text);
+            JsonNode root = objectMapper.readTree(text);
+            // 成功判定: code == "SUCCESS"
+            if (!"SUCCESS".equals(root.path("code").asText())) {
+                log.warn("[QgLongTerm] API error: {}", text);
                 return null;
             }
-            // 取第一行 "ip:port" → "http://user:pass@ip:port"
-            String firstLine = text.split("\\r?\\n")[0].trim();
-            String proxy = "http://" + username + ":" + password + "@" + firstLine;
-            log.info("[QgLongTerm] acquired {}", firstLine);
+            JsonNode data = root.path("data");
+            if (!data.isArray() || data.size() == 0) {
+                log.warn("[QgLongTerm] data empty: {}", text);
+                return null;
+            }
+            // data[0].server = "ip:port"
+            String server = data.get(0).path("server").asText().trim();
+            if (server.isEmpty() || !server.contains(":")) {
+                log.warn("[QgLongTerm] unexpected server: {}", server);
+                return null;
+            }
+            // "ip:port" → "http://key:pass@ip:port"
+            String proxy = "http://" + apiKey + ":" + password + "@" + server;
+            log.info("[QgLongTerm] acquired {}", proxy);
             return proxy;
         } catch (IOException e) {
             log.warn("[QgLongTerm] acquire failed: {}", e.getMessage());
