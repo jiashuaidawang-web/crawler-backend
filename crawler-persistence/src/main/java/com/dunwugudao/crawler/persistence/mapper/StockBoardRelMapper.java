@@ -50,4 +50,12 @@ public interface StockBoardRelMapper extends BaseMapper<StockBoardRel> {
                #{effectiveDate}, #{dataSource}, #{srcDetail}, #{createDate}, #{updateDate})
             """)
     int insertIfAbsent(StockBoardRel row);
+
+    /** 已入库的板块数（去重）。 */
+    @Select("SELECT COUNT(DISTINCT board_code) FROM stock_board_rel")
+    long countDistinctBoards();
+
+    /** 某板块在库里的股票数。 */
+    @Select("SELECT COUNT(*) FROM stock_board_rel WHERE board_code = #{boardCode}")
+    long countByBoardCode(@Param("boardCode") String boardCode);
 }

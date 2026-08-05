@@ -141,6 +141,22 @@ public class JobController {
     }
 
     /**
+     * 增量同步板块-个股关联（stock_board_rel）。
+     * <p>两步校验：板块数（board_basic vs stock_board_rel）+ 股票数（API total vs 库）。
+     * 无变化返回 inserted=0；有新增板块只探测新增。worker 幂等，重复跑不重复数据。</p>
+     */
+    @PostMapping("/sync-board-relations")
+    public Map<String, Object> syncBoardRelations(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "1") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.syncBoardRelations(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
+    /**
      * 串联龙虎榜明细：从 dragon_tiger 表读某交易日上榜代码 → 下发 DRAGON_TIGER_DETAIL 子任务。
      * <p>需在 DRAGON_TIGER 爬完后调用。param: date=2024-01-02（缺失则今天）。</p>
      */

@@ -7,6 +7,7 @@ import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockBoardRelMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
@@ -54,6 +55,7 @@ public class SeedGenerator {
     private final DragonTigerMapper dragonTigerMapper;
     private final ProxyManager proxyManager;
     private final EastmoneyClient eastmoneyClient;
+    private final StockBoardRelMapper stockBoardRelMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
@@ -68,6 +70,7 @@ public class SeedGenerator {
                          DragonTigerMapper dragonTigerMapper,
                          ProxyManager proxyManager,
                          EastmoneyClient eastmoneyClient,
+                         StockBoardRelMapper stockBoardRelMapper,
                          org.springframework.core.env.Environment env) {
         this.mapper = mapper;
         this.universe = universe;
@@ -75,6 +78,7 @@ public class SeedGenerator {
         this.dragonTigerMapper = dragonTigerMapper;
         this.proxyManager = proxyManager;
         this.eastmoneyClient = eastmoneyClient;
+        this.stockBoardRelMapper = stockBoardRelMapper;
         // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
         // 探测失败兜底全市场股票数(默认 5545,保证 task 数)
@@ -294,9 +298,9 @@ public class SeedGenerator {
             }
         }
         int total = 0;
+        String proxy = proxyManager.acquireProxy();  // 取一次代理复用
         for (BoardBasic b : deduped) {
-            // 先请求一次（pz=1）拿 total，计算页数
-            int totalCount = fetchBoardStockTotal(b.getBoardCode(), date);
+            int totalCount = fetchBoardStockTotal(b.getBoardCode(), date, proxy);
             int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
             // 按页拆任务：每页一个 task（pn 从 1 开始）
             for (int pn = 1; pn <= totalPages; pn++) {
@@ -312,6 +316,141 @@ public class SeedGenerator {
         }
         log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
         return total;
+    }
+
+    /**
+     * 增量同步板块-个股关联（stock_board_rel）。
+     * <p>两步校验：</p>
+     * <ol>
+     *   <li>板块数校验：board_basic vs stock_board_rel，有新增板块只探测新增</li>
+     *   <li>股票数校验：逐板块探测 API total，与库里对比，不一致才下发 task 补齐</li>
+     * </ol>
+     * <p>worker 幂等（upsert），重复跑不会重复数据。</p>
+     *
+     * @return 新插入的 task 数
+     */
+    public int syncBoardRelations(int source, String date) {
+        log.info("[syncBoardRelations] 开始 date={}, source={}", date, source);
+
+        // ---------- 1. 板块数校验 ----------
+        long boardsInRel = stockBoardRelMapper.countDistinctBoards();
+        List<String> newBoards = boardBasicMapper.findBoardsNotInRel();
+        log.info("[syncBoardRelations] 板块数校验: stock_board_rel={}, 新增板块={}", boardsInRel, newBoards.size());
+
+        if (!newBoards.isEmpty()) {
+            log.info("[syncBoardRelations] 存在新增板块，开始探测。新增列表: {}", newBoards);
+            int inserted = seedSpecificBoards(newBoards, source, date);
+            log.info("[syncBoardRelations] 完成，新插入 task={}", inserted);
+            return inserted;
+        }
+
+        // ---------- 2. 股票数校验（逐板块） ----------
+        log.info("[syncBoardRelations] 板块数一致({})，开始逐板块校验股票数", boardsInRel);
+        List<BoardBasic> allBoards = boardBasicMapper.selectList(null);
+        log.info("[syncBoardRelations] board_basic 总板块数={}", allBoards.size());
+        String proxy = proxyManager.acquireProxy();
+        log.info("[syncBoardRelations] 获取代理: {}", proxy == null ? "null" : proxy.substring(proxy.indexOf('@') + 1));
+        int inserted = 0;
+        int changedCount = 0;
+        int idx = 0;
+        int proxyFailCount = 0;
+        for (BoardBasic b : allBoards) {
+            idx++;
+            String boardCode = b.getBoardCode();
+            int apiTotal = fetchBoardStockTotal(boardCode, date, proxy);
+            // 代理失败 → 刷新代理 + 重试（最多 20 次）
+            if (apiTotal < 0) {
+                proxyFailCount++;
+                int retry = 0;
+                final int MAX_PROXY_RETRY = 20;
+                while (apiTotal < 0 && retry < MAX_PROXY_RETRY) {
+                    retry++;
+                    log.warn("[syncBoardRelations] {}/{} boardCode={}, 代理失败({}, 第{}次)，刷新代理重试({}/{})",
+                            idx, allBoards.size(), boardCode, proxy.substring(proxy.indexOf('@') + 1), proxyFailCount, retry, MAX_PROXY_RETRY);
+                    proxy = proxyManager.acquireProxy();
+                    log.info("[syncBoardRelations] 新代理: {}", proxy == null ? "null" : proxy.substring(proxy.indexOf('@') + 1));
+                    if (proxy == null) {
+                        log.error("[syncBoardRelations] 刷新代理失败，中断同步");
+                        break;
+                    }
+                    apiTotal = fetchBoardStockTotal(boardCode, date, proxy);
+                }
+                if (apiTotal < 0) {
+                    log.warn("[syncBoardRelations] {}/{} boardCode={}, 重试 {} 次仍失败，跳过", idx, allBoards.size(), boardCode, retry);
+                    continue;
+                }
+            }
+            long dbTotal = stockBoardRelMapper.countByBoardCode(boardCode);
+            if (apiTotal == dbTotal) {
+                // 股票数一致，跳过
+                if (idx % 100 == 0) {
+                    log.info("[syncBoardRelations] 校验进度 {}/{}，已发现 {} 个板块需同步", idx, allBoards.size(), changedCount);
+                }
+                continue;
+            }
+            // 股票数变化，下发 task 补齐
+            changedCount++;
+            int pages = (apiTotal <= 0) ? 1 : ((apiTotal + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
+            log.info("[syncBoardRelations] {}/{} boardCode={}, 股票数变化(db={} → api={}), 拆 {} 个 task",
+                    idx, allBoards.size(), boardCode, dbTotal, apiTotal, pages);
+            int boardInserted = 0;
+            for (int pn = 1; pn <= pages; pn++) {
+                String params = TaskTypeCatalog.buildParams(
+                        "STOCK_BY_BOARD", date, null, null,
+                        boardCode, b.getBoardName(), b.getBoardType());
+                String paramsWithPn = appendPnToParams(params, pn);
+                CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + boardCode);
+                int rows = mapper.insertIfAbsent(task);
+                boardInserted += rows;
+                inserted += rows;
+            }
+            log.info("[syncBoardRelations] {}/{} boardCode={}, 本板块插入 task={}", idx, allBoards.size(), boardCode, boardInserted);
+        }
+        log.info("[syncBoardRelations] 完成，共校验 {} 个板块，{} 个需同步，代理失败 {} 次，新插入 task={}",
+                allBoards.size(), changedCount, proxyFailCount, inserted);
+        return inserted;
+    }
+
+    /** 仅对指定板块列表探测 total + 下发 task（取一次代理复用）。 */
+    private int seedSpecificBoards(List<String> boardCodes, int source, String date) {
+        log.info("[seedSpecificBoards] 开始，待处理板块数={}", boardCodes.size());
+        String proxy = proxyManager.acquireProxy();
+        log.info("[seedSpecificBoards] 获取代理: {}", proxy == null ? "null" : proxy.substring(proxy.indexOf('@') + 1));
+        int inserted = 0;
+        int idx = 0;
+        for (String boardCode : boardCodes) {
+            idx++;
+            // 查板块信息（boardName/boardType）
+            QueryWrapper<BoardBasic> qw = new QueryWrapper<>();
+            qw.eq("board_code", boardCode).last("LIMIT 1");
+            BoardBasic board = boardBasicMapper.selectOne(qw);
+            if (board == null) {
+                log.warn("[seedSpecificBoards] {}/{} boardCode={} 在 board_basic 不存在，跳过", idx, boardCodes.size(), boardCode);
+                continue;
+            }
+            log.info("[seedSpecificBoards] {}/{} boardCode={}, boardName={}, board_type={}",
+                    idx, boardCodes.size(), boardCode, board.getBoardName(), board.getBoardType());
+            int totalCount = fetchBoardStockTotal(boardCode, date, proxy);
+            int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
+            log.info("[seedSpecificBoards] {}/{} boardCode={}, apiTotal={}, pages={}",
+                    idx, boardCodes.size(), boardCode, totalCount, totalPages);
+            int boardInserted = 0;
+            for (int pn = 1; pn <= totalPages; pn++) {
+                String params = TaskTypeCatalog.buildParams(
+                        "STOCK_BY_BOARD", date, null, null,
+                        boardCode, board.getBoardName(), board.getBoardType());
+                String paramsWithPn = appendPnToParams(params, pn);
+                CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + boardCode);
+                int rows = mapper.insertIfAbsent(task);
+                boardInserted += rows;
+                inserted += rows;
+            }
+            log.info("[seedSpecificBoards] {}/{} boardCode={}, 本板块插入 task={}", idx, boardCodes.size(), boardCode, boardInserted);
+        }
+        log.info("[seedSpecificBoards] 完成，总插入 task={}", inserted);
+        return inserted;
     }
 
     /**
@@ -332,8 +471,9 @@ public class SeedGenerator {
             log.warn("[seedSingleBoard] boardCode={} 在 board_basic 表中不存在", boardCode);
             return 0;
         }
-        // 探测 total
-        int totalCount = fetchBoardStockTotal(board.getBoardCode(), date);
+        // 探测 total（取一次代理复用）
+        String proxy = proxyManager.acquireProxy();
+        int totalCount = fetchBoardStockTotal(board.getBoardCode(), date, proxy);
         int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
         int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
@@ -350,14 +490,17 @@ public class SeedGenerator {
         return inserted;
     }
 
-    /** 请求某板块下股票总数（pz=1，只拿 total）。 */
-    private int fetchBoardStockTotal(String boardCode, String date) {
+    /**
+     * 请求某板块下股票总数（pz=1，只拿 total）。proxy 由调用方传入复用。
+     *
+     * @return 股票总数；API 返回 0 也是 0；请求失败返回 -1
+     */
+    private int fetchBoardStockTotal(String boardCode, String date, String proxy) {
         String fs = "b:" + boardCode.toLowerCase() + "+f:!50";
         String url = "https://push2.eastmoney.com/weblogin/api/qt/clist/get"
                 + "?pn=1&pz=1&po=1&np=1&fltt=1&invt=2&fid=f3"
                 + "&fs=" + fs + "&fields=f12";
         try {
-            String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);
             String cleaned = cleanJsonp(resp);
             JsonNode root = objectMapper.readTree(cleaned);
@@ -366,7 +509,7 @@ public class SeedGenerator {
             return total;
         } catch (Exception e) {
             log.warn("[fetchBoardStockTotal] 失败(boardCode={}): {}", boardCode, e.getMessage());
-            return 0;
+            return -1;  // 失败返回 -1，与"API 返回 0 表示无数据"区分
         }
     }
 
