@@ -1,9 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.time.LocalDateTime;
 
@@ -12,10 +7,8 @@ import java.time.LocalDateTime;
  * node_id 为手动赋值的字符串主键。
  */
 @Data
-@TableName("crawl_node")
 public class CrawlNode {
 
-    @TableId(type = IdType.INPUT)
     private String nodeId;
 
     private String nodeName;

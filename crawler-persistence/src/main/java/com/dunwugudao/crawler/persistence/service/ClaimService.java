@@ -1,12 +1,12 @@
 package com.dunwugudao.crawler.persistence.service;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.dunwugudao.crawler.core.policy.ExponentialBackoffRetry;
 import com.dunwugudao.crawler.core.policy.RetryPolicy;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -14,8 +14,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 任务认领 / 完成 / 失败 核心服务（分布式内核）。
- * <p>claim 使用 SKIP LOCKED 原生 SQL；complete/fail 仅更新必要的列（避免覆盖其他字段）。</p>
+ * 任务认领 / 完成 / 失败 核心服务（分布式内核）—— openGauss 版。
+ *
+ * <p>claim 使用 {@code FOR UPDATE SKIP LOCKED} 原生 SQL（CK 不支持，故本服务绑定 openGauss 数据源）；
+ * complete/fail 的状态守卫 UPDATE 改为原生 SQL（去 MyBatis-Plus UpdateWrapper）。</p>
  */
 @Slf4j
 @Service
@@ -23,6 +25,7 @@ import java.util.List;
 public class ClaimService {
 
     private final CrawlTaskMapper crawlTaskMapper;
+    private final JdbcTemplate pgJdbcTemplate;
 
     /** 认领一批任务，返回被置为 CLAIMED 的实体。 */
     public List<CrawlTask> claim(int batch, String nodeId) {
@@ -36,16 +39,11 @@ public class ClaimService {
 
     /** 任务成功完成，并写入耗时（毫秒）。 */
     public void complete(Long taskId, int actualCount, Long durationMs) {
-        CrawlTask t = new CrawlTask();
-        t.setStatus("SUCCESS");
-        t.setActualCount(actualCount);
-        t.setFinishedAt(LocalDateTime.now());
-        if (durationMs != null) {
-            t.setDurationMs(durationMs);
-        }
         // 状态守卫：仅当任务仍为 CLAIMED 时才置 SUCCESS，避免与 retryScan 的 reclaim/promote 竞态
-        int updated = crawlTaskMapper.update(t,
-                new UpdateWrapper<CrawlTask>().eq("task_id", taskId).eq("status", "CLAIMED"));
+        int updated = pgJdbcTemplate.update(
+                "UPDATE crawl_task SET status='SUCCESS', actual_count=?, finished_at=now(), duration_ms=? " +
+                "WHERE task_id=? AND status='CLAIMED'",
+                actualCount, durationMs, taskId);
         if (updated == 0) {
             log.warn("task {} complete 跳过（已非 CLAIMED，可能被 retryScan 回收/耗尽）", taskId);
         }
@@ -59,30 +57,34 @@ public class ClaimService {
         int retryCount = (existing != null && existing.getRetryCount() != null) ? existing.getRetryCount() : 0;
         int maxRetry = (existing != null && existing.getMaxRetry() != null) ? existing.getMaxRetry() : 3;
 
-        CrawlTask t = new CrawlTask();
-        t.setErrorMsg(truncate(err));
-        t.setRetryCount(retryCount + 1);
+        String status;
+        LocalDateTime finishedAt;
+        LocalDateTime nextRetryAt = null;
 
         if (willRetry && retryCount < maxRetry) {
-            // 指数退避：延迟后再可被认领，避免立刻重试烧代理 IP（2s/4s/8s...）
             RetryPolicy policy = new ExponentialBackoffRetry(maxRetry, Duration.ofSeconds(2), Duration.ofMinutes(5));
-            LocalDateTime next = LocalDateTime.now().plus(policy.nextDelay(t.getRetryCount()));
-            t.setStatus("RETRY");
-            t.setNextRetryAt(next);
+            nextRetryAt = LocalDateTime.now().plus(policy.nextDelay(retryCount + 1));
+            status = "RETRY";
+            finishedAt = null;
         } else if (retryCount >= maxRetry) {
-            // 耗尽重试 → DEAD，不再被认领，需人工介入
-            t.setStatus("DEAD");
-            t.setFinishedAt(LocalDateTime.now());
+            status = "DEAD";
+            finishedAt = LocalDateTime.now();
         } else {
-            t.setStatus("FAILED");
-            t.setFinishedAt(LocalDateTime.now());
+            status = "FAILED";
+            finishedAt = LocalDateTime.now();
         }
+        String errMsg = truncate(err);
         // 状态守卫：仅当任务仍为 CLAIMED/RETRY 时才更新，避免与 retryScan 竞态
-        crawlTaskMapper.update(t,
-                new UpdateWrapper<CrawlTask>().eq("task_id", taskId).in("status", "CLAIMED", "RETRY"));
-        log.warn("task {} -> {} (retryCount={}/{}, nextRetryAt={})",
-                taskId, t.getStatus(), t.getRetryCount(), maxRetry, t.getNextRetryAt());
-        log.warn("task {} -> {} (retryCount={}/{})", taskId, t.getStatus(), t.getRetryCount(), maxRetry);
+        int updated = pgJdbcTemplate.update(
+                "UPDATE crawl_task SET status=?, error_msg=?, retry_count=retry_count+1, " +
+                "next_retry_at=?, finished_at=?, updated_at=now() WHERE task_id=? AND status IN ('CLAIMED','RETRY')",
+                status, errMsg, nextRetryAt, finishedAt, taskId);
+        if (updated == 0) {
+            log.warn("task {} fail 跳过（已非 CLAIMED/RETRY）", taskId);
+        } else {
+            log.warn("task {} -> {} (retryCount={}/{}, nextRetryAt={})",
+                    taskId, status, retryCount + 1, maxRetry, nextRetryAt);
+        }
     }
 
     private String truncate(String s) {

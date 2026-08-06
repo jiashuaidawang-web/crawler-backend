@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>非东财接口，需从新闻网站爬取。</p>
  */
 @Data
-@TableName("news_event")
 public class NewsEvent {
     private Long eventId;
     private LocalDateTime eventTime;

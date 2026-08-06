@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +8,6 @@ import java.time.LocalDate;
  * <p>非爬虫灌入，由规则启发式初填。</p>
  */
 @Data
-@TableName("concept")
 public class Concept {
     private String themeCode;
     private String themeName;

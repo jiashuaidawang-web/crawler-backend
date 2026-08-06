@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +8,6 @@ import java.time.LocalDate;
  * <p>非爬虫灌入，由运营维护或从交易所公告导入。</p>
  */
 @Data
-@TableName("trade_calendar")
 public class TradeCalendar {
     private LocalDate tradeDate;
     private Integer isTrading;  // 1=交易日 0=休市

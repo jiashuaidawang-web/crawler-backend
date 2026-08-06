@@ -8,7 +8,6 @@ import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -324,29 +323,29 @@ public class SeedGenerator {
      * @return 插入的 task 数
      */
     public int seedSingleBoard(String boardCode, int source, String date) {
-        // 从 board_basic 表查该板块信息
-        QueryWrapper<BoardBasic> qw = new QueryWrapper<>();
-        qw.eq("board_code", boardCode).last("LIMIT 1");
-        BoardBasic board = boardBasicMapper.selectOne(qw);
-        if (board == null) {
-            log.warn("[seedSingleBoard] boardCode={} 在 board_basic 表中不存在", boardCode);
+        // 从 board_basic 表查该板块信息（原生 SQL，去 MP QueryWrapper）
+        BoardBasic bb = boardBasicMapper.selectOneByBoardCode(boardCode);
+        if (bb == null) {
+            log.warn("seedSingleBoard: board_basic 无 {}, 跳过", boardCode);
             return 0;
         }
+        String boardName = bb.getBoardName();
+        int boardType = bb.getBoardType();
         // 探测 total
-        int totalCount = fetchBoardStockTotal(board.getBoardCode(), date);
+        int totalCount = fetchBoardStockTotal(boardCode, date);
         int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
         int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
             String params = TaskTypeCatalog.buildParams(
                     "STOCK_BY_BOARD", date, null, null,
-                    board.getBoardCode(), board.getBoardName(), board.getBoardType());
+                    bb.getBoardCode(), bb.getBoardName(), bb.getBoardType());
             String paramsWithPn = appendPnToParams(params, pn);
             CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
-            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + board.getBoardCode());
+            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + bb.getBoardCode());
             inserted += mapper.insertIfAbsent(task);
         }
         log.info("[seedSingleBoard] boardCode={} boardName={} total={} pages={} inserted={}",
-                board.getBoardCode(), board.getBoardName(), totalCount, totalPages, inserted);
+                bb.getBoardCode(), bb.getBoardName(), totalCount, totalPages, inserted);
         return inserted;
     }
 

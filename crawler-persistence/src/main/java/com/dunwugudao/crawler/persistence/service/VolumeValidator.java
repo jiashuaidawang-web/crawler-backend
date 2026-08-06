@@ -1,26 +1,32 @@
 package com.dunwugudao.crawler.persistence.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.dunwugudao.crawler.persistence.entity.CrawlAlert;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.mapper.CrawlAlertMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 数据量校验（能力7）：对比 expected_count 与实际 rowCount，偏差 > 阈值（默认 20%）插入告警。
+ * <p>去 MyBatis-Plus QueryWrapper，改原生 SQL（JdbcTemplate）。</p>
  */
 @Slf4j
 @Service
 public class VolumeValidator {
 
     private final CrawlAlertMapper crawlAlertMapper;
+    private final JdbcTemplate pgJdbcTemplate;
     private double threshold = 0.2;
 
-    public VolumeValidator(CrawlAlertMapper crawlAlertMapper) {
+    public VolumeValidator(CrawlAlertMapper crawlAlertMapper,
+                           JdbcTemplate pgJdbcTemplate) {
         this.crawlAlertMapper = crawlAlertMapper;
+        this.pgJdbcTemplate = pgJdbcTemplate;
     }
 
     public void setThreshold(double threshold) {
@@ -54,10 +60,11 @@ public class VolumeValidator {
         }
     }
 
-    /** 供 admin 查询最近告警用（按时间倒序）。 */
-    public java.util.List<CrawlAlert> recent(int resolved, int limit) {
-        QueryWrapper<CrawlAlert> qw = new QueryWrapper<>();
-        qw.eq("resolved", resolved).orderByDesc("created_at").last("LIMIT " + limit);
-        return crawlAlertMapper.selectList(qw);
+    /** 供 admin 查询最近告警用（按时间倒序，openGauss 版）。 */
+    public List<CrawlAlert> recent(int resolved, int limit) {
+        return pgJdbcTemplate.query(
+                "SELECT * FROM crawl_alert WHERE resolved=? ORDER BY created_at DESC LIMIT ?",
+                new BeanPropertyRowMapper<>(CrawlAlert.class),
+                resolved, limit);
     }
 }

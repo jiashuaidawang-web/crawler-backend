@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>源自 push2 clist 接口（fs=m:90+t:2 等）。</p>
  */
 @Data
-@TableName("board_daily")
 public class BoardDaily {
     private LocalDate tradeDate;
     private String boardCode;        // 板块代号

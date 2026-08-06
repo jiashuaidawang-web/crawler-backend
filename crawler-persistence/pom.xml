@@ -12,7 +12,7 @@
 
     <artifactId>crawler-persistence</artifactId>
     <name>crawler-persistence</name>
-    <description>持久层：MyBatis-Plus + openGaussDB/PostgreSQL</description>
+    <description>持久层：MyBatis 原生 XML + 双数据源（openGauss 操作型 + ClickHouse 分析型）</description>
 
     <dependencies>
         <dependency>
@@ -20,13 +20,32 @@
             <artifactId>crawler-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- 原生 MyBatis（CK 无 MP 方言，退回到 mybatis-spring-boot-starter 3.0.3） -->
         <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
         </dependency>
+        <!-- openGauss / PostgreSQL 驱动（操作型数据源，支持 SKIP LOCKED / 事务） -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
+        </dependency>
+        <!-- ClickHouse JDBC（分析型数据源，批量追加 + ReplacingMergeTree） -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+        </dependency>
+        <!-- Apache HTTP 客户端 5.x（clickhouse-jdbc 默认 transport） -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.3.1</version>
+        </dependency>
+        <!-- LZ4 压缩 -->
+        <dependency>
+            <groupId>org.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <version>1.8.0</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
