@@ -322,6 +322,21 @@ public class SeedGenerator {
      * @param date      交易日
      * @return 插入的 task 数
      */
+    public int syncBoardRelations(int source, String date) {
+        // 增量同步板块-个股关联（stock_board_rel）：从 board_basic 读板块，探测 total → 按页拆 STOCK_BY_BOARD 任务。
+        // worker 幂等，重复跑不重复数据。
+        return seedByBoard(source, date);
+    }
+
+    /**
+     * 只跑单个板块的 STOCK_BY_BOARD（端到端测试用）。
+     * <p>从 board_basic 表读指定 boardCode 的信息，探测 total → 按页拆任务。</p>
+     *
+     * @param boardCode 板块代号（如 BK0450）
+     * @param source    数据源
+     * @param date      交易日
+     * @return 插入的 task 数
+     */
     public int seedSingleBoard(String boardCode, int source, String date) {
         // 从 board_basic 表查该板块信息（原生 SQL，去 MP QueryWrapper）
         BoardBasic bb = boardBasicMapper.selectOneByBoardCode(boardCode);

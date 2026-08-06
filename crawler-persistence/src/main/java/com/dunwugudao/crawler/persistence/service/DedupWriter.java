@@ -30,6 +30,8 @@ import com.dunwugudao.crawler.persistence.mapper.StockWeeklyMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.dunwugudao.crawler.core.util.DateTimeUtil;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -136,7 +138,7 @@ public class DedupWriter {
 
     /** 写入板块日线（board_daily）—— CK 版：批量追加 + 副作用同步 board_basic。 */
     public void writeBoardDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<BoardDaily> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -166,7 +168,7 @@ public class DedupWriter {
     /** 写入板块-个股关联（stock_board_rel）—— CK 版：批量追加，UNIQUE 约束由 ReplacingMergeTree 替代。 */
     public void writeStockBoardRel(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<StockBoardRel> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String boardCode = str(r.get("board_code"));
@@ -304,7 +306,7 @@ public class DedupWriter {
     // 5 个池子独立 writer（插在这里，路由调用）
     public void writeLimitUpPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<LimitUpPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
@@ -321,7 +323,7 @@ public class DedupWriter {
 
     public void writeLimitDownPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<LimitDownPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
@@ -338,7 +340,7 @@ public class DedupWriter {
 
     public void writeZhabanPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<ZhabanPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
@@ -355,7 +357,7 @@ public class DedupWriter {
 
     public void writeStrongPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<StrongPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
@@ -372,7 +374,7 @@ public class DedupWriter {
 
     public void writeCixinPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         List<CixinPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
@@ -492,7 +494,7 @@ public class DedupWriter {
 
     /** 写入个股日线（stock_daily）—— CK 版：批量追加，主键 (ts_code, trade_date) 去重由 MergeTree 承接。 */
     public void writeStockDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<StockDaily> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -536,7 +538,7 @@ public class DedupWriter {
 
     /** 写入个股周线（stock_weekly）。 */
     public void writeStockWeekly(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<StockWeekly> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -577,7 +579,7 @@ public class DedupWriter {
 
     /** 写入指数日线（index_daily）。 */
     public void writeIndexDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<IndexDaily> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -611,7 +613,7 @@ public class DedupWriter {
 
     /** 写入主力资金流（main_fund_flow）。 */
     public void writeMainFundFlow(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<MainFundFlow> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -646,7 +648,7 @@ public class DedupWriter {
 
     /** 写入龙虎榜（dragon_tiger）。 */
     public void writeDragonTiger(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<DragonTiger> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
@@ -697,7 +699,7 @@ public class DedupWriter {
 
     /** 写入龙虎榜席位明细（dt_detail）。 */
     public void writeDtDetail(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<DtDetail> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {

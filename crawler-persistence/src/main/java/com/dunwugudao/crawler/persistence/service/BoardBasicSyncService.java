@@ -1,5 +1,6 @@
 package com.dunwugudao.crawler.persistence.service;
 
+import com.dunwugudao.crawler.core.util.DateTimeUtil;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,13 @@ public class BoardBasicSyncService {
         e.setStatus(1);
         e.setDataSource(dataSource);
         e.setCreateDate(LocalDate.now());
+        // 以下三列在原始 MySQL 中均为 nullable（迁 CK 后 String/DateTime 默认非空），东财来源天然没有这些值：
+        // - code：同花顺板块指数代码（东财只有 BK 号）→ 空字符串
+        // - features：备用字段，始终无内容 → 空字符串
+        // - update_date：MySQL 注释"初始 NULL"，CK 非空 → 填创建时间（创建即首次更新）
+        e.setCode("");
+        e.setFeatures("");
+        e.setUpdateDate(DateTimeUtil.nowSeconds());
         try {
             boardBasicMapper.insert(e);
         } catch (Exception ex) {

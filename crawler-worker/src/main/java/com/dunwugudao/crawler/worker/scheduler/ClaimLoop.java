@@ -89,12 +89,14 @@ public class ClaimLoop {
         try {
             CrawlResult result = strategy.fetch(ctx);
             LOG.info("[ fetch ok, rows={}", result.getRowCount());   // TODO M6
-            // 实际请求的 URL（策略生成）优先于种子里的 url
-            log.setUrl(result.getUrl() != null ? result.getUrl() : entity.getUrl());
+            // 实际请求的 URL（策略生成）优先于种子里的 url；CK 的 src_detail 是非空列，null 兜底为空串
+            String url = result.getUrl() != null ? result.getUrl() : entity.getUrl();
+            log.setUrl(url);
 
             if (result.getData() != null && !result.getData().isEmpty()) {
                 LOG.info("[ writing {} rows", result.getData().size());   // TODO M6
-                dedupWriter.write(core.getTaskType(), result.getData(), core.getSource(), entity.getUrl());
+                dedupWriter.write(core.getTaskType(), result.getData(), core.getSource(),
+                        url != null ? url : "");
                 LOG.info("[ write ok");   // TODO M6
             }
             volumeValidator.validate(entity, result.getRowCount());
