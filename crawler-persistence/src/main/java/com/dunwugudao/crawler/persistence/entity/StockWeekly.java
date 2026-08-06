@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>源自 push2his kline 接口（klt=102）。可由 daily 聚合，也可独立爬。</p>
  */
 @Data
-@TableName("stock_weekly")
 public class StockWeekly {
     private LocalDate tradeDate;     // 周末日期
     private String tsCode;

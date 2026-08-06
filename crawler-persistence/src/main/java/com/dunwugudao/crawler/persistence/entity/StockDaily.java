@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -10,9 +7,10 @@ import java.time.LocalDateTime;
 /**
  * A2 个股日线（S1/S2/S6 底层；昨日涨停今表现、八大特征、技术面）。
  * <p>源自 push2his kline 接口。实测 clist 32 f 码映射到各列。</p>
+ * <p>ClickHouse 版：去掉 @TableName/@TableId（CK 无自增主键），纯 POJO。
+ * 写入走 {@link com.dunwugudao.crawler.persistence.service.ClickHouseBatchInserter} 批量追加。</p>
  */
 @Data
-@TableName("stock_daily")
 public class StockDaily {
     private LocalDate tradeDate;
     private String tsCode;           // 股票代码(如 600000.SH)

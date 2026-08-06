@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper">
+
+    <!-- ClickHouse MergeTree 批量追加 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO dragon_tiger
+        (
+        trade_date,
+        ts_code,
+        stock_name,
+        reason,
+        explanation,
+        abnormal_type,
+        net_buy,
+        total_buy,
+        total_sell,
+        data_source,
+        src_detail,
+        create_date,
+        update_date,
+        billboard_deal_amt,
+        accum_amount,
+        buy_ratio,
+        sell_ratio,
+        buy_seat,
+        sell_seat,
+        buy_seat_new,
+        sell_seat_new,
+        change_rate,
+        close_price,
+        turnoverrate,
+        free_market_cap,
+        market,
+        deal_amount_ratio,
+        deal_net_ratio,
+        security_inner_code,
+        security_type_code,
+        trade_id,
+        trade_market,
+        trade_market_code
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.tradeDate},
+             #{r.tsCode},
+             #{r.stockName},
+             #{r.reason},
+             #{r.explanation},
+             #{r.abnormalType},
+             #{r.netBuy},
+             #{r.totalBuy},
+             #{r.totalSell},
+             #{r.dataSource},
+             #{r.srcDetail},
+             #{r.createDate},
+             #{r.updateDate},
+             #{r.billboardDealAmt},
+             #{r.accumAmount},
+             #{r.buyRatio},
+             #{r.sellRatio},
+             #{r.buySeat},
+             #{r.sellSeat},
+             #{r.buySeatNew},
+             #{r.sellSeatNew},
+             #{r.changeRate},
+             #{r.closePrice},
+             #{r.turnoverrate},
+             #{r.freeMarketCap},
+             #{r.market},
+             #{r.dealAmountRatio},
+             #{r.dealNetRatio},
+             #{r.securityInnerCode},
+             #{r.securityTypeCode},
+             #{r.tradeId},
+             #{r.tradeMarket},
+             #{r.tradeMarketCode}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

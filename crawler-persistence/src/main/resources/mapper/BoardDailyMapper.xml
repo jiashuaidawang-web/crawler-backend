@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.BoardDailyMapper">
+
+    <!-- ClickHouse MergeTree 批量追加 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO board_daily
+        (
+        trade_date,
+        board_code,
+        board_name,
+        board_type,
+        pct_chg,
+        amount,
+        up_count,
+        down_count,
+        limit_up_count,
+        leading_code,
+        leading_name,
+        main_net,
+        board_code2,
+        data_source,
+        src_detail,
+        price,
+        rise_fall,
+        volume,
+        amplitude,
+        high_price,
+        low_price,
+        today_open_price,
+        yesterday_received_price,
+        volume_ratio,
+        turnover_ratio,
+        total_market_value,
+        circulation_market_value,
+        create_date,
+        update_date
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.tradeDate},
+             #{r.boardCode},
+             #{r.boardName},
+             #{r.boardType},
+             #{r.pctChg},
+             #{r.amount},
+             #{r.upCount},
+             #{r.downCount},
+             #{r.limitUpCount},
+             #{r.leadingCode},
+             #{r.leadingName},
+             #{r.mainNet},
+             #{r.boardCode2},
+             #{r.dataSource},
+             #{r.srcDetail},
+             #{r.price},
+             #{r.riseFall},
+             #{r.volume},
+             #{r.amplitude},
+             #{r.highPrice},
+             #{r.lowPrice},
+             #{r.todayOpenPrice},
+             #{r.yesterdayReceivedPrice},
+             #{r.volumeRatio},
+             #{r.turnoverRatio},
+             #{r.totalMarketValue},
+             #{r.circulationMarketValue},
+             #{r.createDate},
+             #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

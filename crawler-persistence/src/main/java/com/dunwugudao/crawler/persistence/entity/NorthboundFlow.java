@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +8,6 @@ import java.time.LocalDate;
  * <p>端点未实现，留待 M6 接入。</p>
  */
 @Data
-@TableName("northbound_flow")
 public class NorthboundFlow {
     private LocalDate tradeDate;
     private BigDecimal hkHoldNet;    // 北向净买入(元)

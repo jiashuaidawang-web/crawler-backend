@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.NewsEventMapper">
+
+    <!-- ClickHouse MergeTree 批量追加 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO news_event
+        (
+        event_time,
+        title,
+        content,
+        source,
+        category,
+        related_board,
+        related_ts_code,
+        sentiment_score,
+        is_policy,
+        create_date,
+        update_date
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.eventTime},
+             #{r.title},
+             #{r.content},
+             #{r.source},
+             #{r.category},
+             #{r.relatedBoard},
+             #{r.relatedTsCode},
+             #{r.sentimentScore},
+             #{r.isPolicy},
+             #{r.createDate},
+             #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

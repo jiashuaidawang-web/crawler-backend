@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,7 +10,6 @@ import java.time.LocalDateTime;
  * <p>无 id 列：走自定义 insertOrUpdate / selectDataSource，不走 BaseMapper 的按 id 方法。</p>
  */
 @Data
-@TableName("stock_board_rel")
 public class StockBoardRel {
     private String tsCode;
     private String boardCode;

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.NorthboundFlowMapper">
+
+    <!-- ClickHouse MergeTree 批量追加 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO northbound_flow
+        (
+        hk_hold_net,
+        sh_net,
+        sz_net,
+        source,
+        create_date,
+        update_date
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.hkHoldNet},
+             #{r.shNet},
+             #{r.szNet},
+             #{r.source},
+             #{r.createDate},
+             #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

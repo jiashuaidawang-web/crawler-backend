@@ -10,6 +10,61 @@
 
 ---
 
+## 代理配置（实测 2026-08-04）
+
+> **核心经验：OkHttp 必须用 `interceptor` 主动添加 `Proxy-Authorization` 头，不能用 `authenticator` 被动等 407！**
+
+### 青果短效代理（当前使用）
+
+| 参数 | 值 |
+|---|---|
+| 提取 API | `https://share.proxy.qg.net/get?key=8XMUHNWJ&num=1&area=&isp=0&format=json&distinct=true` |
+| 单价 | 0.0027 元/IP |
+| 复活周期 | 1 分钟 |
+| 成功率 | ~50%（实测 10 次 5 次成功，一把就成） |
+| 返回格式 | `{"code":"SUCCESS","data":[{"server":"ip:port"}]}` |
+
+**application.yml（admin + worker 统一）：**
+```yaml
+proxy:
+  qg:
+    api-key: D7A19F5D
+    password: EC00F1DB9AAC
+```
+
+### 关键教训：OkHttp 代理认证
+
+**❌ 错误方式（成功率 0%）：**
+```java
+builder.authenticator(new Authenticator() {
+    public Request authenticate(Route route, Response response) {
+        // 收到 407 后才触发 → 某些代理不触发回调 → 永远 407
+    }
+});
+```
+
+**✅ 正确方式（成功率 ~50%）：**
+```java
+final String credential = Credentials.basic(username, password);
+builder.addInterceptor(chain -> {
+    Request request = chain.request().newBuilder()
+        .header("Proxy-Authorization", credential)  // 第一请求就带认证
+        .build();
+    return chain.proceed(request);
+});
+```
+
+**诊断方法：** 5 个不同 IP/端口/省份的代理全部毫秒级返回 407 → 请求到达了代理但没带认证头。
+
+### 其他代理（备用）
+
+| 代理 | 单价 | 成功率 | 说明 |
+|---|---|---|---|
+| 巨量(juliangip) | 0.003 元/IP | 40% | `auth_type=2` 用户名密码模式 |
+| 快代理(kuaidaili) | 0.015 元/IP | 20% | 账号密码鉴权 |
+
+---
+
 ## M2 新增 / 改写类清单
 
 ### strategy 层（东财）

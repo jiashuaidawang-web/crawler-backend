@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>报表名待确认（RPT_BILLBOARD_DETAIL 不存在，需拦截真实页面请求）。</p>
  */
 @Data
-@TableName("dt_detail")
 public class DtDetail {
     private LocalDate tradeDate;
     private String tsCode;

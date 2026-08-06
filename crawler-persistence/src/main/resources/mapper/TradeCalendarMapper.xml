@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.TradeCalendarMapper">
+
+    <!-- ClickHouse MergeTree 批量追加 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO trade_calendar
+        (
+        is_trading,
+        data_source,
+        src_detail,
+        create_date
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.isTrading},
+             #{r.dataSource},
+             #{r.srcDetail},
+             #{r.createDate}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

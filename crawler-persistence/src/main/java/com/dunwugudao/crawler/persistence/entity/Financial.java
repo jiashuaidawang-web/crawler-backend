@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +8,6 @@ import java.time.LocalDate;
  * <p>非东财接口，需从财报网站爬取。</p>
  */
 @Data
-@TableName("financial")
 public class Financial {
     private String tsCode;
     private LocalDate endDate;       // 报告期

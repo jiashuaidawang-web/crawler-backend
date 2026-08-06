@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>源自 push2his kline 接口（secid=1.000001 等）。</p>
  */
 @Data
-@TableName("index_daily")
 public class IndexDaily {
     private LocalDate tradeDate;
     private String indexCode;        // 指数代码(如 000001.SH)

@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,7 +8,6 @@ import java.time.LocalDate;
  * <p>用户手工录入或导入交割单，做心法量化复盘。source=99。</p>
  */
 @Data
-@TableName("trade_log")
 public class TradeLog {
     private Long id;
     private LocalDate tradeDate;

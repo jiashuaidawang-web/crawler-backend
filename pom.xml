@@ -31,17 +31,20 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <mybatis-spring-boot.version>3.0.3</mybatis-spring-boot.version>
         <okhttp.version>4.12.0</okhttp.version>
         <playwright.version>1.40.0</playwright.version>
         <postgresql.version>42.7.3</postgresql.version>
+        <clickhouse-jdbc.version>0.6.5</clickhouse-jdbc.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- 原生 MyBatis Spring Boot（替代 mybatis-plus-spring-boot3-starter，CK 无 MP 方言） -->
             <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-                <version>${mybatis-plus.version}</version>
+                <groupId>org.mybatis.spring.boot</groupId>
+                <artifactId>mybatis-spring-boot-starter</artifactId>
+                <version>${mybatis-spring-boot.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.baomidou</groupId>
@@ -62,6 +65,23 @@
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.clickhouse</groupId>
+                <artifactId>clickhouse-jdbc</artifactId>
+                <version>${clickhouse-jdbc.version}</version>
+            </dependency>
+            <!-- clickhouse-jdbc 0.6.x 默认用 Apache HTTP 客户端；显式声明避免 ClassNotFoundException -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>5.3.1</version>
+            </dependency>
+            <!-- LZ4 压缩（clickhouse 数据压缩用） -->
+            <dependency>
+                <groupId>org.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>1.8.0</version>
             </dependency>
             <dependency>
                 <groupId>com.xuxueli</groupId>
