@@ -194,7 +194,12 @@ public class DedupWriter {
             entity.setUpdateDate(now);
             batch.add(entity);
         }
-        stockBoardRelMapper.batchInsert(batch);
+        try {
+            stockBoardRelMapper.batchInsert(batch);
+        } catch (Exception e) {
+            log.error("[writeStockBoardRel] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
+            throw e;
+        }
     }
 
 //    private LimitPool toEntity(Map<String, Object> r, SourceType source, String srcDetail) {
@@ -497,6 +502,8 @@ public class DedupWriter {
         LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<StockDaily> batch = new ArrayList<>(rows.size());
+        int nullOpenCount = 0;
+        int nullCloseCount = 0;
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
@@ -531,9 +538,24 @@ public class DedupWriter {
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
+            // DEBUG: 统计 open/close null
+            if (e.getOpen() == null) nullOpenCount++;
+            if (e.getClose() == null) nullCloseCount++;
+            // DEBUG: 每 100 行打一条样本
+            if (batch.size() % 100 == 0) {
+                log.debug("[writeStockDaily] sample #{}: tsCode={}, open={}, high={}, low={}, close={}, preClose={}",
+                        batch.size(), tsCode, e.getOpen(), e.getHigh(), e.getLow(), e.getClose(), e.getPreClose());
+            }
             batch.add(e);
         }
-        stockDailyMapper.batchInsert(batch);
+        // DEBUG: 写入汇总
+        log.debug("[writeStockDaily] write batch: total={}, nullOpen={}, nullClose={}, source={}", batch.size(), nullOpenCount, nullCloseCount, source);
+        try {
+            stockDailyMapper.batchInsert(batch);
+        } catch (Exception e) {
+            log.error("[writeStockDaily] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
+            throw e;
+        }
     }
 
     /** 写入个股周线（stock_weekly）。 */

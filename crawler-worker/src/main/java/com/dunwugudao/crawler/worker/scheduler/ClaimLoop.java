@@ -109,7 +109,9 @@ public class ClaimLoop {
             log.setRaw(truncate(result.getRaw()));   // 落库原始响应，便于排查 parser
             log.setBytes(result.getRaw() == null ? 0L : (long) result.getRaw().length());
         } catch (Exception e) {
-            LOG.error("[ process failed: {}", e.getMessage(), e);   // TODO M6
+            LOG.error("[process failed] taskType={}, taskUniqueId={}, retry={}/{}, error={}",
+                    entity.getTaskType(), entity.getUniqueKey(), entity.getRetryCount(), entity.getMaxRetry(),
+                    e.getMessage(), e);
             int attempt = entity.getRetryCount() == null ? 0 : entity.getRetryCount();
             RetryPolicy policy = ctx.getRetryPolicy();
             boolean willRetry = policy.shouldRetry(attempt + 1, e);

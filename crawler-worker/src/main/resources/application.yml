@@ -31,6 +31,12 @@ anti-crawl:
   ua-pool:
     - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   proxy-list: []
+
+# 日志级别（排查数据问题时把 eastmoney / DedupWriter 改成 DEBUG）
+logging:
+  level:
+    com.dunwugudao.crawler.strategy.eastmoney: INFO
+    com.dunwugudao.crawler.persistence.service.DedupWriter: INFO
   # stealth-mode: SELF（默认，现状 JS 注入）| CLOAK（CloakBrowser CDP，C++ 源码级补丁）
   # stealth-mode: SELF
   # ---- CloakBrowser(CLOAK 模式)参数 ----

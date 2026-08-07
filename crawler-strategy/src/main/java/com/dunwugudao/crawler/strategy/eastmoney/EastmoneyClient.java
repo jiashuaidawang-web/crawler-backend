@@ -8,6 +8,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okhttp3.Route;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -25,6 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 故强制使用 HTTP/1.1。</b></p>
  */
 public class EastmoneyClient {
+
+    private static final Logger log = LoggerFactory.getLogger(EastmoneyClient.class);
 
     private static final OkHttpClient BASE_CLIENT = new OkHttpClient.Builder()
             .protocols(List.of(Protocol.HTTP_1_1))
@@ -54,15 +58,22 @@ public class EastmoneyClient {
                 .get()
                 .build();
 
+        // DEBUG: 打印代理 IP 和 URL（排查代理/请求问题）
+        log.debug("[EastmoneyClient.get] proxy={}, url={}", proxy, url);
+
         try (Response response = client.newCall(request).execute()) {
             int code = response.code();
             ResponseBody body = response.body();
             String resp = body != null ? body.string() : "";
+            // DEBUG: 打印 HTTP 状态码 + 响应体前 500 字符（排查数据截断/异常）
+            log.debug("[EastmoneyClient.get] httpCode={}, respLen={}, respPreview={}", code, resp.length(),
+                    resp.length() > 500 ? resp.substring(0, 500) + "..." : resp);
             if (!response.isSuccessful()) {
                 throw new RuntimeException("Eastmoney HTTP " + code + " for " + url);
             }
             return resp;
         } catch (java.io.IOException e) {
+            log.error("[EastmoneyClient.get] IO error, proxy={}, url={}: {}", proxy, url, e.getMessage(), e);
             throw new RuntimeException("Eastmoney request failed: " + e.getMessage(), e);
         }
     }
@@ -118,9 +129,11 @@ public class EastmoneyClient {
                 .readTimeout(Duration.ofSeconds(30));
 
         // 设置代理认证(主动添加 Proxy-Authorization 头,不等 407 触发)
+        // 必须用 addNetworkInterceptor: HTTPS 代理 CONNECT 隧道阶段不走应用拦截器,
+        // 只有网络拦截器才能给 CONNECT 请求加上 Proxy-Authorization 头,否则会 407 认证失败
         if (username != null && password != null) {
             final String credential = Credentials.basic(username, password);
-            builder.addInterceptor(chain -> {
+            builder.addNetworkInterceptor(chain -> {
                 Request request = chain.request().newBuilder()
                         .header("Proxy-Authorization", credential)
                         .build();

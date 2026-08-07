@@ -367,7 +367,8 @@ public class SeedGenerator {
     /** 请求某板块下股票总数（pz=1，只拿 total）。 */
     private int fetchBoardStockTotal(String boardCode, String date) {
         String fs = "b:" + boardCode.toLowerCase() + "+f:!50";
-        String url = "https://push2.eastmoney.com/weblogin/api/qt/clist/get"
+        // HTTP（非 HTTPS）：避免 OkHttp 代理 CONNECT 隧道阶段 Proxy-Authorization 加不上导致 407
+        String url = "http://push2.eastmoney.com/weblogin/api/qt/clist/get"
                 + "?pn=1&pz=1&po=1&np=1&fltt=1&invt=2&fid=f3"
                 + "&fs=" + fs + "&fields=f12";
         try {
@@ -379,7 +380,7 @@ public class SeedGenerator {
             log.info("[fetchBoardStockTotal] boardCode={}, total={}, proxy={}", boardCode, total, proxy);
             return total;
         } catch (Exception e) {
-            log.warn("[fetchBoardStockTotal] 失败(boardCode={}): {}", boardCode, e.getMessage());
+            log.error("[fetchBoardStockTotal] 失败(boardCode={}, date={}): {}", boardCode, date, e.getMessage(), e);
             return 0;
         }
     }
@@ -408,7 +409,7 @@ public class SeedGenerator {
             log.info("[fetchPoolTotal] limitType={}, tc={}, proxy={}", limitType, tc, proxy);
             return tc;
         } catch (Exception e) {
-            log.warn("[fetchPoolTotal] 失败(limitType={}): {}", limitType, e.getMessage());
+            log.error("[fetchPoolTotal] 失败(limitType={}, date={}): {}", limitType, date, e.getMessage(), e);
             return -1;
         }
     }
@@ -644,7 +645,7 @@ public class SeedGenerator {
             log.info("[fetchPoolTotalByProxy] limitType={}, tc={}", limitType, tc);
             return tc;
         } catch (Exception e) {
-            log.warn("[fetchPoolTotalByProxy] 失败(limitType={}): {}", limitType, e.getMessage());
+            log.error("[fetchPoolTotalByProxy] 失败(limitType={}, date={}): {}", limitType, date, e.getMessage(), e);
             return -1;
         }
     }

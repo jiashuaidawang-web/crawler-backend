@@ -1,9 +1,7 @@
 -- ============================================================================
--- 股票复盘系统 · ClickHouse 完整建库 DDL
--- 生成时间：2026-08-05
+-- 股票复盘系统 · ClickHouse 完整建库 DDL（修正版 v2，2026-08-07）
 -- 用途：ClickHouse 数据库 crawler 全部分析表一键重建（幂等）
--- 运行：clickhouse-client --host 127.0.0.1 --port=8123 -d crawler < clickhouse-schema.sql
---       或：cat clickhouse-schema.sql | clickhouse-client --host 127.0.0.1
+-- 运行：clickhouse-client --host <ck> --port=8123 -d crawler < clickhouse-schema.sql
 --
 -- 约定：
 --   金额单位=元；幅度/涨跌=百分比数值；成交量=手
@@ -15,10 +13,38 @@
 --   只追加行情/池子/资金流/龙虎榜 → MergeTree
 --   需要覆盖的维表 → ReplacingMergeTree(_ver=data_source)，同键保留高 data_source 行
 --   ORDER BY = 查询最高频过滤字段；PARTITION BY = toYYYYMM(trade_date)
+--
 -- ============================================================================
-
--- 时间类型：Date32（交易日）/ DateTime（带时间字段）
--- 金额 Decimal：金额 Decimal64(2)，百分比 Decimal64(4)，通用 Decimal64(4)
+-- 【2026-08-07 修正说明 —— 解决迁移"空校验"报错】
+--   原 DDL 在 openGauss → ClickHouse 迁移时大量报 "Cannot insert NULL into
+--   non-nullable column" / 语法错误。根因两类：
+--
+--   ① 语法错误（直接让建表脚本中断）：
+--        board_daily 中 `yesterday_received_priceNullable(Decimal64(4))` 与
+--        `circulation_market_valueNullable(Decimal64(2))` 列名与类型之间漏了空格，
+--       被 CK 解析成非法标识符 → SYNTAX_ERROR。本版已修正为带空格的 Nullable(...)。
+--
+--   ② 过度 NOT NULL（迁移 INSERT 时空值触发校验失败）：
+--        很多列在源库 openGauss 里是 NULLABLE，但 DDL 写成 NOT NULL；
+--        且 CK 比源库多出了 create_date / update_date 等审计列（源库部分表根本没有
+--        这些列，如 stock_daily / stock_weekly / index_daily / dragon_tiger /
+--        dt_detail / northbound_flow / news_event / financial 及其计算层表），
+--        迁移写入时只能填 NULL → 报错。
+--        另有 main_fund_flow 的 ts_code / board_code / index_code 按维度区分，
+--        非本维度的行这些列为 NULL（如 obj_type='stock' 时 board_code/index_code
+--        为 NULL），原 NOT NULL 直接失败。
+--
+--   修复原则（迁移友好、零空校验失败）：
+--        ★ 仅「自然键 / ORDER BY 键」保持 NOT NULL（trade_date / ts_code /
+--          board_code / index_code / obj_type / seat_name / event_id /
+--          theme_code / end_date / board_type / data_source）；
+--        ★ 其余所有列（含审计列 create_date / update_date、维度可空列、
+--          计算层业务列、status/flag 类小字段）一律 Nullable(...)；
+--        ★ data_source 保留 `NOT NULL DEFAULT 0` 作为默认溯源；
+--        ★ 原无默认值的 flag 列（is_policy / confirmed / worth_trade / is_trading）
+--          补 DEFAULT 0，避免 INSERT 漏列报错。
+--   说明：放宽 NULL 不影响查询语义；下游 replay 计算层对 NULL 做了空安全处理。
+-- ============================================================================
 
 -- 需要先建库（按需取消下面注释）
 -- CREATE DATABASE IF NOT EXISTS crawler;
@@ -71,7 +97,7 @@ CREATE TABLE IF NOT EXISTS stock_daily (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date)
@@ -101,7 +127,7 @@ CREATE TABLE IF NOT EXISTS stock_weekly (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date)
@@ -124,7 +150,7 @@ CREATE TABLE IF NOT EXISTS index_daily (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (index_code, trade_date)
@@ -152,15 +178,15 @@ CREATE TABLE IF NOT EXISTS board_daily (
     high_price              Nullable(Decimal64(4)),
     low_price               Nullable(Decimal64(4)),
     today_open_price        Nullable(Decimal64(4)),
-    yesterday_received_priceNullable(Decimal64(4)),
+    yesterday_received_price Nullable(Decimal64(4)),
     volume_ratio            Nullable(Decimal64(4)),
     turnover_ratio          Nullable(Decimal64(4)),
     total_market_value      Nullable(Decimal64(2)),
-    circulation_market_valueNullable(Decimal64(2)),
-    data_source                 UInt8 NOT NULL DEFAULT 0,
+    circulation_market_value Nullable(Decimal64(2)),
+    data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date                 DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (board_code, trade_date)
@@ -176,13 +202,13 @@ CREATE TABLE IF NOT EXISTS board_basic (
     features                Nullable(String),
     status                  Nullable(UInt8),
     data_source             UInt8 NOT NULL DEFAULT 0,
-    create_date             Date,
+    create_date             Nullable(Date),
     update_date             Nullable(DateTime),
     _ver                    UInt8 MATERIALIZED data_source
 ) ENGINE = ReplacingMergeTree(_ver)
 PARTITION BY toYYYYMM(create_date)
 ORDER BY (board_type, board_code, data_source)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- ========== 二、池表（涨跌停/炸板/强势/次新） ==========
 
@@ -211,7 +237,7 @@ CREATE TABLE IF NOT EXISTS limit_up_pool (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, data_source)
@@ -238,7 +264,7 @@ CREATE TABLE IF NOT EXISTS limit_down_pool (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, data_source)
@@ -266,7 +292,7 @@ CREATE TABLE IF NOT EXISTS zhaban_pool (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, data_source)
@@ -294,7 +320,7 @@ CREATE TABLE IF NOT EXISTS strong_pool (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, data_source)
@@ -311,7 +337,7 @@ CREATE TABLE IF NOT EXISTS cixin_pool (
     ods                     Nullable(Int32),
     od                      Nullable(String),
     ipod                    Nullable(String),
-    o                       UInt8,
+    o                       Nullable(UInt8),
     nh                      Nullable(UInt8),
     amount                  Nullable(Decimal64(2)),
     ltsz                    Nullable(Decimal64(2)),
@@ -323,7 +349,7 @@ CREATE TABLE IF NOT EXISTS cixin_pool (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, data_source)
@@ -365,7 +391,7 @@ CREATE TABLE IF NOT EXISTS dragon_tiger (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date)
@@ -384,19 +410,21 @@ CREATE TABLE IF NOT EXISTS dt_detail (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date, seat_name)
 SETTINGS index_granularity = 8192;
 
 -- 13. 主力资金流
+-- 注意：obj_type 决定哪几列有效，非本维度的列在源库为 NULL，
+-- 故 ts_code / board_code / index_code 改为 Nullable（仍是 ORDER BY 成员，CK 允许 Nullable 排序键）。
 CREATE TABLE IF NOT EXISTS main_fund_flow (
     trade_date              Date NOT NULL,
     obj_type                String NOT NULL,
-    ts_code                 String NOT NULL,
-    board_code              String NOT NULL,
-    index_code              String NOT NULL,
+    ts_code                 Nullable(String),
+    board_code              Nullable(String),
+    index_code              Nullable(String),
     main_net                Nullable(Decimal64(2)),
     super_big               Nullable(Decimal64(2)),
     big_net                 Nullable(Decimal64(2)),
@@ -405,11 +433,11 @@ CREATE TABLE IF NOT EXISTS main_fund_flow (
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             DateTime
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (obj_type, ts_code, board_code, index_code, trade_date)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- 14. 板块-个股关联（需要覆盖 → ReplacingMergeTree）
 CREATE TABLE IF NOT EXISTS stock_board_rel (
@@ -421,7 +449,7 @@ CREATE TABLE IF NOT EXISTS stock_board_rel (
     is_leader               Nullable(UInt8),
     is_midarm               Nullable(UInt8),
     weight                  Nullable(Decimal64(4)),
-    effective_date          Date NOT NULL,
+    effective_date          Nullable(Date),
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
@@ -430,18 +458,18 @@ CREATE TABLE IF NOT EXISTS stock_board_rel (
 ) ENGINE = ReplacingMergeTree(_ver)
 PARTITION BY toYYYYMM(effective_date)
 ORDER BY (board_code, ts_code, board_type, data_source)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- 15. 北向资金
 CREATE TABLE IF NOT EXISTS northbound_flow (
     trade_date              Date NOT NULL,
-    hk_hold_net             Decimal64(2),
-    sh_net                  Decimal64(2),
-    sz_net                  Decimal64(2),
+    hk_hold_net             Nullable(Decimal64(2)),
+    sh_net                  Nullable(Decimal64(2)),
+    sz_net                  Nullable(Decimal64(2)),
     data_source             UInt8 NOT NULL DEFAULT 0,
-    src_detail              String,
-    create_date             Date,
-    update_date             DateTime
+    src_detail              Nullable(String),
+    create_date             Nullable(Date),
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
@@ -451,14 +479,14 @@ SETTINGS index_granularity = 8192;
 -- 16. 概念主题（维表，需要覆盖）
 CREATE TABLE IF NOT EXISTS concept (
     theme_code              String NOT NULL,
-    theme_name              String,
-    theme_type              String,
-    scarcity                Decimal64(4),
-    imagination             Decimal64(4),
-    data_source             UInt8 DEFAULT 0,
-    src_detail              String,
-    create_date             Date,
-    update_date             DateTime,
+    theme_name              Nullable(String),
+    theme_type              Nullable(String),
+    scarcity                Nullable(Decimal64(4)),
+    imagination             Nullable(Decimal64(4)),
+    data_source             UInt8 NOT NULL DEFAULT 0,
+    src_detail              Nullable(String),
+    create_date             Nullable(Date),
+    update_date             Nullable(DateTime),
     _ver                    UInt8 MATERIALIZED data_source
 ) ENGINE = ReplacingMergeTree(_ver)
 ORDER BY theme_code
@@ -468,16 +496,16 @@ SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS financial (
     ts_code                 String NOT NULL,
     end_date                Date NOT NULL,
-    report_type             String,
-    ann_date                Date,
-    revenue                 Decimal64(2),
-    net_profit              Decimal64(2),
-    net_profit_yoy          Decimal64(4),
-    roe                     Decimal64(4),
-    data_source             UInt8 DEFAULT 0,
-    src_detail              String,
-    create_date             Date,
-    update_date             DateTime
+    report_type             Nullable(String),
+    ann_date                Nullable(Date),
+    revenue                 Nullable(Decimal64(2)),
+    net_profit              Nullable(Decimal64(2)),
+    net_profit_yoy          Nullable(Decimal64(4)),
+    roe                     Nullable(Decimal64(4)),
+    data_source             UInt8 NOT NULL DEFAULT 0,
+    src_detail              Nullable(String),
+    create_date             Nullable(Date),
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(end_date)
 ORDER BY (ts_code, end_date)
@@ -486,33 +514,33 @@ SETTINGS index_granularity = 8192;
 -- 18. 新闻事件
 CREATE TABLE IF NOT EXISTS news_event (
     event_id                Int64 NOT NULL,
-    event_time              DateTime,
-    title                   String,
-    content                 String,
-    source                  String,
-    category                String,
-    related_board           String,
-    related_ts_code         String,
-    sentiment_score         Decimal64(4),
-    is_policy               UInt8,
+    event_time              Nullable(DateTime),
+    title                   Nullable(String),
+    content                 Nullable(String),
+    source                  Nullable(String),
+    category                Nullable(String),
+    related_board           Nullable(String),
+    related_ts_code         Nullable(String),
+    sentiment_score         Nullable(Decimal64(4)),
+    is_policy               UInt8 DEFAULT 0,
     data_source             UInt8 NOT NULL DEFAULT 0,
-    src_detail              String,
-    create_date             Date,
-    update_date             DateTime
+    src_detail              Nullable(String),
+    create_date             Nullable(Date),
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDate(event_time))
 ORDER BY (event_time, event_id)
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- 19. 情绪温度（S2，每日一条）
 CREATE TABLE IF NOT EXISTS sentiment_daily (
     trade_date              Date NOT NULL,
-    limit_up_cnt            Int32,
-    limit_down_cnt          Int32,
-    max_board_pos           Int32,
-    yest_limit_ret          Decimal64(4),
-    thermal                 Decimal64(4),
-    regime                  String
+    limit_up_cnt            Nullable(Int32),
+    limit_down_cnt          Nullable(Int32),
+    max_board_pos           Nullable(Int32),
+    yest_limit_ret          Nullable(Decimal64(4)),
+    thermal                 Nullable(Decimal64(4)),
+    regime                  Nullable(String)
 ) ENGINE = MergeTree()
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
@@ -521,12 +549,12 @@ SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS theme_factor_daily (
     trade_date              Date NOT NULL,
     board_code              String NOT NULL,
-    scarcity                Decimal64(4),
-    imagination             Decimal64(4),
-    sudden                  Decimal64(4),
-    certainty               Decimal64(4),
-    min_resist              Decimal64(4),
-    total                   Decimal64(4)
+    scarcity                Nullable(Decimal64(4)),
+    imagination             Nullable(Decimal64(4)),
+    sudden                  Nullable(Decimal64(4)),
+    certainty               Nullable(Decimal64(4)),
+    min_resist              Nullable(Decimal64(4)),
+    total                   Nullable(Decimal64(4))
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (board_code, trade_date)
@@ -536,8 +564,8 @@ SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS trend_candidate_daily (
     trade_date              Date NOT NULL,
     ts_code                 String NOT NULL,
-    feature_hit             UInt8,
-    rs_vs_index             Decimal64(4),
+    feature_hit             Nullable(UInt8),
+    rs_vs_index             Nullable(Decimal64(4)),
     confirmed               UInt8 DEFAULT 0
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
@@ -547,13 +575,13 @@ SETTINGS index_granularity = 8192;
 -- 22. 四维度评分（S1）
 CREATE TABLE IF NOT EXISTS four_dimension_daily (
     trade_date              Date NOT NULL,
-    tech                    Decimal64(4),
-    sentiment               Decimal64(4),
-    fund                    Decimal64(4),
-    policy                  Decimal64(4),
-    composite               Decimal64(4),
+    tech                    Nullable(Decimal64(4)),
+    sentiment               Nullable(Decimal64(4)),
+    fund                    Nullable(Decimal64(4)),
+    policy                  Nullable(Decimal64(4)),
+    composite               Nullable(Decimal64(4)),
     worth_trade             UInt8 DEFAULT 0,
-    note                    String
+    note                    Nullable(String)
 ) ENGINE = MergeTree()
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
@@ -561,13 +589,38 @@ SETTINGS index_granularity = 8192;
 -- 23. 交易日历
 CREATE TABLE IF NOT EXISTS trade_calendar (
     trade_date              Date NOT NULL,
-    is_trading              UInt8,
+    is_trading              Nullable(UInt8),
     data_source             UInt8 NOT NULL DEFAULT 0,
-    src_detail              String,
-    create_date             Date,
-    update_date             DateTime
+    src_detail              Nullable(String),
+    create_date             Nullable(Date),
+    update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 ORDER BY trade_date
+SETTINGS index_granularity = 8192;
+
+-- 24. 主线识别（S4 计算层产出，trade_date+board_code 为自然键）
+CREATE TABLE IF NOT EXISTS mainline_daily (
+    trade_date              Date NOT NULL,
+    board_code              String NOT NULL,
+    main_level              Nullable(String),
+    strength                Nullable(Decimal(8, 4)),
+    rank                    Nullable(Int32)
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(trade_date)
+ORDER BY (trade_date, board_code)
+SETTINGS index_granularity = 8192;
+
+-- 25. 龙头池（S4 计算层产出，trade_date+ts_code 为自然键）
+CREATE TABLE IF NOT EXISTS leader_pool_daily (
+    trade_date              Date NOT NULL,
+    ts_code                 String NOT NULL,
+    board_code              Nullable(String),
+    board_pos               Nullable(Int16),
+    role                    Nullable(String),
+    score                   Nullable(Decimal(8, 4))
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(trade_date)
+ORDER BY (trade_date, ts_code)
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -580,4 +633,7 @@ SETTINGS index_granularity = 8192;
 --    SELECT * FROM stock_daily FINAL WHERE ts_code=? AND trade_date=? LIMIT 1;
 --    SELECT argMax(*, data_source) FROM stock_daily WHERE ts_code=? GROUP BY ts_code, trade_date;
 -- 4. 数据迁移：pg_dump --data-only --table=stock_daily | clickhouse-client --query="INSERT INTO stock_daily FORMAT CSV"
+-- 5. 【修正 v2】若在线库已有旧表（含过度 NOT NULL），请配套执行 clickhouse-schema-fix.sql
+--    用 ALTER MODIFY COLUMN 把非键列改为 Nullable（仅放宽约束，不丢数据），
+--    专项修复 main_fund_flow 三维度列与全部 update_date/create_date 的"空校验"报错。
 -- ============================================================================

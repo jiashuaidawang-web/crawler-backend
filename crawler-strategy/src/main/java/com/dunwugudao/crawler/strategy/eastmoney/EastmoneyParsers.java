@@ -2,6 +2,8 @@ package com.dunwugudao.crawler.strategy.eastmoney;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,6 +17,8 @@ import java.util.Map;
  */
 public final class EastmoneyParsers {
 
+    private static final Logger log = LoggerFactory.getLogger(EastmoneyParsers.class);
+
     private EastmoneyParsers() {
     }
 
@@ -26,6 +30,8 @@ public final class EastmoneyParsers {
         if (!diff.isArray()) {
             return rows;
         }
+        int nullOpenCount = 0;
+        int nullCloseCount = 0;
         for (JsonNode n : diff) {
             Map<String, Object> row = new HashMap<>();
             switch (spec.getTaskType()) {
@@ -127,6 +133,16 @@ public final class EastmoneyParsers {
                     Double pct = num(n, "f3");
                     row.put("is_limit_up", (pct != null && pct >= 9.8) ? 1 : 0);
                     row.put("is_limit_down", (pct != null && pct <= -9.8) ? 1 : 0);
+                    // DEBUG: 统计 open/close 为 null 的比例
+                    if (row.get("open") == null) nullOpenCount++;
+                    if (row.get("close") == null) nullCloseCount++;
+                    // DEBUG: 每 100 行打一条样本（含原始 f 码）
+                    if (rows.size() % 100 == 0) {
+                        log.debug("[STOCK_DAILY] sample row #{}: f12={}, f14={}, f2={}, f15={}, f16={}, f17={}, f18={}, raw_f17='{}', raw_f15='{}'",
+                                rows.size(), txt(n, "f12"), txt(n, "f14"), txt(n, "f2"),
+                                txt(n, "f15"), txt(n, "f16"), txt(n, "f17"), txt(n, "f18"),
+                                n.get("f17"), n.get("f15"));
+                    }
                     break;
                 default:
                     // 通用兜底：用 EastmoneyFieldMap 投影
@@ -141,6 +157,10 @@ public final class EastmoneyParsers {
             }
             row.put("trade_date", tradeDate);
             rows.add(row);
+        }
+        // DEBUG: STOCK_DAILY 解析汇总
+        if ("STOCK_DAILY".equals(spec.getTaskType())) {
+            log.debug("[STOCK_DAILY] parse done: totalRows={}, nullOpen={}, nullClose={}", rows.size(), nullOpenCount, nullCloseCount);
         }
         return rows;
     }

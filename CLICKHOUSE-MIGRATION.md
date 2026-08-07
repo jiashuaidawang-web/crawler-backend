@@ -4,15 +4,16 @@
 
 ClickHouse **不适合** OLTP 工作负载（行级 UPDATE、行锁、RETURNING、事务）。
 经代码审计，`crawl_task / crawl_log / crawl_alert / crawl_node / trade_log` 是纯操作型表，
-**保留 openGauss**；其余 20 张分析型表迁 ClickHouse。
+**保留 openGauss**；其余 25 张分析型表迁 ClickHouse（共 30 张 = 25 分析 + 5 操作）。
 
 ```
 openGauss（主数据源 @Primary）    → crawl_task / crawl_log / crawl_alert / crawl_node / trade_log
-ClickHouse（分析型数据源）        → stock_daily/weekly, index/board_daily, 池子×5,
+ClickHouse（分析型数据源，25张）  → stock_daily/weekly, index/board_daily, 池子×5,
                                    dragon_tiger, dt_detail, main_fund_flow, northbound_flow,
                                    stock_board_rel, board_basic, concept, financial,
                                    sentiment_daily, theme_factor_daily, trend_candidate_daily,
-                                   four_dimension_daily, news_event
+                                   four_dimension_daily, news_event, trade_calendar,
+                                   mainline_daily, leader_pool_daily（后两者为复盘计算层产出表）
 ```
 
 ## 2. 去重范式变更（最大改造点）
