@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,7 +10,6 @@ import java.time.LocalDateTime;
  * 实测 30 字段，SECUCODE 已带市场后缀。</p>
  */
 @Data
-@TableName("dragon_tiger")
 public class DragonTiger {
     private LocalDate tradeDate;
     private String tsCode;           // 优先 SECUCODE(带后缀)，否则 SECURITY_CODE

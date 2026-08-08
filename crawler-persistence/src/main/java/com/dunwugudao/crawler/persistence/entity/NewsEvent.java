@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,7 +9,6 @@ import java.time.LocalDateTime;
  * <p>非东财接口，需从新闻网站爬取。</p>
  */
 @Data
-@TableName("news_event")
 public class NewsEvent {
     private Long eventId;
     private LocalDateTime eventTime;
@@ -24,6 +20,8 @@ public class NewsEvent {
     private String relatedTsCode;    // 关联个股代码(逗号分隔)
     private BigDecimal sentimentScore; // 情感分 -1~1
     private Integer isPolicy;        // 是否政策
+    private Integer dataSource;      // data_source: 0=东财 1=同花顺
+    private String srcDetail;        // src_detail: 来源URL/接口/备注
     private LocalDate createDate;
     private LocalDateTime updateDate;
 

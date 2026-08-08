@@ -1,7 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -11,7 +8,6 @@ import java.time.LocalDateTime;
  * <p>用途：标识增量（新增哪些板块），分析当下概念下的股票。</p>
  */
 @Data
-@TableName("board_basic")
 public class BoardBasic {
     private Long id;
     private Integer boardType;       // 1：地域 2：行业 3：概念

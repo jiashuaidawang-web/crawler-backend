@@ -1,6 +1,5 @@
 package com.dunwugudao.crawler.persistence.mapper;
 
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -15,7 +14,11 @@ import java.util.Map;
  * crawl_task Mapper。核心认领用 {@link #claim} 的原生 SQL。
  */
 @Mapper
-public interface CrawlTaskMapper extends BaseMapper<CrawlTask> {
+public interface CrawlTaskMapper {
+
+    /** 按主键查询（替代已移除的 BaseMapper.selectById）。 */
+    @Select("SELECT * FROM crawl_task WHERE task_id = #{taskId}")
+    CrawlTask selectById(@Param("taskId") Long taskId);
 
     /**
      * 分布式认领：在 PENDING/RETRY 且未到 next_retry_at 的任务中按优先级/创建时间取前 batch 条，

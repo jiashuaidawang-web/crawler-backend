@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.FinancialMapper">
+
+    <!-- ClickHouse MergeTree 批量追加（对齐 DDL：补 ts_code 主键、source→data_source、补 src_detail） -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO financial
+        (
+        ts_code,
+        end_date,
+        report_type,
+        ann_date,
+        revenue,
+        net_profit,
+        net_profit_yoy,
+        roe,
+        data_source,
+        src_detail,
+        create_date,
+        update_date
+        )
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.tsCode},
+             #{r.endDate},
+             #{r.reportType},
+             #{r.annDate},
+             #{r.revenue},
+             #{r.netProfit},
+             #{r.netProfitYoy},
+             #{r.roe},
+             #{r.dataSource},
+             #{r.srcDetail},
+             #{r.createDate},
+             #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

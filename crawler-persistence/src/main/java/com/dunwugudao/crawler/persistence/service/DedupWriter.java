@@ -14,6 +14,11 @@ import com.dunwugudao.crawler.persistence.entity.MainFundFlow;
 import com.dunwugudao.crawler.persistence.entity.StockBoardRel;
 import com.dunwugudao.crawler.persistence.entity.StockDaily;
 import com.dunwugudao.crawler.persistence.entity.StockWeekly;
+import com.dunwugudao.crawler.persistence.entity.Concept;
+import com.dunwugudao.crawler.persistence.entity.Financial;
+import com.dunwugudao.crawler.persistence.entity.NorthboundFlow;
+import com.dunwugudao.crawler.persistence.entity.NewsEvent;
+import com.dunwugudao.crawler.persistence.entity.TradeCalendar;
 import com.dunwugudao.crawler.persistence.mapper.BoardDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.persistence.mapper.DtDetailMapper;
@@ -27,24 +32,38 @@ import com.dunwugudao.crawler.persistence.mapper.MainFundFlowMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBoardRelMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockWeeklyMapper;
+import com.dunwugudao.crawler.persistence.mapper.ConceptMapper;
+import com.dunwugudao.crawler.persistence.mapper.FinancialMapper;
+import com.dunwugudao.crawler.persistence.mapper.NorthboundFlowMapper;
+import com.dunwugudao.crawler.persistence.mapper.NewsEventMapper;
+import com.dunwugudao.crawler.persistence.mapper.TradeCalendarMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
+import com.dunwugudao.crawler.core.util.DateTimeUtil;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 去重 / 溯源写入层（能力4/8/9）。
- * <p>规则：同一自然键(如 ts_code+trade_date)可能两源都给，
- * 以 data_source 优先级裁决覆写——新来源代码 > 已存在代码才覆写，相等或更低则不覆盖（避免抖动）。</p>
- * <p>优先级集中配置在 {@link #precedence}：东财优先 daily/board，同花顺优先 board_rel。该表用于
- * 调用方选择“权威来源”，逐行覆写裁决仍按 source 代码比较。</p>
+ * 去重 / 溯源写入层（能力4/8/9）—— ClickHouse 版。
+ *
+ * <p><b>核心策略变更</b>：原 openGauss 版逐行 {@code select→compare→update/insert} 依赖行锁+事务，
+ * ClickHouse 不支持。改为：</p>
+ * <ul>
+ *   <li><b>写入全部变成批量追加</b>（{@code batchInsert}，单次 ≥ 1000 行）</li>
+ *   <li><b>去重交给表引擎</b>：主键表用 MergeTree 纯追加；需要覆盖的维表用
+ *       {@code ReplacingMergeTree(data_source)}，同键保留高 data_source 行（对应"高优先级覆盖"）</li>
+ *   <li><b>查询时取权威行</b>：加 {@code FINAL} 或 {@code argMax} 触发合并</li>
+ * </ul>
+ *
+ * <p>代价：同一自然键多源数据短期共存（合并异步），T+1 复盘场景完全可接受。</p>
  */
 @Slf4j
 @Service
@@ -64,6 +83,12 @@ public class DedupWriter {
     private final DragonTigerMapper dragonTigerMapper;
     private final DtDetailMapper dtDetailMapper;
     private final BoardBasicSyncService boardBasicSyncService;
+    // 5 张 P0 表 Mapper（T73 已对齐 DDL，本处接入写入路由）
+    private final ConceptMapper conceptMapper;
+    private final FinancialMapper financialMapper;
+    private final NorthboundFlowMapper northboundFlowMapper;
+    private final NewsEventMapper newsEventMapper;
+    private final TradeCalendarMapper tradeCalendarMapper;
 
     public DedupWriter(LimitUpPoolMapper limitUpPoolMapper,
                        LimitDownPoolMapper limitDownPoolMapper,
@@ -78,7 +103,12 @@ public class DedupWriter {
                        MainFundFlowMapper mainFundFlowMapper,
                        DragonTigerMapper dragonTigerMapper,
                        DtDetailMapper dtDetailMapper,
-                       BoardBasicSyncService boardBasicSyncService
+                       BoardBasicSyncService boardBasicSyncService,
+                       ConceptMapper conceptMapper,
+                       FinancialMapper financialMapper,
+                       NorthboundFlowMapper northboundFlowMapper,
+                       NewsEventMapper newsEventMapper,
+                       TradeCalendarMapper tradeCalendarMapper
     ) {
         this.limitUpPoolMapper = limitUpPoolMapper;
         this.limitDownPoolMapper = limitDownPoolMapper;
@@ -94,19 +124,13 @@ public class DedupWriter {
         this.dragonTigerMapper = dragonTigerMapper;
         this.dtDetailMapper = dtDetailMapper;
         this.boardBasicSyncService = boardBasicSyncService;
+        this.conceptMapper = conceptMapper;
+        this.financialMapper = financialMapper;
+        this.northboundFlowMapper = northboundFlowMapper;
+        this.newsEventMapper = newsEventMapper;
+        this.tradeCalendarMapper = tradeCalendarMapper;
     }
 
-//        this.stockBoardRelMapper = stockBoardRelMapper;
-//        this.boardDailyMapper = boardDailyMapper;
-//        this.stockDailyMapper = stockDailyMapper;
-//        this.stockWeeklyMapper = stockWeeklyMapper;
-//        this.indexDailyMapper = indexDailyMapper;
-//        this.mainFundFlowMapper = mainFundFlowMapper;
-//        this.dragonTigerMapper = dragonTigerMapper;
-//        this.dtDetailMapper = dtDetailMapper;
-
-
-    /** 写入 limit_pool（示例原始表）。openGauss 兼容：select → update/insert。 */
 //    @Transactional(rollbackFor = Exception.class)
 //    public void writeLimitPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
 //        int newCode = source.getCode();
@@ -138,12 +162,11 @@ public class DedupWriter {
 //        return precedence.getOrDefault(tableName, SourceType.EASTMONEY);
 //    }
 
-    /** 写入板块日线（board_daily）。openGauss 兼容：select → update/insert。 */
-    @Transactional(rollbackFor = Exception.class)
+    /** 写入板块日线（board_daily）—— CK 版：批量追加 + 副作用同步 board_basic。 */
     public void writeBoardDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<BoardDaily> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String boardCode = str(r.get("board_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
@@ -151,46 +174,34 @@ public class DedupWriter {
                 log.warn("skip board_daily row missing board_code/trade_date: {}", r);
                 continue;
             }
-            Integer existing = boardDailyMapper.selectDataSource(boardCode, tradeDate);
-            if (existing != null && existing >= newCode) {
-                continue;
-            }
             BoardDaily entity = toBoardDailyEntity(r, source, srcDetail);
             entity.setCreateDate(today);
             entity.setUpdateDate(now);
-            if (existing != null) {
-                boardDailyMapper.updateRow(entity);
-            } else {
-                boardDailyMapper.insertIfAbsent(entity);
-            }
+            batch.add(entity);
             // board_daily 落库后，顺手同步 board_basic 维表（幂等，失败不影响主流程）
             try {
                 boardBasicSyncService.syncBoard(
                         boardCode, str(r.get("board_name")),
-                        intVal(r.get("board_type")), newCode);
+                        intVal(r.get("board_type")), source.getCode());
             } catch (Exception e) {
                 log.warn("syncBoard 副作用失败(boardCode={}, tradeDate={}): {}",
                         boardCode, tradeDate, e.getMessage());
             }
         }
+        boardDailyMapper.batchInsert(batch);
     }
 
-    /** 写入板块-个股关联（stock_board_rel）。逐行幂等 upsert，主键四列由数据库兜底防重。 */
+    /** 写入板块-个股关联（stock_board_rel）—— CK 版：批量追加，UNIQUE 约束由 ReplacingMergeTree 替代。 */
     public void writeStockBoardRel(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
         LocalDate today = LocalDate.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<StockBoardRel> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String boardCode = str(r.get("board_code"));
             String tsCode = str(r.get("ts_code"));
             Integer boardType = intVal(r.get("board_type"));
             if (boardCode == null || tsCode == null || boardType == null) {
                 log.warn("skip stock_board_rel row missing board_code/ts_code/board_type: {}", r);
-                continue;
-            }
-            // 优先级裁决：已存在且优先级 >= 新来源 → 不覆盖
-            Integer existing = stockBoardRelMapper.selectDataSource(boardCode, tsCode, boardType);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             StockBoardRel entity = new StockBoardRel();
@@ -203,16 +214,17 @@ public class DedupWriter {
             entity.setIsMidarm(intVal(r.get("is_midarm")));
             entity.setWeight(bigDec(r.get("weight")));
             entity.setEffectiveDate(today);
-            entity.setDataSource(newCode);
+            entity.setDataSource(source.getCode());
             entity.setSrcDetail(srcDetail);
             entity.setCreateDate(today);
             entity.setUpdateDate(now);
-            // openGauss 兼容：拆成 updateRow / insertIfAbsent（不用 ON CONFLICT）
-            if (existing != null) {
-                stockBoardRelMapper.updateRow(entity);
-            } else {
-                stockBoardRelMapper.insertIfAbsent(entity);
-            }
+            batch.add(entity);
+        }
+        try {
+            stockBoardRelMapper.batchInsert(batch);
+        } catch (Exception e) {
+            log.error("[writeStockBoardRel] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
+            throw e;
         }
     }
 
@@ -323,96 +335,90 @@ public class DedupWriter {
     }
 
     // 5 个池子独立 writer（插在这里，路由调用）
-    @Transactional(rollbackFor = Exception.class)
     public void writeLimitUpPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<LimitUpPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = limitUpPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             LimitUpPool e = new LimitUpPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setFund(bigDec(r.get("fund")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
-            if (existing != null) limitUpPoolMapper.updateRow(e); else limitUpPoolMapper.insertIfAbsent(e);
+            batch.add(e);
         }
+        limitUpPoolMapper.batchInsert(batch);
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public void writeLimitDownPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<LimitDownPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = limitDownPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             LimitDownPool e = new LimitDownPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setPe(bigDec(r.get("pe"))); e.setFba(bigDec(r.get("fba")));
             e.setDays(intVal(r.get("days"))); e.setOc(intVal(r.get("oc")));
-            if (existing != null) limitDownPoolMapper.updateRow(e); else limitDownPoolMapper.insertIfAbsent(e);
+            batch.add(e);
         }
+        limitDownPoolMapper.batchInsert(batch);
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public void writeZhabanPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<ZhabanPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = zhabanPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             ZhabanPool e = new ZhabanPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setZf(bigDec(r.get("zf"))); e.setZs(bigDec(r.get("zs")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
-            if (existing != null) zhabanPoolMapper.updateRow(e); else zhabanPoolMapper.insertIfAbsent(e);
+            batch.add(e);
         }
+        zhabanPoolMapper.batchInsert(batch);
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public void writeStrongPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<StrongPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            Integer existing = strongPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             StrongPool e = new StrongPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setZs(bigDec(r.get("zs"))); e.setNh(intVal(r.get("nh"))); e.setLb(bigDec(r.get("lb")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
-            if (existing != null) strongPoolMapper.updateRow(e); else strongPoolMapper.insertIfAbsent(e);
+            batch.add(e);
         }
+        strongPoolMapper.batchInsert(batch);
     }
 
-    @Transactional(rollbackFor = Exception.class)
     public void writeCixinPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
         LocalDate today = LocalDate.now();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        List<CixinPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) continue;
-            // 主键 (ts_code, trade_date, data_source)：仅当同一来源已存在时才更新，否则插入（不同来源共存）
-            Integer existing = cixinPoolMapper.selectDataSource(tsCode, tradeDate, newCode);
             CixinPool e = new CixinPool();
             setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setOds(intVal(r.get("ods"))); e.setOd(str(r.get("od"))); e.setIpod(str(r.get("ipod")));
             e.setO(intVal(r.get("o"))); e.setNh(intVal(r.get("nh")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
-            if (existing != null) cixinPoolMapper.updateRow(e); else cixinPoolMapper.insertIfAbsent(e);
+            batch.add(e);
         }
+        cixinPoolMapper.batchInsert(batch);
     }
 
     /** 设置 5 个池子实体的公共字段。 */
@@ -476,6 +482,12 @@ public class DedupWriter {
             // 板块基础维表（board_basic）—— 独立抓取，幂等写入
             case "REGION_BOARD", "INDUSTRY_BOARD", "CONCEPT_BOARD" ->
                     writeBoardBasic(rows, source, srcDetail);
+            // 5 张 P0 表（T73 已对齐 DDL）：CONCEPT/FINANCIAL/NORTHBOUND_FLOW/NEWS_EVENT/TRADE_CALENDAR
+            case "CONCEPT" -> writeConcept(rows, source, srcDetail);
+            case "FINANCIAL" -> writeFinancial(rows, source, srcDetail);
+            case "NORTHBOUND_FLOW" -> writeNorthboundFlow(rows, source, srcDetail);
+            case "NEWS_EVENT" -> writeNewsEvent(rows, source, srcDetail);
+            case "TRADE_CALENDAR" -> writeTradeCalendar(rows, source, srcDetail);
             default ->
                     log.warn("DedupWriter.write: 未路由的 taskType={}, 跳过 {} 行（避免静默写错表）", taskType, rows.size());
         }
@@ -514,23 +526,161 @@ public class DedupWriter {
     }
 
     // ----------------------------------------------------------------------
+    // 5 张 P0 表写入（T73 已对齐 DDL）：CONCEPT / FINANCIAL / NORTHBOUND_FLOW / NEWS_EVENT / TRADE_CALENDAR
+    // ----------------------------------------------------------------------
+
+    /** 写入概念主题维表（concept）—— ReplacingMergeTree(data_source) 覆盖，scarcity/imagination 由 S7 启发式填充。 */
+    public void writeConcept(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<Concept> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            String themeCode = str(r.get("theme_code"));
+            if (themeCode == null) {
+                log.warn("skip concept row missing theme_code: {}", r);
+                continue;
+            }
+            Concept e = new Concept();
+            e.setThemeCode(themeCode);
+            e.setThemeName(str(r.get("theme_name")));
+            e.setThemeType(str(r.get("theme_type")));
+            e.setScarcity(bigDec(r.get("scarcity")));
+            e.setImagination(bigDec(r.get("imagination")));
+            e.setDataSource(source.getCode());
+            e.setSrcDetail(srcDetail);
+            e.setCreateDate(today);
+            e.setUpdateDate(now);
+            batch.add(e);
+        }
+        conceptMapper.batchInsert(batch);
+    }
+
+    /** 写入财务报表（financial）。 */
+    public void writeFinancial(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<Financial> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            LocalDate endDate = toLocalDate(r.get("end_date"));
+            if (tsCode == null || endDate == null) {
+                log.warn("skip financial row missing ts_code/end_date: {}", r);
+                continue;
+            }
+            Financial e = new Financial();
+            e.setTsCode(tsCode);
+            e.setEndDate(endDate);
+            e.setReportType(str(r.get("report_type")));
+            e.setAnnDate(toLocalDate(r.get("ann_date")));
+            e.setRevenue(bigDec(r.get("revenue")));
+            e.setNetProfit(bigDec(r.get("net_profit")));
+            e.setNetProfitYoy(bigDec(r.get("net_profit_yoy")));
+            e.setRoe(bigDec(r.get("roe")));
+            e.setDataSource(source.getCode());
+            e.setSrcDetail(srcDetail);
+            e.setCreateDate(today);
+            e.setUpdateDate(now);
+            batch.add(e);
+        }
+        financialMapper.batchInsert(batch);
+    }
+
+    /** 写入北向资金（northbound_flow）。 */
+    public void writeNorthboundFlow(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<NorthboundFlow> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tradeDate == null) {
+                log.warn("skip northbound_flow row missing trade_date: {}", r);
+                continue;
+            }
+            NorthboundFlow e = new NorthboundFlow();
+            e.setTradeDate(tradeDate);
+            e.setHkHoldNet(bigDec(r.get("hk_hold_net")));
+            e.setShNet(bigDec(r.get("sh_net")));
+            e.setSzNet(bigDec(r.get("sz_net")));
+            e.setDataSource(source.getCode());
+            e.setSrcDetail(srcDetail);
+            e.setCreateDate(today);
+            e.setUpdateDate(now);
+            batch.add(e);
+        }
+        northboundFlowMapper.batchInsert(batch);
+    }
+
+    /** 写入新闻/政策/题材事件（news_event）。 */
+    public void writeNewsEvent(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<NewsEvent> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            Object eventIdObj = r.get("event_id");
+            Long eventId = eventIdObj instanceof Number n ? n.longValue() : null;
+            if (eventId == null) {
+                log.warn("skip news_event row missing event_id: {}", r);
+                continue;
+            }
+            NewsEvent e = new NewsEvent();
+            e.setEventId(eventId);
+            e.setEventTime(toLocalDateTime(r.get("event_time")));
+            e.setTitle(str(r.get("title")));
+            e.setContent(str(r.get("content")));
+            e.setSource(str(r.get("source")));
+            e.setCategory(str(r.get("category")));
+            e.setRelatedBoard(str(r.get("related_board")));
+            e.setRelatedTsCode(str(r.get("related_ts_code")));
+            e.setSentimentScore(bigDec(r.get("sentiment_score")));
+            e.setIsPolicy(intVal(r.get("is_policy")));
+            e.setDataSource(source.getCode());
+            e.setSrcDetail(srcDetail);
+            e.setCreateDate(today);
+            e.setUpdateDate(now);
+            batch.add(e);
+        }
+        newsEventMapper.batchInsert(batch);
+    }
+
+    /** 写入交易日历（trade_calendar）。 */
+    public void writeTradeCalendar(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<TradeCalendar> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+            if (tradeDate == null) {
+                log.warn("skip trade_calendar row missing trade_date: {}", r);
+                continue;
+            }
+            TradeCalendar e = new TradeCalendar();
+            e.setTradeDate(tradeDate);
+            e.setIsTrading(intVal(r.get("is_trading")));
+            e.setDataSource(source.getCode());
+            e.setSrcDetail(srcDetail);
+            e.setCreateDate(today);
+            e.setUpdateDate(java.sql.Timestamp.valueOf(now));
+            batch.add(e);
+        }
+        tradeCalendarMapper.batchInsert(batch);
+    }
+
+    // ----------------------------------------------------------------------
     // 个股日线 / 周线 / 指数日线 / 主力资金流 / 龙虎榜 / 龙虎榜明细
     // ----------------------------------------------------------------------
 
-    /** 写入个股日线（stock_daily）。逐行幂等 upsert，主键 (ts_code, trade_date)。 */
+    /** 写入个股日线（stock_daily）—— CK 版：批量追加，主键 (ts_code, trade_date) 去重由 MergeTree 承接。 */
     public void writeStockDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<StockDaily> batch = new ArrayList<>(rows.size());
+        int nullOpenCount = 0;
+        int nullCloseCount = 0;
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) {
                 log.warn("skip stock_daily row missing ts_code/trade_date: {}", r);
-                continue;
-            }
-            Integer existing = stockDailyMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             StockDaily e = new StockDaily();
@@ -556,32 +706,40 @@ public class DedupWriter {
             e.setVolumeRatio(bigDec(r.get("volume_ratio")));
             e.setChg60d(bigDec(r.get("chg_60d")));
             e.setMarketCode(intVal(r.get("market_code")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                stockDailyMapper.updateRow(e);
-            } else {
-                stockDailyMapper.insertIfAbsent(e);
+            // DEBUG: 统计 open/close null
+            if (e.getOpen() == null) nullOpenCount++;
+            if (e.getClose() == null) nullCloseCount++;
+            // DEBUG: 每 100 行打一条样本
+            if (batch.size() % 100 == 0) {
+                log.debug("[writeStockDaily] sample #{}: tsCode={}, open={}, high={}, low={}, close={}, preClose={}",
+                        batch.size(), tsCode, e.getOpen(), e.getHigh(), e.getLow(), e.getClose(), e.getPreClose());
             }
+            batch.add(e);
+        }
+        // DEBUG: 写入汇总
+        log.debug("[writeStockDaily] write batch: total={}, nullOpen={}, nullClose={}, source={}", batch.size(), nullOpenCount, nullCloseCount, source);
+        try {
+            stockDailyMapper.batchInsert(batch);
+        } catch (Exception e) {
+            log.error("[writeStockDaily] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
+            throw e;
         }
     }
 
-    /** 写入个股周线（stock_weekly）。逐行幂等 upsert，主键 (ts_code, trade_date)。 */
+    /** 写入个股周线（stock_weekly）。 */
     public void writeStockWeekly(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<StockWeekly> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) {
                 log.warn("skip stock_weekly row missing ts_code/trade_date: {}", r);
-                continue;
-            }
-            Integer existing = stockWeeklyMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             StockWeekly e = new StockWeekly();
@@ -604,32 +762,25 @@ public class DedupWriter {
             e.setIndustryCode(str(r.get("industry_code")));
             e.setConceptCode(str(r.get("concept_code")));
             e.setMarketCode(intVal(r.get("market_code")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                stockWeeklyMapper.updateRow(e);
-            } else {
-                stockWeeklyMapper.insertIfAbsent(e);
-            }
+            batch.add(e);
         }
+        stockWeeklyMapper.batchInsert(batch);
     }
 
-    /** 写入指数日线（index_daily）。逐行幂等 upsert，主键 (index_code, trade_date)。 */
+    /** 写入指数日线（index_daily）。 */
     public void writeIndexDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<IndexDaily> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String indexCode = str(r.get("index_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (indexCode == null || tradeDate == null) {
                 log.warn("skip index_daily row missing index_code/trade_date: {}", r);
-                continue;
-            }
-            Integer existing = indexDailyMapper.selectDataSource(indexCode, tradeDate);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             IndexDaily e = new IndexDaily();
@@ -645,23 +796,20 @@ public class DedupWriter {
             e.setVol(bigDec(r.get("vol")));
             e.setAmount(bigDec(r.get("amount")));
             e.setTurnover(bigDec(r.get("turnover")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                indexDailyMapper.updateRow(e);
-            } else {
-                indexDailyMapper.insertIfAbsent(e);
-            }
+            batch.add(e);
         }
+        indexDailyMapper.batchInsert(batch);
     }
 
-    /** 写入主力资金流（main_fund_flow）。逐行幂等 upsert，主键 (obj_type, ts_code, board_code, index_code, trade_date)。 */
+    /** 写入主力资金流（main_fund_flow）。 */
     public void writeMainFundFlow(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<MainFundFlow> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String objType = str(r.get("obj_type"));
             String tsCode = str(r.get("ts_code"));
@@ -670,10 +818,6 @@ public class DedupWriter {
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (objType == null || tsCode == null || boardCode == null || indexCode == null || tradeDate == null) {
                 log.warn("skip main_fund_flow row missing key fields: {}", r);
-                continue;
-            }
-            Integer existing = mainFundFlowMapper.selectDataSource(objType, tsCode, boardCode, indexCode, tradeDate);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             MainFundFlow e = new MainFundFlow();
@@ -687,32 +831,25 @@ public class DedupWriter {
             e.setBigNet(bigDec(r.get("big_net")));
             e.setMidNet(bigDec(r.get("mid_net")));
             e.setSmallNet(bigDec(r.get("small_net")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                mainFundFlowMapper.updateRow(e);
-            } else {
-                mainFundFlowMapper.insertIfAbsent(e);
-            }
+            batch.add(e);
         }
+        mainFundFlowMapper.batchInsert(batch);
     }
 
-    /** 写入龙虎榜（dragon_tiger）。逐行幂等 upsert，主键 (ts_code, trade_date)。 */
+    /** 写入龙虎榜（dragon_tiger）。 */
     public void writeDragonTiger(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<DragonTiger> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             if (tsCode == null || tradeDate == null) {
                 log.warn("skip dragon_tiger row missing ts_code/trade_date: {}", r);
-                continue;
-            }
-            Integer existing = dragonTigerMapper.selectDataSource(tsCode, tradeDate);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             DragonTiger e = new DragonTiger();
@@ -745,33 +882,26 @@ public class DedupWriter {
             e.setTradeId(r.get("trade_id") instanceof Number n ? n.longValue() : null);
             e.setTradeMarket(str(r.get("trade_market")));
             e.setTradeMarketCode(str(r.get("trade_market_code")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                dragonTigerMapper.updateRow(e);
-            } else {
-                dragonTigerMapper.insertIfAbsent(e);
-            }
+            batch.add(e);
         }
+        dragonTigerMapper.batchInsert(batch);
     }
 
-    /** 写入龙虎榜席位明细（dt_detail）。逐行幂等 upsert，主键 (ts_code, trade_date, seat_name)。 */
+    /** 写入龙虎榜席位明细（dt_detail）。 */
     public void writeDtDetail(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        int newCode = source.getCode();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
+        List<DtDetail> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
             LocalDate tradeDate = toLocalDate(r.get("trade_date"));
             String seatName = str(r.get("seat_name"));
             if (tsCode == null || tradeDate == null || seatName == null) {
                 log.warn("skip dt_detail row missing ts_code/trade_date/seat_name: {}", r);
-                continue;
-            }
-            Integer existing = dtDetailMapper.selectDataSource(tsCode, tradeDate, seatName);
-            if (existing != null && existing >= newCode) {
                 continue;
             }
             DtDetail e = new DtDetail();
@@ -783,16 +913,13 @@ public class DedupWriter {
             e.setSell(bigDec(r.get("sell")));
             e.setIsInstitution(intVal(r.get("is_institution")));
             e.setIsFamous(intVal(r.get("is_famous")));
-            e.setDataSource(newCode);
+            e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
-            if (existing != null) {
-                dtDetailMapper.updateRow(e);
-            } else {
-                dtDetailMapper.insertIfAbsent(e);
-            }
+            batch.add(e);
         }
+        dtDetailMapper.batchInsert(batch);
     }
 
     private static String str(Object o) {
@@ -837,6 +964,30 @@ public class DedupWriter {
                 return LocalDate.parse(s.substring(0, 8), java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
             }
             return LocalDate.parse(s);
+        }
+        return null;
+    }
+
+    /** 解析为 LocalDateTime（兼容 "YYYY-MM-DD HH:mm:ss" / "YYYY-MM-DD" / LocalDateTime）。 */
+    private static LocalDateTime toLocalDateTime(Object o) {
+        if (o instanceof LocalDateTime dt) {
+            return dt;
+        }
+        if (o instanceof LocalDate d) {
+            return d.atStartOfDay();
+        }
+        if (o != null) {
+            String s = String.valueOf(o).trim();
+            try {
+                if (s.length() >= 19 && s.contains(":")) {
+                    return LocalDateTime.parse(s.substring(0, 19).replace(' ', 'T'));
+                }
+                if (s.length() >= 10) {
+                    return LocalDate.parse(s.substring(0, 10)).atStartOfDay();
+                }
+            } catch (Exception ignored) {
+                // 解析失败返回 null，由调用方跳过
+            }
         }
         return null;
     }

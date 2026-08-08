@@ -1,5 +1,7 @@
 package com.dunwugudao.crawler.admin.service;
 
+import com.dunwugudao.crawler.core.util.DateTimeUtil;
+
 import com.dunwugudao.crawler.admin.seed.BoardUniverseProvider;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
@@ -67,7 +69,7 @@ public class BoardBasicService {
         for (BoardBasic existing : existingBoards) {
             if (!latestCodes.contains(existing.getBoardCode()) && existing.getStatus() != 0) {
                 existing.setStatus(0);
-                existing.setUpdateDate(java.time.LocalDateTime.now());
+                existing.setUpdateDate(DateTimeUtil.nowSeconds());
                 boardBasicMapper.updateById(existing);
                 removed++;
             }
@@ -84,7 +86,7 @@ public class BoardBasicService {
                         .orElse(null);
                 if (existing != null && !info.boardName().equals(existing.getBoardName())) {
                     existing.setBoardName(info.boardName());
-                    existing.setUpdateDate(java.time.LocalDateTime.now());
+                    existing.setUpdateDate(DateTimeUtil.nowSeconds());
                     boardBasicMapper.updateById(existing);
                     updated++;
                 }

@@ -1,17 +1,14 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+package com.dunwugudao.crawler.persistence.entity;import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * A14 财报（S2 两套钱之"企业利润之钱"）。
  * <p>非东财接口，需从财报网站爬取。</p>
  */
 @Data
-@TableName("financial")
 public class Financial {
     private String tsCode;
     private LocalDate endDate;       // 报告期
@@ -21,8 +18,9 @@ public class Financial {
     private BigDecimal netProfit;    // 净利润(元)
     private BigDecimal netProfitYoy; // 净利润同比%
     private BigDecimal roe;
-    private Integer source;          // 0=东财 1=同花顺
+    private Integer dataSource;      // data_source: 0=东财 1=同花顺
+    private String srcDetail;        // src_detail: 来源URL/接口/备注
     private LocalDate createDate;
-    private LocalDate updateDate;
+    private LocalDateTime updateDate;
 
 }

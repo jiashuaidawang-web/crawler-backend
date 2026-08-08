@@ -2,6 +2,8 @@ package com.dunwugudao.crawler.strategy.eastmoney;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,6 +17,8 @@ import java.util.Map;
  */
 public final class EastmoneyParsers {
 
+    private static final Logger log = LoggerFactory.getLogger(EastmoneyParsers.class);
+
     private EastmoneyParsers() {
     }
 
@@ -26,6 +30,8 @@ public final class EastmoneyParsers {
         if (!diff.isArray()) {
             return rows;
         }
+        int nullOpenCount = 0;
+        int nullCloseCount = 0;
         for (JsonNode n : diff) {
             Map<String, Object> row = new HashMap<>();
             switch (spec.getTaskType()) {
@@ -127,6 +133,16 @@ public final class EastmoneyParsers {
                     Double pct = num(n, "f3");
                     row.put("is_limit_up", (pct != null && pct >= 9.8) ? 1 : 0);
                     row.put("is_limit_down", (pct != null && pct <= -9.8) ? 1 : 0);
+                    // DEBUG: 统计 open/close 为 null 的比例
+                    if (row.get("open") == null) nullOpenCount++;
+                    if (row.get("close") == null) nullCloseCount++;
+                    // DEBUG: 每 100 行打一条样本（含原始 f 码）
+                    if (rows.size() % 100 == 0) {
+                        log.debug("[STOCK_DAILY] sample row #{}: f12={}, f14={}, f2={}, f15={}, f16={}, f17={}, f18={}, raw_f17='{}', raw_f15='{}'",
+                                rows.size(), txt(n, "f12"), txt(n, "f14"), txt(n, "f2"),
+                                txt(n, "f15"), txt(n, "f16"), txt(n, "f17"), txt(n, "f18"),
+                                n.get("f17"), n.get("f15"));
+                    }
                     break;
                 default:
                     // 通用兜底：用 EastmoneyFieldMap 投影
@@ -141,6 +157,10 @@ public final class EastmoneyParsers {
             }
             row.put("trade_date", tradeDate);
             rows.add(row);
+        }
+        // DEBUG: STOCK_DAILY 解析汇总
+        if ("STOCK_DAILY".equals(spec.getTaskType())) {
+            log.debug("[STOCK_DAILY] parse done: totalRows={}, nullOpen={}, nullClose={}", rows.size(), nullOpenCount, nullCloseCount);
         }
         return rows;
     }
@@ -329,6 +349,35 @@ public final class EastmoneyParsers {
                 rows.add(row);
             }
         }
+        return rows;
+    }
+
+    /**
+     * 北向资金解析器（东财 push2 kamt 实时端点，纯 JSON 非 JSONP）。
+     * <p>响应结构：{@code data.{hk2sh,hk2sz,sh2hk,sz2hk}.{netBuyAmt,date2}}。
+     * 北向净买入 = 沪股通(hk2sh) + 深股通(hk2sz)；trade_date 取响应 {@code date2}
+     * （如 "2026-08-07"，缺失时回退 params.tradeDate）。返回单行 Map（落 northbound_flow 表，主键 trade_date）。</p>
+     */
+    public static List<Map<String, Object>> parseNorthbound(JsonNode root, EastmoneyEndpoints.EndpointSpec spec,
+                                                            Map<String, Object> params) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        JsonNode data = root.path("data");
+        if (data.isMissingNode() || data.isNull()) {
+            return rows;
+        }
+        JsonNode hk2sh = data.path("hk2sh");   // 沪股通（北向买沪）
+        JsonNode hk2sz = data.path("hk2sz");   // 深股通（北向买深）
+        Double shNet = num(hk2sh, "netBuyAmt");   // 沪股通当日净买入(元)
+        Double szNet = num(hk2sz, "netBuyAmt");   // 深股通当日净买入(元)
+        double hkHoldNet = (shNet != null ? shNet : 0d) + (szNet != null ? szNet : 0d);
+        String date2 = txt(hk2sh, "date2");        // 交易日，形如 "2026-08-07"
+        String tradeDate = (date2 != null) ? date2 : String.valueOf(params.getOrDefault("tradeDate", ""));
+        Map<String, Object> row = new HashMap<>();
+        row.put("trade_date", tradeDate);
+        row.put("hk_hold_net", hkHoldNet);  // 北向合计净买入(元)
+        row.put("sh_net", shNet);           // 沪股通净买入(元)
+        row.put("sz_net", szNet);           // 深股通净买入(元)
+        rows.add(row);
         return rows;
     }
 

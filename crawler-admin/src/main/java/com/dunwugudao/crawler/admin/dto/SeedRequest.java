@@ -13,6 +13,8 @@ public record SeedRequest(
         Integer expectedCount,
         Integer priority,
         Integer maxRetry,
-        String tradeDate  // STOCK_DAILY 专用（如 "2026-08-01"），可为 null
+        String tradeDate,  // STOCK_DAILY 专用（如 "2026-08-01"），可为 null
+        String from,       // TRADE_CALENDAR 区间起（如 "2020-01-01"），可为 null
+        String to          // TRADE_CALENDAR 区间止（如 "2030-12-31"），可为 null
 ) {
 }

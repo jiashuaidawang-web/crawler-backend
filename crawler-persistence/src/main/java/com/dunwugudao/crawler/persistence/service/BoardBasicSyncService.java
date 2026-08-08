@@ -1,6 +1,6 @@
 package com.dunwugudao.crawler.persistence.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.dunwugudao.crawler.core.util.DateTimeUtil;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -9,9 +9,14 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 
 /**
- * board_basic 维表同步（幂等）。
- * <p>由 board_daily 落库副作用触发：每写一行 board_daily，顺手按
- * (board_type, board_code, data_source) 三字段查 board_basic，有则跳过、无则新增。</p>
+ * board_basic 维表同步（幂等）—— ClickHouse 版。
+ *
+ * <p>由 board_daily 落库副作用触发。CK 版：</p>
+ * <ul>
+ *   <li>去掉 MyBatis-Plus {@code QueryWrapper}（CK 不支持），改原生 SQL</li>
+ *   <li>幂等由表引擎 {@code ReplacingMergeTree(_ver=data_source)} 兜底：同键重插保留高 data_source 行；
+ *       查一次判定"是否已存在"仍做，减少无意义写入</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -35,9 +40,10 @@ public class BoardBasicSyncService {
         if (boardCode == null || boardCode.isBlank() || boardType <= 0) {
             return;
         }
-        BoardBasic existing = selectByUnique(boardType, boardCode, dataSource);
-        if (existing != null) {
-            return; // 已有则跳过（名称变化不追）
+        // 先查是否已存在，减少无意义写入（最终幂等仍由 ReplacingMergeTree 保证）
+        Integer existingDs = boardBasicMapper.selectDataSource(boardType, boardCode, dataSource);
+        if (existingDs != null) {
+            return;
         }
         BoardBasic e = new BoardBasic();
         e.setBoardCode(boardCode);
@@ -46,21 +52,18 @@ public class BoardBasicSyncService {
         e.setStatus(1);
         e.setDataSource(dataSource);
         e.setCreateDate(LocalDate.now());
+        // 以下三列在原始 MySQL 中均为 nullable（迁 CK 后 String/DateTime 默认非空），东财来源天然没有这些值：
+        // - code：同花顺板块指数代码（东财只有 BK 号）→ 空字符串
+        // - features：备用字段，始终无内容 → 空字符串
+        // - update_date：MySQL 注释"初始 NULL"，CK 非空 → 填创建时间（创建即首次更新）
+        e.setCode("");
+        e.setFeatures("");
+        e.setUpdateDate(DateTimeUtil.nowSeconds());
         try {
             boardBasicMapper.insert(e);
         } catch (Exception ex) {
             log.warn("BoardBasicSyncService.syncBoard 新增失败(boardCode={}, boardType={}, ds={}): {}",
                     boardCode, boardType, dataSource, ex.getMessage());
         }
-    }
-
-    /** 三字段唯一查询：(board_type, board_code, data_source)。 */
-    private BoardBasic selectByUnique(int boardType, String boardCode, int dataSource) {
-        QueryWrapper<BoardBasic> qw = new QueryWrapper<>();
-        qw.eq("board_type", boardType)
-          .eq("board_code", boardCode)
-          .eq("data_source", dataSource)
-          .last("LIMIT 1");
-        return boardBasicMapper.selectOne(qw);
     }
 }

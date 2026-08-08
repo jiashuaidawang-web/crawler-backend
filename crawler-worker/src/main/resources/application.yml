@@ -5,19 +5,17 @@ spring:
   application:
     name: crawler-worker
   datasource:
-    # openGaussDB 兼容 PostgreSQL 协议，使用 PG 驱动即可
+    # 主数据源：openGauss（操作型表 crawl_* / trade_log）—— 默认前缀，Spring Boot 自动配置（和改前一致）
     driver-class-name: org.postgresql.Driver
-#    url: jdbc:postgresql://100.92.86.64:15432/postgres
-    url: jdbc:postgresql://127.0.0.1:15432/postgres
+    url: jdbc:postgresql://100.92.86.64:15432/postgres
     username: dbuser
     password: OpenGauss@2026
-
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      id-type: auto
+    # 分析型数据源：ClickHouse（行情 / 池子 / 龙虎榜 / 资金流，批量追加 + ReplacingMergeTree）
+    ch:
+      driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+      jdbc-url: jdbc:clickhouse://124.223.220.245:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
+      username: default
+      password: pamirs@123
 
 crawler:
   node-id: ${HOSTNAME:worker-node-1}
@@ -33,6 +31,12 @@ anti-crawl:
   ua-pool:
     - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
   proxy-list: []
+
+# 日志级别（排查数据问题时把 eastmoney / DedupWriter 改成 DEBUG）
+logging:
+  level:
+    com.dunwugudao.crawler.strategy.eastmoney: INFO
+    com.dunwugudao.crawler.persistence.service.DedupWriter: INFO
   # stealth-mode: SELF（默认，现状 JS 注入）| CLOAK（CloakBrowser CDP，C++ 源码级补丁）
   # stealth-mode: SELF
   # ---- CloakBrowser(CLOAK 模式)参数 ----

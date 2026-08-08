@@ -43,6 +43,26 @@ public class ProxyManager {
     /** 单任务最大重试次数(获取新 IP 重试) — 40% 成功率下,10 次期望 4 次成功 */
     private static final int MAX_RETRIES = 10;
 
+    /**
+     * 全局连续失败熔断阈值。
+     * <p>当所有任务的累计连续失败次数达到此值，说明代理池整体被目标站点封禁（如东财封了整段 IP），
+     * 此时不再浪费代理 IP，直接返回 null 让上层快速失败。
+     * <p>熔断后需人工介入（换代理供应商 / 等封禁解除），或等待 {@link #CIRCUIT_BREAKER_RESET_MS} 后自动半开。</p>
+     */
+    private static final int CIRCUIT_BREAKER_THRESHOLD = 35;
+
+    /** 熔断器自动半开时间（毫秒）— 30 分钟后尝试恢复 */
+    private static final long CIRCUIT_BREAKER_RESET_MS = 30 * 60 * 1000L;
+
+    /** 连续失败计数（达到阈值触发熔断） */
+    private int consecutiveFailures = 0;
+
+    /** 熔断开始时间（用于自动半开） */
+    private long circuitBreakerOpenTime = 0L;
+
+    /** 是否处于熔断状态 */
+    private boolean circuitBreakerOpen = false;
+
     /** clist 类接口响应验证：rc=0 且含 total 字段 */
     public static final Predicate<String> CLIST_VALIDATOR =
             resp -> resp.contains("\"rc\":0") && resp.contains("\"total\":");
@@ -92,13 +112,30 @@ public class ProxyManager {
      * @return 响应体文本;所有重试失败返回 null
      */
     public String executeWithRetry(String url, Predicate<String> responseValidator) {
-        log.info("[ProxyManager] 开始请求, url={}, maxRetries={}", url, MAX_RETRIES);
+        // ---------- 熔断器检查 ----------
+        if (circuitBreakerOpen) {
+            long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
+            if (elapsed < CIRCUIT_BREAKER_RESET_MS) {
+                log.warn("[ProxyManager] 熔断器开启中, 拒绝请求({}ms/{}ms), url={}",
+                        elapsed, CIRCUIT_BREAKER_RESET_MS, url);
+                return null;
+            }
+            // 超过重置时间，半开：允许一次尝试
+            log.info("[ProxyManager] 熔断器半开, 尝试恢复, url={}", url);
+            circuitBreakerOpen = false;
+            consecutiveFailures = 0;
+        }
+
+        log.info("[ProxyManager] 开始请求, url={}, maxRetries={}, consecutiveFailures={}/{}",
+                url, MAX_RETRIES, consecutiveFailures, CIRCUIT_BREAKER_THRESHOLD);
 
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             // ---------- 1. 获取代理 ----------
             String proxyStr = acquireProxy();
             if (proxyStr == null) {
                 log.warn("[ProxyManager] attempt={}/{}, 获取代理失败(返回 null), 换下一个", attempt, MAX_RETRIES);
+                consecutiveFailures++;
+                checkCircuitBreaker();
                 continue;
             }
 
@@ -112,6 +149,8 @@ public class ProxyManager {
                 if (resp == null || resp.isEmpty()) {
                     log.warn("[ProxyManager] attempt={}/{}, 空响应, latency={}ms, proxy={}, 换下一个代理",
                             attempt, MAX_RETRIES, latency, extractProxyHost(proxyStr));
+                    consecutiveFailures++;
+                    checkCircuitBreaker();
                     continue;
                 }
 
@@ -120,6 +159,8 @@ public class ProxyManager {
                 if (!hasValidData && (resp.contains("502") || resp.contains("Bad Gateway"))) {
                     log.warn("[ProxyManager] attempt={}/{}, 502 错误(无有效数据), latency={}ms, resp={}, 换下一个代理",
                             attempt, MAX_RETRIES, latency, resp.substring(0, Math.min(200, resp.length())));
+                    consecutiveFailures++;
+                    checkCircuitBreaker();
                     continue;
                 }
 
@@ -128,9 +169,10 @@ public class ProxyManager {
                             attempt, MAX_RETRIES, latency);
                 }
 
-                // ---------- 4. 成功 ----------
+                // ---------- 4. 成功 → 重置连续失败计数 ----------
                 log.info("[ProxyManager] attempt={}/{}, 请求成功! latency={}ms, respLen={}, proxy={}",
                         attempt, MAX_RETRIES, latency, resp.length(), extractProxyHost(proxyStr));
+                consecutiveFailures = 0;
                 return resp;
 
             } catch (Exception e) {
@@ -138,12 +180,28 @@ public class ProxyManager {
                 int latency = (int) (System.currentTimeMillis() - start);
                 log.warn("[ProxyManager] attempt={}/{}, 请求异常, latency={}ms, error={}, 换下一个代理",
                         attempt, MAX_RETRIES, latency, e.getMessage());
+                consecutiveFailures++;
+                checkCircuitBreaker();
             }
         }
 
         // ---------- 6. 所有重试耗尽 ----------
         log.error("[ProxyManager] 请求最终失败, 已重试 {} 次, url={}", MAX_RETRIES, url);
         return null;
+    }
+
+    /**
+     * 检查是否需要触发熔断。
+     * <p>当连续失败次数达到 {@link #CIRCUIT_BREAKER_THRESHOLD}，开启熔断器，
+     * 后续请求直接返回 null 直到 {@link #CIRCUIT_BREAKER_RESET_MS} 后自动半开。</p>
+     */
+    private void checkCircuitBreaker() {
+        if (!circuitBreakerOpen && consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+            circuitBreakerOpen = true;
+            circuitBreakerOpenTime = System.currentTimeMillis();
+            log.error("[ProxyManager] ⚠️ 熔断器开启! 连续失败 {} 次, {}ms 内不再请求代理, 请检查代理池是否被封禁",
+                    consecutiveFailures, CIRCUIT_BREAKER_RESET_MS);
+        }
     }
 
     // ========================================================================
@@ -189,5 +247,28 @@ public class ProxyManager {
     /** 随机 User-Agent */
     private static String randomUa() {
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+    }
+
+    // ========================================================================
+    // 熔断器状态查询 / 手动控制
+    // ========================================================================
+
+    /** 查询熔断器当前状态（健康检查用） */
+    public String getCircuitBreakerStatus() {
+        if (circuitBreakerOpen) {
+            long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
+            long remaining = Math.max(0, CIRCUIT_BREAKER_RESET_MS - elapsed);
+            return String.format("OPEN(连续失败=%d, 剩余=%ds)", consecutiveFailures, remaining / 1000);
+        }
+        return String.format("CLOSED(连续失败=%d/%d)", consecutiveFailures, CIRCUIT_BREAKER_THRESHOLD);
+    }
+
+    /** 手动重置熔断器（换代理供应商后调用） */
+    public void resetCircuitBreaker() {
+        boolean wasOpen = circuitBreakerOpen;
+        circuitBreakerOpen = false;
+        consecutiveFailures = 0;
+        circuitBreakerOpenTime = 0L;
+        log.info("[ProxyManager] 熔断器手动重置(wasOpen={})", wasOpen);
     }
 }

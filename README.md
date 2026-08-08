@@ -10,6 +10,61 @@
 
 ---
 
+## 代理配置（实测 2026-08-04）
+
+> **核心经验：OkHttp 必须用 `interceptor` 主动添加 `Proxy-Authorization` 头，不能用 `authenticator` 被动等 407！**
+
+### 青果短效代理（当前使用）
+
+| 参数 | 值 |
+|---|---|
+| 提取 API | `https://share.proxy.qg.net/get?key=8XMUHNWJ&num=1&area=&isp=0&format=json&distinct=true` |
+| 单价 | 0.0027 元/IP |
+| 复活周期 | 1 分钟 |
+| 成功率 | ~50%（实测 10 次 5 次成功，一把就成） |
+| 返回格式 | `{"code":"SUCCESS","data":[{"server":"ip:port"}]}` |
+
+**application.yml（admin + worker 统一）：**
+```yaml
+proxy:
+  qg:
+    api-key: D7A19F5D
+    password: EC00F1DB9AAC
+```
+
+### 关键教训：OkHttp 代理认证
+
+**❌ 错误方式（成功率 0%）：**
+```java
+builder.authenticator(new Authenticator() {
+    public Request authenticate(Route route, Response response) {
+        // 收到 407 后才触发 → 某些代理不触发回调 → 永远 407
+    }
+});
+```
+
+**✅ 正确方式（成功率 ~50%）：**
+```java
+final String credential = Credentials.basic(username, password);
+builder.addInterceptor(chain -> {
+    Request request = chain.request().newBuilder()
+        .header("Proxy-Authorization", credential)  // 第一请求就带认证
+        .build();
+    return chain.proceed(request);
+});
+```
+
+**诊断方法：** 5 个不同 IP/端口/省份的代理全部毫秒级返回 407 → 请求到达了代理但没带认证头。
+
+### 其他代理（备用）
+
+| 代理 | 单价 | 成功率 | 说明 |
+|---|---|---|---|
+| 巨量(juliangip) | 0.003 元/IP | 40% | `auth_type=2` 用户名密码模式 |
+| 快代理(kuaidaili) | 0.015 元/IP | 20% | 账号密码鉴权 |
+
+---
+
 ## M2 新增 / 改写类清单
 
 ### strategy 层（东财）
@@ -104,7 +159,7 @@
 3. **limit_pool.limit_style** —— 当前为近似判定（`kbc==0 && ztsj=="09:30:00"` → `一字`，否则 `换手`）；炸板/烂板/T字 细分需下游结合 `open_times/last_time` 细化。
 4. **dt_detail.is_famous** —— 需维护知名游资名单，当前置 `0`。
 5. **dragon_tiger / dt_detail 的 ts_code 后缀** —— datacenter 响应无显式市场字段，`tsCodeFromRaw` 按代码前缀（6→.SH / 0,3→.SZ / 8,4→.BJ）启发式补后缀，TODO M6 核对真实响应字段。
-6. **northbound_flow 端点** —— 未实现（`EastmoneyEndpoints.get` 对非覆盖 taskType 抛 `UnsupportedOperationException`），留待 M6 接入北向接口。
+6. **northbound_flow 端点** —— 已实现（东财 `push2 kamt` 实时端点，`NORTHBOUND_FLOW` taskType → `parseNorthbound` → `writeNorthboundFlow`，含 `/seed-northbound` 触发）。⚠️ kamt 为实时端点（忽略日期参数、始终返回当日），故只能填当日、不能历史回填；历史需 datacenter 报告（当前 API 变更要求 columns 参数，暂不可回填）。
 7. **同花顺 DOM 选择器** —— `waitSelector` / `extract.selector` / `extract.cols` 依赖 M6 实测页面结构。
 8. **STOCK_WEEKLY 行** —— kline 解析对日/周线套用同一投影，会带上 `pct_chg/turnover/pre_close` 等 `stock_weekly` 表没有的列；下游 DedupWriter 应按目标表选列（或 M6 对周线做列裁剪）。
 

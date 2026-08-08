@@ -1,9 +1,4 @@
-package com.dunwugudao.crawler.persistence.entity;
-
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.dunwugudao.crawler.core.model.SourceType;
+package com.dunwugudao.crawler.persistence.entity;import com.dunwugudao.crawler.core.model.SourceType;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -16,10 +11,8 @@ import java.time.LocalDateTime;
  * created_at / updated_at。
  */
 @Data
-@TableName("crawl_task")
 public class CrawlTask {
 
-    @TableId(type = IdType.AUTO)
     private Long taskId;
 
     private String taskType;

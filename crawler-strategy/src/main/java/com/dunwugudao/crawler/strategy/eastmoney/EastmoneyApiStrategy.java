@@ -104,9 +104,10 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         try {
             return fetchWithOkHttp(ctx, taskType);
         } catch (Exception e) {
-            if ("STOCK_DAILY".equals(taskType)) {
-                // STOCK_DAILY 不 fallback：OkHttp 失败直接抛，交 worker 重试/死亡
-                log.warn("[{}] OkHttp failed ({})，无 Playwright fallback，交 worker 重试", taskType, e.getMessage());
+            if ("STOCK_DAILY".equals(taskType) || "NORTHBOUND_FLOW".equals(taskType)) {
+                // STOCK_DAILY / NORTHBOUND_FLOW 不 fallback：前者走 Playwright 会 TLS 拦截，
+                // 后者 Playwright 路径无 KAMT 解析器（会静空），均直接抛交 worker 重试/死亡
+                log.error("[{}] OkHttp failed ({})，无 Playwright fallback，交 worker 重试", taskType, e.getMessage(), e);
                 throw e;
             }
             // OkHttp 路径失败（代理级错误/446/EMPTY_RESPONSE 等）→ 立即 fallback Playwright + 青果长效 IP
@@ -115,7 +116,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 return playwrightStrategy.fetch(ctx);
             } catch (Exception e2) {
                 // Playwright 也失败 → 抛出异常，让 worker 重试/死亡
-                log.error("[{}] Playwright fallback also failed: {}", taskType, e2.getMessage());
+                log.error("[{}] Playwright fallback also failed: {}", taskType, e2.getMessage(), e2);
                 throw e2;
             }
         }
@@ -135,6 +136,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case CLIST -> fetchClist(ctx, taskType, params, spec);
             case ZT_POOL, DATACENTER -> fetchZtPoolOrDatacenter(ctx, taskType, params, spec);
             case KLINE -> fetchKline(ctx, taskType, params, spec);
+            case KAMT -> fetchKamt(ctx, taskType, params, spec);
         };
     }
 
@@ -148,6 +150,10 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         resp = cleanJsonp(resp);
         JsonNode root = readTree(resp);
         JsonNode data = root.path("data");
+        // DEBUG: 打印 CLIST 解析摘要（total/diff数量）
+        log.debug("[fetchClist] taskType={}, pn={}, total={}, diffSize={}", taskType, pn,
+                data.path("total").asInt(-1),
+                data.path("diff").isArray() ? data.path("diff").size() : 0);
         List<Map<String, Object>> allRows = EastmoneyParsers.parseClist(data, spec, td, params);
         return buildResult(allRows, resp, url);
     }
@@ -192,6 +198,17 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         resp = cleanJsonp(resp);
         JsonNode root = readTree(resp);
         List<Map<String, Object>> allRows = EastmoneyParsers.parseKline(root.path("data"), spec, params);
+        return buildResult(allRows, resp, url);
+    }
+
+    /** 北向资金（kamt 实时端点，纯 JSON 非 JSONP，无需 cleanJsonp）。 */
+    private CrawlResult fetchKamt(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        rateLimiter.acquire();
+        String url = spec.buildUrl(params, 0);
+        String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+        // kamt 返回纯 JSON（非 JSONP），直接解析
+        JsonNode root = readTree(resp);
+        List<Map<String, Object>> allRows = EastmoneyParsers.parseNorthbound(root, spec, params);
         return buildResult(allRows, resp, url);
     }
 
@@ -243,8 +260,8 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                     continue;
                 }
                 // 配额已尽 or 业务错误：不再换 IP，抛异常交 worker
-                log.warn("[fetchWithWorkerProxy] give up, usedIp={}/{}, proxyFailure={}, error={}",
-                        used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, proxyFailure, e.getMessage());
+                log.error("[fetchWithWorkerProxy] give up, usedIp={}/{}, proxyFailure={}, error={}",
+                        used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, proxyFailure, e.getMessage(), e);
                 throw e;
             }
         }
@@ -305,6 +322,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         try {
             return objectMapper.readTree(resp);
         } catch (Exception e) {
+            log.error("[EastmoneyApiStrategy] JSON parse failed, respLen={}: {}", resp == null ? 0 : resp.length(), e.getMessage(), e);
             throw new RuntimeException("Eastmoney JSON parse failed: " + e.getMessage(), e);
         }
     }
