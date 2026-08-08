@@ -159,7 +159,7 @@ builder.addInterceptor(chain -> {
 3. **limit_pool.limit_style** —— 当前为近似判定（`kbc==0 && ztsj=="09:30:00"` → `一字`，否则 `换手`）；炸板/烂板/T字 细分需下游结合 `open_times/last_time` 细化。
 4. **dt_detail.is_famous** —— 需维护知名游资名单，当前置 `0`。
 5. **dragon_tiger / dt_detail 的 ts_code 后缀** —— datacenter 响应无显式市场字段，`tsCodeFromRaw` 按代码前缀（6→.SH / 0,3→.SZ / 8,4→.BJ）启发式补后缀，TODO M6 核对真实响应字段。
-6. **northbound_flow 端点** —— 未实现（`EastmoneyEndpoints.get` 对非覆盖 taskType 抛 `UnsupportedOperationException`），留待 M6 接入北向接口。
+6. **northbound_flow 端点** —— 已实现（东财 `push2 kamt` 实时端点，`NORTHBOUND_FLOW` taskType → `parseNorthbound` → `writeNorthboundFlow`，含 `/seed-northbound` 触发）。⚠️ kamt 为实时端点（忽略日期参数、始终返回当日），故只能填当日、不能历史回填；历史需 datacenter 报告（当前 API 变更要求 columns 参数，暂不可回填）。
 7. **同花顺 DOM 选择器** —— `waitSelector` / `extract.selector` / `extract.cols` 依赖 M6 实测页面结构。
 8. **STOCK_WEEKLY 行** —— kline 解析对日/周线套用同一投影，会带上 `pct_chg/turnover/pre_close` 等 `stock_weekly` 表没有的列；下游 DedupWriter 应按目标表选列（或 M6 对周线做列裁剪）。
 

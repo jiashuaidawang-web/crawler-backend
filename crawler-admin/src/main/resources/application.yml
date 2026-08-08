@@ -24,6 +24,21 @@ stock-daily:
   now-stock-size: 5545
   page-size: 100   # 东财 clist 每页最多 100 条（pz 参数）
 
+# ---------------------- akshare-bridge（financial 财报来源） ----------------------
+# datacenter 当前 9501 不可用，财报改由 akshare-bridge（Python 服务）提供。
+# 该服务需独立部署在能访问东财的网络（与 crawler 同机即可，无需额外代理），
+# 部署方式见 akshare-bridge/README.md。未启用时 /seed-financial 返回 inserted=0。
+akshare:
+  bridge:
+    enabled: false
+    url: http://localhost:8800
+    max-stocks: 200   # 单次 seed-financial 最多覆盖股票数（全市场回填需分批/循环触发）
+
+# ---------------------- news_event 7x24 直爬配置 ----------------------
+news:
+  crawl:
+    limit: 200       # seed-news-event 默认拉取条数（上限 500）
+
 # ---------------------- 巨量代理配置(用户实测 2026-08-04) ----------------------
 # 统一用巨量,用户名密码鉴权(auth_type=2),返回 ip:port:user:pass。
 # 提取 API: http://v2.api.juliangip.com/company/dynamic/getips?auth_type=2&auto_white=1&filter=1&num=1&pt=1&result_type=json&trade_no=...&sign=...

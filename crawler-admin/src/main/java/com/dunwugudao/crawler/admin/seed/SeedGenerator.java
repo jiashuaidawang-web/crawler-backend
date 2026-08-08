@@ -102,6 +102,8 @@ public class SeedGenerator {
         n += seedStrongPool(source, date);
         n += seedCixinPool(source, date);
         n += seedLimitPool(source, date);
+        // 北向资金（东财 kamt 实时端点，每日一条；历史回填需 datacenter 报告，当前 API 变更暂不可回填）
+        n += seedNorthbound(source, date);
         // 逐板块：从 board_basic 表读去重 boardCode，每个板块一个任务（板块-个股关联初始化）
         n += seedByBoard(source, date);
         log.info("dailySeed date={} source={} inserted={}", date, source, n);
@@ -279,6 +281,22 @@ public class SeedGenerator {
             n += seedPoolTasksSingle(limitType, source, date);
         }
         return n;
+    }
+
+    /** 北向资金（NORTHBOUND_FLOW）单独处理：每日一条（kamt 实时端点，返回当日北向/沪股通/深股通净买入）。 */
+    public int seedNorthbound(int source, String date) {
+        CrawlTask task = buildTask("NORTHBOUND_FLOW", source, date, null, 1);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedNorthbound] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
+    }
+
+    /** 龙虎榜主表（DRAGON_TIGER，市场级，每日一条）—— 经东财 datacenter 新版接口抓取，worker 认领后落 dragon_tiger 表。 */
+    public int seedDragonTiger(int source, String date) {
+        CrawlTask task = buildTask("DRAGON_TIGER", source, date, null, 1);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedDragonTiger] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
     }
 
     /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */

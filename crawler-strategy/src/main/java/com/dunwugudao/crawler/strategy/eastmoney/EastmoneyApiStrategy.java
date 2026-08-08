@@ -104,8 +104,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         try {
             return fetchWithOkHttp(ctx, taskType);
         } catch (Exception e) {
-            if ("STOCK_DAILY".equals(taskType)) {
-                // STOCK_DAILY 不 fallback：OkHttp 失败直接抛，交 worker 重试/死亡
+            if ("STOCK_DAILY".equals(taskType) || "NORTHBOUND_FLOW".equals(taskType)) {
+                // STOCK_DAILY / NORTHBOUND_FLOW 不 fallback：前者走 Playwright 会 TLS 拦截，
+                // 后者 Playwright 路径无 KAMT 解析器（会静空），均直接抛交 worker 重试/死亡
                 log.error("[{}] OkHttp failed ({})，无 Playwright fallback，交 worker 重试", taskType, e.getMessage(), e);
                 throw e;
             }
@@ -135,6 +136,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case CLIST -> fetchClist(ctx, taskType, params, spec);
             case ZT_POOL, DATACENTER -> fetchZtPoolOrDatacenter(ctx, taskType, params, spec);
             case KLINE -> fetchKline(ctx, taskType, params, spec);
+            case KAMT -> fetchKamt(ctx, taskType, params, spec);
         };
     }
 
@@ -196,6 +198,17 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         resp = cleanJsonp(resp);
         JsonNode root = readTree(resp);
         List<Map<String, Object>> allRows = EastmoneyParsers.parseKline(root.path("data"), spec, params);
+        return buildResult(allRows, resp, url);
+    }
+
+    /** 北向资金（kamt 实时端点，纯 JSON 非 JSONP，无需 cleanJsonp）。 */
+    private CrawlResult fetchKamt(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        rateLimiter.acquire();
+        String url = spec.buildUrl(params, 0);
+        String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+        // kamt 返回纯 JSON（非 JSONP），直接解析
+        JsonNode root = readTree(resp);
+        List<Map<String, Object>> allRows = EastmoneyParsers.parseNorthbound(root, spec, params);
         return buildResult(allRows, resp, url);
     }
 

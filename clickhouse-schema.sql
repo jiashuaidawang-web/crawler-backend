@@ -586,15 +586,16 @@ CREATE TABLE IF NOT EXISTS four_dimension_daily (
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
 
--- 23. 交易日历
+-- 23. 交易日历（ReplacingMergeTree：重复 seed 同 trade_date 自动保留新版，幂等）
 CREATE TABLE IF NOT EXISTS trade_calendar (
     trade_date              Date NOT NULL,
-    is_trading              Nullable(UInt8),
+    is_trading              UInt8 NOT NULL DEFAULT 0,   -- 1=交易日 0=休市（总是有值，不再 Nullable）
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
-    update_date             Nullable(DateTime)
-) ENGINE = MergeTree()
+    update_date             Nullable(DateTime),
+    _ver                    DateTime MATERIALIZED now()  -- 版本列：同 trade_date 保留最新
+) ENGINE = ReplacingMergeTree(_ver)
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
 

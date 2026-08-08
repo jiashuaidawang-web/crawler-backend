@@ -352,6 +352,35 @@ public final class EastmoneyParsers {
         return rows;
     }
 
+    /**
+     * 北向资金解析器（东财 push2 kamt 实时端点，纯 JSON 非 JSONP）。
+     * <p>响应结构：{@code data.{hk2sh,hk2sz,sh2hk,sz2hk}.{netBuyAmt,date2}}。
+     * 北向净买入 = 沪股通(hk2sh) + 深股通(hk2sz)；trade_date 取响应 {@code date2}
+     * （如 "2026-08-07"，缺失时回退 params.tradeDate）。返回单行 Map（落 northbound_flow 表，主键 trade_date）。</p>
+     */
+    public static List<Map<String, Object>> parseNorthbound(JsonNode root, EastmoneyEndpoints.EndpointSpec spec,
+                                                            Map<String, Object> params) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        JsonNode data = root.path("data");
+        if (data.isMissingNode() || data.isNull()) {
+            return rows;
+        }
+        JsonNode hk2sh = data.path("hk2sh");   // 沪股通（北向买沪）
+        JsonNode hk2sz = data.path("hk2sz");   // 深股通（北向买深）
+        Double shNet = num(hk2sh, "netBuyAmt");   // 沪股通当日净买入(元)
+        Double szNet = num(hk2sz, "netBuyAmt");   // 深股通当日净买入(元)
+        double hkHoldNet = (shNet != null ? shNet : 0d) + (szNet != null ? szNet : 0d);
+        String date2 = txt(hk2sh, "date2");        // 交易日，形如 "2026-08-07"
+        String tradeDate = (date2 != null) ? date2 : String.valueOf(params.getOrDefault("tradeDate", ""));
+        Map<String, Object> row = new HashMap<>();
+        row.put("trade_date", tradeDate);
+        row.put("hk_hold_net", hkHoldNet);  // 北向合计净买入(元)
+        row.put("sh_net", shNet);           // 沪股通净买入(元)
+        row.put("sz_net", szNet);           // 深股通净买入(元)
+        rows.add(row);
+        return rows;
+    }
+
     // ----------------------------------------------------------------------
     // 工具
     // ----------------------------------------------------------------------

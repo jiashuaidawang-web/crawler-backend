@@ -32,4 +32,11 @@ public interface StockDailyMapper {
      */
     @Select("SELECT * FROM stock_daily FINAL WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate} LIMIT 1")
     StockDaily selectFinal(@Param("tsCode") String tsCode, @Param("tradeDate") LocalDate tradeDate);
+
+    /**
+     * 取最新交易日去重股票池（供 financial 等种子使用）。
+     * <p>use server_time_zone=false 下 CK 存 Date，直接返回字符串即可；去掉可能的 .SZ/.SH 后缀由调用方处理。</p>
+     */
+    @Select("SELECT DISTINCT ts_code FROM stock_daily WHERE trade_date = (SELECT max(trade_date) FROM stock_daily)")
+    List<String> selectDistinctTsCode();
 }

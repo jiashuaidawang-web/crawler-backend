@@ -20,6 +20,8 @@ public class NewsEvent {
     private String relatedTsCode;    // 关联个股代码(逗号分隔)
     private BigDecimal sentimentScore; // 情感分 -1~1
     private Integer isPolicy;        // 是否政策
+    private Integer dataSource;      // data_source: 0=东财 1=同花顺
+    private String srcDetail;        // src_detail: 来源URL/接口/备注
     private LocalDate createDate;
     private LocalDateTime updateDate;
 

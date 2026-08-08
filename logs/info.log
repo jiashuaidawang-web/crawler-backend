@@ -106908,3 +106908,879 @@ Caused by: java.io.EOFException: \n not found: limit=0 content=…
 2026-08-08 01:17:49.908  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
 2026-08-08 01:18:19.980  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
 2026-08-08 01:18:50.055  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 01:19:20.131  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 01:19:31.747  INFO [Thread-4] com.xxl.job.core.server.EmbedServer : >>>>>>>>>>> xxl-job remoting server stop.
+2026-08-08 01:19:31.768  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Shutdown initiated...
+2026-08-08 01:19:31.773  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Shutdown completed.
+2026-08-08 01:19:31.792  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Shutdown initiated...
+2026-08-08 01:19:31.794  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Shutdown completed.
+2026-08-08 01:19:31.816  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry-remove fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 01:19:31.816  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job, executor registry thread destroy.
+2026-08-08 01:19:31.816  INFO [SpringApplicationShutdownHook] com.xxl.job.core.server.EmbedServer : >>>>>>>>>>> xxl-job remoting server destroy success.
+2026-08-08 01:19:31.816  INFO [xxl-job, executor JobLogFileCleanThread] com.xxl.job.core.thread.JobLogFileCleanThread : >>>>>>>>>>> xxl-job, executor JobLogFileCleanThread thread destroy.
+2026-08-08 01:19:31.817  INFO [xxl-job, executor TriggerCallbackThread] com.xxl.job.core.thread.TriggerCallbackThread : >>>>>>>>>>> xxl-job, executor callback thread destroy.
+2026-08-08 01:19:31.817  INFO [Thread-3] com.xxl.job.core.thread.TriggerCallbackThread : >>>>>>>>>>> xxl-job, executor retry callback thread destroy.
+2026-08-08 01:19:31.818  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Shutdown initiated...
+2026-08-08 01:19:31.819  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Shutdown completed.
+2026-08-08 01:19:31.820  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Shutdown initiated...
+2026-08-08 01:19:31.821  INFO [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Shutdown completed.
+2026-08-08 09:42:10.085  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : Starting CrawlerWorkerApplication using Java 21.0.11 with PID 21665 (/Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new/crawler-worker/target/classes started by null in /Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new)
+2026-08-08 09:42:10.088  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : No active profile set, falling back to 1 default profile: "default"
+2026-08-08 09:42:11.255  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8080 (http)
+2026-08-08 09:42:11.265  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-08 09:42:11.267  INFO [main] org.apache.catalina.core.StandardService : Starting service [Tomcat]
+2026-08-08 09:42:11.267  INFO [main] org.apache.catalina.core.StandardEngine : Starting Servlet engine: [Apache Tomcat/10.1.20]
+2026-08-08 09:42:11.308  INFO [main] o.a.c.core.ContainerBase.[Tomcat].[localhost].[/] : Initializing Spring embedded WebApplicationContext
+2026-08-08 09:42:11.308  INFO [main] o.s.b.w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1178 ms
+2026-08-08 09:42:11.890  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Starting...
+2026-08-08 09:42:11.952  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:42:11.952  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:42:12.286  INFO [main] com.zaxxer.hikari.pool.HikariPool : HikariPool-1 - Added connection com.clickhouse.jdbc.internal.ClickHouseConnectionImpl@6eeb29c0
+2026-08-08 09:42:12.288  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Start completed.
+2026-08-08 09:42:12.390  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:42:12.390  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:42:12.487  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:42:12.487  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:42:12.581  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:42:12.581  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:42:12.682  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:42:12.683  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:42:12.774  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Starting ProtocolHandler ["http-nio-8080"]
+2026-08-08 09:42:12.793  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http) with context path ''
+2026-08-08 09:42:12.809  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : Started CrawlerWorkerApplication in 3.292 seconds (process running for 4.467)
+2026-08-08 09:42:12.841  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:42:18.876 ERROR [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Exception during pool initialization.
+org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectOne(DefaultSqlSession.java:75)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectOne(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectOne(SqlSessionTemplate.java:160)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:87)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy66.selectById(Unknown Source)
+	at com.dunwugudao.crawler.worker.heartbeat.CrawlNodeHeartbeat.heartbeat(CrawlNodeHeartbeat.java:45)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.SocketException: Connection reset
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 51 common frames omitted
+2026-08-08 09:42:18.880 ERROR [scheduling-1] o.s.s.support.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+org.mybatis.spring.MyBatisSystemException: null
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:97)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectOne(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectOne(SqlSessionTemplate.java:160)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:87)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy66.selectById(Unknown Source)
+	at com.dunwugudao.crawler.worker.heartbeat.CrawlNodeHeartbeat.heartbeat(CrawlNodeHeartbeat.java:45)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.ibatis.exceptions.PersistenceException: 
+### Error querying database.  Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+### The error may exist in com/dunwugudao/crawler/persistence/mapper/CrawlNodeMapper.java (best guess)
+### The error may involve com.dunwugudao.crawler.persistence.mapper.CrawlNodeMapper.selectById
+### The error occurred while executing a query
+### Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.apache.ibatis.exceptions.ExceptionFactory.wrapException(ExceptionFactory.java:30)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:156)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectOne(DefaultSqlSession.java:75)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 21 common frames omitted
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:84)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	... 27 common frames omitted
+Caused by: org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	... 37 common frames omitted
+Caused by: java.net.SocketException: Connection reset
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 51 common frames omitted
+2026-08-08 09:42:18.881  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:42:24.886 ERROR [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Exception during pool initialization.
+org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:304)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:24.887 ERROR [scheduling-1] o.s.s.support.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+org.mybatis.spring.MyBatisSystemException: null
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:97)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.ibatis.exceptions.PersistenceException: 
+### Error querying database.  Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+### The error may exist in com/dunwugudao/crawler/persistence/mapper/CrawlTaskMapper.java (best guess)
+### The error may involve com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper.claim
+### The error occurred while executing a query
+### Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.apache.ibatis.exceptions.ExceptionFactory.wrapException(ExceptionFactory.java:30)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:156)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 23 common frames omitted
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:84)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	... 28 common frames omitted
+Caused by: org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	... 38 common frames omitted
+Caused by: java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:304)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:29.888  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:42:35.895 ERROR [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Exception during pool initialization.
+org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:304)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:35.896 ERROR [scheduling-1] o.s.s.support.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+org.mybatis.spring.MyBatisSystemException: null
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:97)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.ibatis.exceptions.PersistenceException: 
+### Error querying database.  Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+### The error may exist in com/dunwugudao/crawler/persistence/mapper/CrawlTaskMapper.java (best guess)
+### The error may involve com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper.claim
+### The error occurred while executing a query
+### Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.apache.ibatis.exceptions.ExceptionFactory.wrapException(ExceptionFactory.java:30)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:156)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 23 common frames omitted
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:84)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	... 28 common frames omitted
+Caused by: org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	... 38 common frames omitted
+Caused by: java.net.SocketTimeoutException: Read timed out
+	at java.base/sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:304)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:40.897  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:42:46.900 ERROR [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Exception during pool initialization.
+org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.net.SocketException: Connection reset
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:46.901 ERROR [scheduling-1] o.s.s.support.TaskUtils$LoggingErrorHandler : Unexpected error occurred in scheduled task
+org.mybatis.spring.MyBatisSystemException: null
+	at org.mybatis.spring.MyBatisExceptionTranslator.translateExceptionIfPossible(MyBatisExceptionTranslator.java:97)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:439)
+	at jdk.proxy2/jdk.proxy2.$Proxy63.selectList(Unknown Source)
+	at org.mybatis.spring.SqlSessionTemplate.selectList(SqlSessionTemplate.java:224)
+	at org.apache.ibatis.binding.MapperMethod.executeForMany(MapperMethod.java:147)
+	at org.apache.ibatis.binding.MapperMethod.execute(MapperMethod.java:80)
+	at org.apache.ibatis.binding.MapperProxy$PlainMethodInvoker.invoke(MapperProxy.java:141)
+	at org.apache.ibatis.binding.MapperProxy.invoke(MapperProxy.java:86)
+	at jdk.proxy2/jdk.proxy2.$Proxy68.claim(Unknown Source)
+	at com.dunwugudao.crawler.persistence.service.ClaimService.claim(ClaimService.java:32)
+	at com.dunwugudao.crawler.worker.scheduler.ClaimLoop.run(ClaimLoop.java:58)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124)
+	at io.micrometer.observation.Observation.observe(Observation.java:499)
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124)
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.runAndReset$$$capture(FutureTask.java:358)
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: org.apache.ibatis.exceptions.PersistenceException: 
+### Error querying database.  Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+### The error may exist in com/dunwugudao/crawler/persistence/mapper/CrawlTaskMapper.java (best guess)
+### The error may involve com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper.claim
+### The error occurred while executing a query
+### Cause: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.apache.ibatis.exceptions.ExceptionFactory.wrapException(ExceptionFactory.java:30)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:156)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:147)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:142)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.mybatis.spring.SqlSessionTemplate$SqlSessionInterceptor.invoke(SqlSessionTemplate.java:425)
+	... 23 common frames omitted
+Caused by: org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:84)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.openConnection(SpringManagedTransaction.java:80)
+	at org.mybatis.spring.transaction.SpringManagedTransaction.getConnection(SpringManagedTransaction.java:67)
+	at org.apache.ibatis.executor.BaseExecutor.getConnection(BaseExecutor.java:348)
+	at org.apache.ibatis.executor.SimpleExecutor.prepareStatement(SimpleExecutor.java:89)
+	at org.apache.ibatis.executor.SimpleExecutor.doQuery(SimpleExecutor.java:64)
+	at org.apache.ibatis.executor.BaseExecutor.queryFromDatabase(BaseExecutor.java:336)
+	at org.apache.ibatis.executor.BaseExecutor.query(BaseExecutor.java:158)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:110)
+	at org.apache.ibatis.executor.CachingExecutor.query(CachingExecutor.java:90)
+	at org.apache.ibatis.session.defaults.DefaultSqlSession.selectList(DefaultSqlSession.java:154)
+	... 28 common frames omitted
+Caused by: org.postgresql.util.PSQLException: 尝试连线已失败。
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:358)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:54)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:273)
+	at org.postgresql.Driver.makeConnection(Driver.java:446)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112)
+	at org.springframework.jdbc.datasource.DataSourceUtils.fetchConnection(DataSourceUtils.java:160)
+	at org.springframework.jdbc.datasource.DataSourceUtils.doGetConnection(DataSourceUtils.java:118)
+	at org.springframework.jdbc.datasource.DataSourceUtils.getConnection(DataSourceUtils.java:81)
+	... 38 common frames omitted
+Caused by: java.net.SocketException: Connection reset
+	at java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)
+	at java.base/sun.nio.ch.NioSocketImpl.read(NioSocketImpl.java:346)
+	at java.base/sun.nio.ch.NioSocketImpl$1.read(NioSocketImpl.java:796)
+	at java.base/java.net.Socket$SocketInputStream.read(Socket.java:1099)
+	at org.postgresql.core.VisibleBufferedInputStream.readMore(VisibleBufferedInputStream.java:162)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:129)
+	at org.postgresql.core.VisibleBufferedInputStream.ensureBytes(VisibleBufferedInputStream.java:114)
+	at org.postgresql.core.VisibleBufferedInputStream.read(VisibleBufferedInputStream.java:74)
+	at org.postgresql.core.PGStream.receiveChar(PGStream.java:467)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.enableSSL(ConnectionFactoryImpl.java:594)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:195)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:262)
+	... 52 common frames omitted
+2026-08-08 09:42:48.882  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:42:49.089  INFO [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@e453788
+2026-08-08 09:42:49.089  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Start completed.
+2026-08-08 09:43:14.579  INFO [main] c.dunwugudao.crawler.admin.CrawlerAdminApplication : Starting CrawlerAdminApplication using Java 21.0.11 with PID 21684 (/Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new/crawler-admin/target/classes started by null in /Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new)
+2026-08-08 09:43:14.582  INFO [main] c.dunwugudao.crawler.admin.CrawlerAdminApplication : No active profile set, falling back to 1 default profile: "default"
+2026-08-08 09:43:15.959  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8081 (http)
+2026-08-08 09:43:15.973  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Initializing ProtocolHandler ["http-nio-8081"]
+2026-08-08 09:43:15.974  INFO [main] org.apache.catalina.core.StandardService : Starting service [Tomcat]
+2026-08-08 09:43:15.975  INFO [main] org.apache.catalina.core.StandardEngine : Starting Servlet engine: [Apache Tomcat/10.1.20]
+2026-08-08 09:43:16.021  INFO [main] o.a.c.core.ContainerBase.[Tomcat].[localhost].[/] : Initializing Spring embedded WebApplicationContext
+2026-08-08 09:43:16.021  INFO [main] o.s.b.w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1187 ms
+2026-08-08 09:43:16.439  INFO [main] com.dunwugudao.crawler.admin.seed.ProxyManager : [ProxyManager] 初始化完成(proxyProvider=QgLongTermProxyProvider, maxRetries=10, client=EastmoneyClient)
+2026-08-08 09:43:16.467  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Starting...
+2026-08-08 09:43:16.521  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:16.521  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:16.759  INFO [main] com.zaxxer.hikari.pool.HikariPool : HikariPool-1 - Added connection com.clickhouse.jdbc.internal.ClickHouseConnectionImpl@485c84d7
+2026-08-08 09:43:16.760  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Start completed.
+2026-08-08 09:43:16.865  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:16.865  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:16.975  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:16.975  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:17.093  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:17.094  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:17.196  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:17.196  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:17.342  INFO [main] com.xxl.job.core.executor.XxlJobExecutor : >>>>>>>>>>> xxl-job register jobhandler success, name:retryScan, jobHandler:com.xxl.job.core.handler.impl.MethodJobHandler@3e998033[class com.dunwugudao.crawler.admin.job.XxlJobHandlers#retryScan]
+2026-08-08 09:43:17.342  INFO [main] com.xxl.job.core.executor.XxlJobExecutor : >>>>>>>>>>> xxl-job register jobhandler success, name:dailyCloseSeed, jobHandler:com.xxl.job.core.handler.impl.MethodJobHandler@e1a150c[class com.dunwugudao.crawler.admin.job.XxlJobHandlers#dailyCloseSeed]
+2026-08-08 09:43:17.342  INFO [main] com.xxl.job.core.executor.XxlJobExecutor : >>>>>>>>>>> xxl-job register jobhandler success, name:chainDragonDetails, jobHandler:com.xxl.job.core.handler.impl.MethodJobHandler@527d5e48[class com.dunwugudao.crawler.admin.job.XxlJobHandlers#chainDragonDetails]
+2026-08-08 09:43:17.342  INFO [main] com.xxl.job.core.executor.XxlJobExecutor : >>>>>>>>>>> xxl-job register jobhandler success, name:historyBackfill, jobHandler:com.xxl.job.core.handler.impl.MethodJobHandler@407b41e6[class com.dunwugudao.crawler.admin.job.XxlJobHandlers#historyBackfill]
+2026-08-08 09:43:17.370  WARN [main] com.xxl.job.core.executor.XxlJobExecutor : >>>>>>>>>>> xxl-job accessToken is empty. To ensure system security, please set the accessToken.
+2026-08-08 09:43:17.381  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Starting ProtocolHandler ["http-nio-8081"]
+2026-08-08 09:43:17.390  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat started on port 8081 (http) with context path ''
+2026-08-08 09:43:17.411  INFO [main] c.dunwugudao.crawler.admin.CrawlerAdminApplication : Started CrawlerAdminApplication in 3.604 seconds (process running for 4.573)
+2026-08-08 09:43:17.555  INFO [Thread-4] com.xxl.job.core.server.EmbedServer : >>>>>>>>>>> xxl-job remoting server start success, nettype = class com.xxl.job.core.server.EmbedServer, port = 9999
+2026-08-08 09:43:17.650  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:43:31.947  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : Starting CrawlerWorkerApplication using Java 21.0.11 with PID 21702 (/Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new/crawler-worker/target/classes started by null in /Users/null/Myself/stock/dunwugudao/爬虫项目/github/crawler-backend-new)
+2026-08-08 09:43:31.949  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : No active profile set, falling back to 1 default profile: "default"
+2026-08-08 09:43:33.330  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8080 (http)
+2026-08-08 09:43:33.342  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-08 09:43:33.344  INFO [main] org.apache.catalina.core.StandardService : Starting service [Tomcat]
+2026-08-08 09:43:33.345  INFO [main] org.apache.catalina.core.StandardEngine : Starting Servlet engine: [Apache Tomcat/10.1.20]
+2026-08-08 09:43:33.391  INFO [main] o.a.c.core.ContainerBase.[Tomcat].[localhost].[/] : Initializing Spring embedded WebApplicationContext
+2026-08-08 09:43:33.391  INFO [main] o.s.b.w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1373 ms
+2026-08-08 09:43:33.935  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Starting...
+2026-08-08 09:43:33.996  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:33.997  INFO [main] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:34.232  INFO [main] com.zaxxer.hikari.pool.HikariPool : HikariPool-1 - Added connection com.clickhouse.jdbc.internal.ClickHouseConnectionImpl@1fb6b8fb
+2026-08-08 09:43:34.236  INFO [main] com.zaxxer.hikari.HikariDataSource : HikariPool-1 - Start completed.
+2026-08-08 09:43:34.342  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:34.342  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:34.437  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:34.438  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:34.538  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:34.538  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:34.654  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:43:34.654  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:43:34.797  INFO [main] org.apache.coyote.http11.Http11NioProtocol : Starting ProtocolHandler ["http-nio-8080"]
+2026-08-08 09:43:34.811  INFO [main] o.s.boot.web.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http) with context path ''
+2026-08-08 09:43:34.821  INFO [main] c.d.crawler.worker.CrawlerWorkerApplication : Started CrawlerWorkerApplication in 4.066 seconds (process running for 4.991)
+2026-08-08 09:43:34.844  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Starting...
+2026-08-08 09:43:35.053  INFO [scheduling-1] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@126f0dda
+2026-08-08 09:43:35.053  INFO [scheduling-1] com.zaxxer.hikari.HikariDataSource : HikariPool-2 - Start completed.
+2026-08-08 09:43:47.810  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:44:17.894  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:44:47.969  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:45:18.039  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:45:48.115  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:46:18.187  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:46:48.265  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:47:18.339  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:47:48.411  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:48:18.480  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:48:48.549  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:49:18.638  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:49:48.714  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:50:18.793  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:50:48.882  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:51:18.959  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:51:49.039  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:52:19.109  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:52:49.178  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:53:19.273  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:53:49.343  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:54:19.412  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:54:49.488  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:54:58.376  INFO [http-nio-8081-exec-1] o.a.c.core.ContainerBase.[Tomcat].[localhost].[/] : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-08-08 09:54:58.376  INFO [http-nio-8081-exec-1] org.springframework.web.servlet.DispatcherServlet : Initializing Servlet 'dispatcherServlet'
+2026-08-08 09:54:58.380  INFO [http-nio-8081-exec-1] org.springframework.web.servlet.DispatcherServlet : Completed initialization in 4 ms
+2026-08-08 09:54:59.742  WARN [http-nio-8081-exec-1] c.c.jdbc.internal.SqlBasedPreparedStatement : Please consider to use one and only one values expression, for example: use 'values(?)' instead of 'values(?),(?)'.
+2026-08-08 09:55:01.040  WARN [http-nio-8081-exec-1] c.c.jdbc.internal.SqlBasedPreparedStatement : Please consider to use one and only one values expression, for example: use 'values(?)' instead of 'values(?),(?)'.
+2026-08-08 09:55:02.230  WARN [http-nio-8081-exec-1] c.c.jdbc.internal.SqlBasedPreparedStatement : Please consider to use one and only one values expression, for example: use 'values(?)' instead of 'values(?),(?)'.
+2026-08-08 09:55:03.352  WARN [http-nio-8081-exec-1] c.c.jdbc.internal.SqlBasedPreparedStatement : Please consider to use one and only one values expression, for example: use 'values(?)' instead of 'values(?),(?)'.
+2026-08-08 09:55:03.432  WARN [http-nio-8081-exec-1] c.c.jdbc.internal.SqlBasedPreparedStatement : Please consider to use one and only one values expression, for example: use 'values(?)' instead of 'values(?),(?)'.
+2026-08-08 09:55:03.468  INFO [http-nio-8081-exec-1] c.d.crawler.admin.seed.TradeCalendarSeeder : TradeCalendarSeeder.seedRange: from=2020-01-01, to=2030-12-31, days=4018, source=1
+2026-08-08 09:55:19.563  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:55:49.636  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:56:19.709  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:56:49.795  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:57:19.872  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:57:49.944  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:58:16.845  WARN [HikariPool-1 housekeeper] com.zaxxer.hikari.pool.HikariPool : HikariPool-1 - Retrograde clock change detected (housekeeper delta=29s813ms), soft-evicting connections from pool.
+2026-08-08 09:58:16.848  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:16.848  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:16.951  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:16.952  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:17.054  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:17.054  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:17.168  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:17.168  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:17.268  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:17.268  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:19.823  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:58:34.258  WARN [HikariPool-1 housekeeper] com.zaxxer.hikari.pool.HikariPool : HikariPool-1 - Retrograde clock change detected (housekeeper delta=29s811ms), soft-evicting connections from pool.
+2026-08-08 09:58:34.264  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:34.264  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:34.361  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:34.361  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:34.476  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:34.477  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:34.577  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:34.577  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:34.694  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 09:58:34.694  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 09:58:35.075  WARN [HikariPool-2 housekeeper] com.zaxxer.hikari.pool.HikariPool : HikariPool-2 - Retrograde clock change detected (housekeeper delta=29s815ms), soft-evicting connections from pool.
+2026-08-08 09:58:49.894  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:59:19.970  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 09:59:50.052  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:00:20.145  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:00:50.217  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:01:20.307  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:01:50.528  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:02:20.601  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:02:50.676  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:03:20.742  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:03:50.811  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:04:20.891  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:04:50.980  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:05:21.046  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:05:51.119  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:06:21.189  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:06:51.258  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:07:21.335  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:07:51.418  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:08:21.486  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:08:51.560  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:09:21.652  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:09:51.726  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:10:21.813  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:10:51.882  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:11:21.950  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:11:52.020  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:12:22.092  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:12:52.158  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:13:22.257  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:13:52.320  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:14:22.393  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:14:52.591  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:15:22.662  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:15:52.739  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:16:22.964  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:16:54.119  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:17:24.191  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:17:54.259  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:18:24.333  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:18:54.407  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:19:24.479  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:19:54.548  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:20:24.613  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:20:54.714  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:21:24.787  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:21:54.871  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:22:24.949  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:22:55.022  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:23:25.100  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:23:55.171  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:24:25.241  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:24:55.327  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:25:25.412  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:25:55.480  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:26:25.551  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:26:55.623  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:27:25.705  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:27:39.354  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:27:39.354  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:27:53.914  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:27:53.914  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:27:55.792  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:28:02.557  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:02.557  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:04.593  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:04.593  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:06.942  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:06.942  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:07.560  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:07.560  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:16.030  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:16.030  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:22.717  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:22.717  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:25.876  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:28:27.436  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:27.436  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:29.276  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection TTL: 0 ms
+2026-08-08 10:28:29.276  INFO [HikariPool-1 connection adder] c.clickhouse.client.http.ApacheHttpConnectionImpl : Connection reuse strategy: LIFO
+2026-08-08 10:28:55.941  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:29:26.008  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:29:56.081  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:30:26.149  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:30:56.219  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:31:26.285  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:31:56.356  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:32:26.427  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:32:56.501  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
+2026-08-08 10:33:26.572  INFO [xxl-job, executor ExecutorRegistryThread] com.xxl.job.core.thread.ExecutorRegistryThread : >>>>>>>>>>> xxl-job registry fail, registryParam:RegistryParam{registryGroup='EXECUTOR', registryKey='crawler-admin-executor', registryValue='http://192.168.1.6:9999/'}, registryResult:ReturnT [code=500, msg=invalid request, accessToken or appname is empty., content=null]
