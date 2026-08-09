@@ -80,13 +80,20 @@ public final class EastmoneyEndpoints {
                 case KLINE: {
                     String secid = secidFor(taskType, params);
                     String klt = "STOCK_WEEKLY".equals(taskType) ? "102" : "101";
-                    String date = String.valueOf(params.getOrDefault("date", params.getOrDefault("tradeDate", "")));
-                    String lmt = String.valueOf(params.getOrDefault("lmt", "1"));
+                    // 严格按 market 项目 URL 格式：ut + cb + _ + lmt=50000 + end=20500101（固定值，不从 params 读）
+                    String cb = "jQuery" + System.currentTimeMillis() + "_" + new Random().nextLong();
+                    long ts = System.currentTimeMillis();
                     return baseUrl
-                            + "?secid=" + secid + "&klt=" + klt + "&fqt=0"
-                            + "&fields1=f1,f2,f3,f4,f5,f6"
-                            + "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-                            + "&end=" + date + "&lmt=" + lmt;
+                            + "?cb=" + cb
+                            + "&secid=" + secid
+                            + "&ut=fa5fd1943c7b386f172d6893dbfba10b"
+                            + "&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6"
+                            + "&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61"
+                            + "&klt=" + klt
+                            + "&fqt=0"
+                            + "&end=20500101"
+                            + "&lmt=50000"
+                            + "&_=" + ts;
                 }
                 case CLIST: {
                     String fsVal;
@@ -375,7 +382,7 @@ public final class EastmoneyEndpoints {
             }
             return s;
         }
-        String ts = String.valueOf(params.get("tsCode")); // 形如 600000.SH
+        String ts = String.valueOf(params.get("tsCode"));
         String market;
         if (ts.endsWith(".SH")) {
             market = "1";
@@ -384,7 +391,23 @@ public final class EastmoneyEndpoints {
         } else if (ts.endsWith(".CSI")) {
             market = "1";
         } else {
-            market = "1"; // 兜底，真实场景应由 seed 保证后缀
+            // 无后缀：优先读 params 中的 isHs（market 项目逻辑：0=深市 1=沪市）
+            Object isHs = params.get("isHs");
+            if (isHs != null) {
+                market = String.valueOf(isHs);
+            } else {
+                // 兜底：按代码前缀判断
+                String code = ts.contains(".") ? ts.substring(0, ts.indexOf('.')) : ts;
+                if (code.startsWith("6") || code.startsWith("11")) {
+                    market = "1"; // 沪市（60xxxx 主板 / 11xxxx 科创板）
+                } else if (code.startsWith("0") || code.startsWith("3") || code.startsWith("12") || code.startsWith("13")) {
+                    market = "0"; // 深市（00xxxx 主板 / 30xxxx 创业板 / 12xxxx 可转债 / 13xxxx）
+                } else if (code.startsWith("8") || code.startsWith("4")) {
+                    market = "0"; // 北交所
+                } else {
+                    market = "1"; // 兜底
+                }
+            }
         }
         String code = ts.contains(".") ? ts.substring(0, ts.indexOf('.')) : ts;
         return market + "." + code;

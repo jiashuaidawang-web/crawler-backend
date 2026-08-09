@@ -9,6 +9,8 @@ import com.dunwugudao.crawler.strategy.eastmoney.WorkerProxyManager;
 import com.dunwugudao.crawler.strategy.tonghuashun.BrowserPool;
 import com.dunwugudao.crawler.strategy.tonghuashun.CloakServerProcess;
 import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateCrawler;
+import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateDirectCrawler;
+import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateDirectStrategy;
 import com.dunwugudao.crawler.strategy.tonghuashun.TonghuashunBrowserStrategy;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;

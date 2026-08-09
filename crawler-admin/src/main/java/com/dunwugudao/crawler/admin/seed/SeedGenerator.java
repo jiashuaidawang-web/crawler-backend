@@ -44,7 +44,8 @@ import java.util.Set;
 public class SeedGenerator {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final int BATCH = 500;
+    /** 批次大小：STOCK_DAILY_HISTORY 用 100（避免 UNION ALL 过大导致 PG 解析慢） */
+    private static final int BATCH = 100;
 
     /** LIMIT_POOL 拆成的三个子任务 */
     private static final List<String> LIMIT_SUBTYPES =
@@ -728,35 +729,49 @@ public class SeedGenerator {
     /**
      * 个股日K历史回填（断点续传）。
      * <p>从 stock_daily 取全量股票（distinct ts_code），每只股票一个任务：
-     * push2his kline, lmt=20000（约 80 年，覆盖 A 股全历史），一次拿满。</p>
+     * push2his kline, lmt=50000（约 80 年，覆盖 A 股全历史），一次拿满。</p>
      * <p>断点续传：{@code crawl_stock_backfill_status} 记录每只股票进度，
      * 已是 SUCCESS 的股票自动跳过；重启后从断点继续。</p>
      *
      * @param source 数据源（1=东财）
-     * @param end    截止日期（yyyy-MM-dd），通常填今天
-     * @param lmt    拉取天数上限（默认 20000，约 80 年）
+     * @param lmt    拉取天数上限（默认 50000，约 80 年）
+     * @param tsCode 指定股票代码（如 "300976"），为空则跑全量
      * @return 新插入的任务数
      */
-    public int backfillDailyHistory(int source, String end, int lmt) {
+    public int backfillDailyHistory(int source, int lmt, String tsCode) {
         // 1. 全量股票：从 stock_daily 取 distinct ts_code
         List<String> allCodes = stockDailyMapper.selectDistinctTsCode();
         if (allCodes == null || allCodes.isEmpty()) {
             log.warn("[backfillDailyHistory] stock_daily 无股票数据，跳过");
             return 0;
         }
-        log.info("[backfillDailyHistory] 全量股票 {} 只，end={}, lmt={}", allCodes.size(), end, lmt);
 
-        // 2. 过滤：排除已是 SUCCESS 的股票（断点续传）
-        List<String> pendingCodes = new ArrayList<>();
-        for (String tsCode : allCodes) {
-            StockBackfillStatus st = backfillStatusMapper.selectByTsCode(tsCode);
-            if (st != null && "SUCCESS".equals(st.getStatus())) {
-                continue; // 已回填成功，跳过
+        // 2. 如果指定了 tsCode，只跑这一只
+        List<String> pendingCodes;
+        if (tsCode != null && !tsCode.isBlank()) {
+            String code = tsCode.trim();
+            if (!allCodes.contains(code)) {
+                log.warn("[backfillDailyHistory] stock_daily 中无该股票: {}", code);
+                return 0;
             }
-            pendingCodes.add(tsCode);
+            pendingCodes = List.of(code);
+            log.info("[backfillDailyHistory] 指定单只股票 {}, lmt={}", code, lmt);
+        } else {
+            // 全量：排除已是 SUCCESS 的股票（断点续传）
+            List<String> successCodes = backfillStatusMapper.selectSuccessCodes();
+            java.util.Set<String> successSet = successCodes == null ? java.util.Set.of() : new java.util.HashSet<>(successCodes);
+            log.info("[backfillDailyHistory] 全量股票 {} 只，已 SUCCESS {} 只", allCodes.size(), successSet.size());
+
+            pendingCodes = new ArrayList<>();
+            for (String c : allCodes) {
+                if (successSet.contains(c)) {
+                    continue;
+                }
+                pendingCodes.add(c);
+            }
+            log.info("[backfillDailyHistory] 需回填 {} 只（跳过 {} 只已 SUCCESS）",
+                    pendingCodes.size(), allCodes.size() - pendingCodes.size());
         }
-        log.info("[backfillDailyHistory] 需回填 {} 只（跳过 {} 只已 SUCCESS）",
-                pendingCodes.size(), allCodes.size() - pendingCodes.size());
         if (pendingCodes.isEmpty()) {
             return 0;
         }
@@ -764,25 +779,41 @@ public class SeedGenerator {
         // 3. 初始化进度表（幂等，已存在则忽略）+ 下发任务
         int inserted = 0;
         List<CrawlTask> batch = new ArrayList<>(BATCH);
-        for (String tsCode : pendingCodes) {
-            backfillStatusMapper.insertIfAbsent(tsCode); // 进度表幂等初始化
-            String params = buildDailyHistoryParams(tsCode, end, lmt);
-            CrawlTask task = buildTask("STOCK_DAILY_HISTORY", source, end, tsCode, 1, params);
-            task.setUniqueKey("STOCK_DAILY_HISTORY|" + source + "|" + tsCode);
+        List<String> statusInitBatch = new ArrayList<>(BATCH);
+        for (String code : pendingCodes) {
+            statusInitBatch.add(code);
+            int isHs = isHsByCode(code); // 按代码前缀判断 market
+            String params = buildDailyHistoryParams(code, isHs, lmt);
+            CrawlTask task = buildTask("STOCK_DAILY_HISTORY", source, "", code, 1, params);
+            task.setUniqueKey("STOCK_DAILY_HISTORY|" + source + "|" + code);
             batch.add(task);
             if (batch.size() >= BATCH) {
+                backfillStatusMapper.batchInsertIfAbsent(statusInitBatch); // 进度表幂等初始化
+                statusInitBatch.clear();
                 inserted += flush(batch);
                 batch.clear();
             }
+        }
+        if (!statusInitBatch.isEmpty()) {
+            backfillStatusMapper.batchInsertIfAbsent(statusInitBatch);
         }
         inserted += flush(batch);
         log.info("[backfillDailyHistory] 下发 {} 个日K历史回填任务", inserted);
         return inserted;
     }
 
-    /** 个股日K历史回填 params：{"tsCode":"CODE","end":"YYYY-MM-DD","lmt":20000} */
-    private String buildDailyHistoryParams(String tsCode, String end, int lmt) {
-        return "{\"tsCode\":\"" + tsCode + "\",\"end\":\"" + end + "\",\"lmt\":" + lmt + "}";
+    /** 按股票代码前缀判断是否沪市：1=沪市 0=深市/北交所（market 项目逻辑）。 */
+    private int isHsByCode(String tsCode) {
+        String code = tsCode.contains(".") ? tsCode.substring(0, tsCode.indexOf('.')) : tsCode;
+        if (code.startsWith("6") || code.startsWith("11")) {
+            return 1; // 沪市（60xxxx 主板 / 11xxxx 科创板）
+        }
+        return 0; // 深市/北交所（00xxxx/30xxxx/12xxxx/13xxxx/8xxxx/4xxxx）
+    }
+
+    /** 个股日K历史回填 params：{"tsCode":"300976","isHs":0,"lmt":50000} */
+    private String buildDailyHistoryParams(String tsCode, int isHs, int lmt) {
+        return "{\"tsCode\":\"" + tsCode + "\",\"isHs\":" + isHs + ",\"lmt\":" + lmt + "}";
     }
 
     private int backfillMarketWide(String date, int source, List<String> typeFilter) {

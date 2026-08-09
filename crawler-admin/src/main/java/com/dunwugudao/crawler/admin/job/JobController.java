@@ -166,21 +166,22 @@ public class JobController {
 
     /**
      * 个股日K历史回填（断点续传）。
-     * <p>从 stock_daily 取全量股票，每只股票一个任务（push2his kline, lmt 拿满历史）。
+     * <p>从 stock_daily 取全量股票，每只股票一个任务（push2his kline, lmt=50000 拿满历史）。
      * 进度记在 crawl_stock_backfill_status，已是 SUCCESS 的股票自动跳过。</p>
-     * <p>示例：POST /api/job/backfill-daily-history?end=2026-08-09&amp;lmt=20000</p>
+     * <p>示例：
+     *   全量：POST /api/job/backfill-daily-history?lmt=50000
+     *   单只：POST /api/job/backfill-daily-history?tsCode=300976&amp;lmt=50000</p>
      */
     @PostMapping("/backfill-daily-history")
     public Map<String, Object> backfillDailyHistory(
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate end,
             @RequestParam(required = false, defaultValue = "1") int source,
-            @RequestParam(required = false, defaultValue = "20000") int lmt) {
-        String e = (end == null ? LocalDate.now() : end).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        int inserted = seedGenerator.backfillDailyHistory(source, e, lmt);
+            @RequestParam(required = false, defaultValue = "50000") int lmt,
+            @RequestParam(required = false) String tsCode) {
+        int inserted = seedGenerator.backfillDailyHistory(source, lmt, tsCode);
         Map<String, Object> r = new HashMap<>();
         r.put("taskType", "STOCK_DAILY_HISTORY");
-        r.put("end", e);
         r.put("lmt", lmt);
+        r.put("tsCode", tsCode);
         r.put("inserted", inserted);
         return r;
     }

@@ -80,7 +80,7 @@ public class ClaimLoop {
         int maxRetry = entity.getMaxRetry() == null ? 3 : entity.getMaxRetry();
         ctx.setRetryPolicy(new ExponentialBackoffRetry(maxRetry, Duration.ofSeconds(2), Duration.ofMinutes(5)));
 
-        SourceStrategy strategy = strategyFactory.get(core.getSource());
+        SourceStrategy strategy = strategyFactory.get(core.getSource(), core.getTaskType());
         LOG.info("[ strategy={}", strategy.getClass().getSimpleName());   // TODO M6
 
         CrawlLog log = new CrawlLog();

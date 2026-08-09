@@ -13,6 +13,14 @@ public interface SourceStrategy {
     /** 该策略是否支持给定来源。 */
     boolean supports(SourceType source);
 
+    /**
+     * 该策略是否支持给定任务类型(可选,用于同一 source 下多种任务类型的路由)。
+     * <p>默认返回 false,表示不参与 taskType 路由(只按 source 匹配)。</p>
+     */
+    default boolean supports(String taskType) {
+        return false;
+    }
+
     /** 执行抓取，返回结构化结果。 */
     CrawlResult fetch(CrawlContext ctx);
 }

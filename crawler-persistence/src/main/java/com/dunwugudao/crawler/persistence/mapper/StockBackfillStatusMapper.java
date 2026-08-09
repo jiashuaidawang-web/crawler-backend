@@ -32,6 +32,10 @@ public interface StockBackfillStatusMapper {
             "</script>")
     List<StockBackfillStatus> selectAll(@Param("status") String status);
 
+    /** 全部已是 SUCCESS 的 ts_code（用于批量过滤）。 */
+    @Select("SELECT ts_code FROM crawl_stock_backfill_status WHERE status = 'SUCCESS'")
+    List<String> selectSuccessCodes();
+
     /** 进度汇总：各状态股票数。 */
     @Select("SELECT status, count(*) AS cnt FROM crawl_stock_backfill_status GROUP BY status ORDER BY status")
     List<java.util.Map<String, Object>> countByStatus();

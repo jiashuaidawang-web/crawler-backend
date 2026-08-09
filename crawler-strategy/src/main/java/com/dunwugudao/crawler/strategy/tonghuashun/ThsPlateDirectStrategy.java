@@ -31,6 +31,11 @@ public class ThsPlateDirectStrategy implements SourceStrategy {
     }
 
     @Override
+    public boolean supports(String taskType) {
+        return "THS_PLATE_DIRECT".equals(taskType);
+    }
+
+    @Override
     public CrawlResult fetch(CrawlContext ctx) {
         CrawlTask task = ctx.getTask();
         Map<String, Object> params = JsonCheckpoint.deserialize(task.getParamsJson());
