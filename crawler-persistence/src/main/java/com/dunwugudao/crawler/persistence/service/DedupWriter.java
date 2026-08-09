@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * 去重 / 溯源写入层（能力4/8/9）—— ClickHouse 版。
@@ -188,7 +189,7 @@ public class DedupWriter {
                         boardCode, tradeDate, e.getMessage());
             }
         }
-        boardDailyMapper.batchInsert(batch);
+        insertInChunks(boardDailyMapper::batchInsert, batch, "board_daily", source);
     }
 
     /** 写入板块-个股关联（stock_board_rel）—— CK 版：批量追加，UNIQUE 约束由 ReplacingMergeTree 替代。 */
@@ -221,7 +222,7 @@ public class DedupWriter {
             batch.add(entity);
         }
         try {
-            stockBoardRelMapper.batchInsert(batch);
+            insertInChunks(stockBoardRelMapper::batchInsert, batch, "stock_board_rel", source);
         } catch (Exception e) {
             log.error("[writeStockBoardRel] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
             throw e;
@@ -349,7 +350,7 @@ public class DedupWriter {
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
         }
-        limitUpPoolMapper.batchInsert(batch);
+        insertInChunks(limitUpPoolMapper::batchInsert, batch, "limit_up_pool", source);
     }
 
     public void writeLimitDownPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
@@ -366,7 +367,7 @@ public class DedupWriter {
             e.setDays(intVal(r.get("days"))); e.setOc(intVal(r.get("oc")));
             batch.add(e);
         }
-        limitDownPoolMapper.batchInsert(batch);
+        insertInChunks(limitDownPoolMapper::batchInsert, batch, "limit_down_pool", source);
     }
 
     public void writeZhabanPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
@@ -383,7 +384,7 @@ public class DedupWriter {
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
         }
-        zhabanPoolMapper.batchInsert(batch);
+        insertInChunks(zhabanPoolMapper::batchInsert, batch, "zhaban_pool", source);
     }
 
     public void writeStrongPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
@@ -400,7 +401,7 @@ public class DedupWriter {
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
         }
-        strongPoolMapper.batchInsert(batch);
+        insertInChunks(strongPoolMapper::batchInsert, batch, "strong_pool", source);
     }
 
     public void writeCixinPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
@@ -418,7 +419,7 @@ public class DedupWriter {
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
         }
-        cixinPoolMapper.batchInsert(batch);
+        insertInChunks(cixinPoolMapper::batchInsert, batch, "cixin_pool", source);
     }
 
     /** 设置 5 个池子实体的公共字段。 */
@@ -552,7 +553,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        conceptMapper.batchInsert(batch);
+        insertInChunks(conceptMapper::batchInsert, batch, "concept", source);
     }
 
     /** 写入财务报表（financial）。 */
@@ -582,7 +583,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        financialMapper.batchInsert(batch);
+        insertInChunks(financialMapper::batchInsert, batch, "financial", source);
     }
 
     /** 写入北向资金（northbound_flow）。 */
@@ -607,7 +608,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        northboundFlowMapper.batchInsert(batch);
+        insertInChunks(northboundFlowMapper::batchInsert, batch, "northbound_flow", source);
     }
 
     /** 写入新闻/政策/题材事件（news_event）。 */
@@ -639,7 +640,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        newsEventMapper.batchInsert(batch);
+        insertInChunks(newsEventMapper::batchInsert, batch, "news_event", source);
     }
 
     /** 写入交易日历（trade_calendar）。 */
@@ -662,7 +663,7 @@ public class DedupWriter {
             e.setUpdateDate(java.sql.Timestamp.valueOf(now));
             batch.add(e);
         }
-        tradeCalendarMapper.batchInsert(batch);
+        insertInChunks(tradeCalendarMapper::batchInsert, batch, "trade_calendar", source);
     }
 
     // ----------------------------------------------------------------------
@@ -723,7 +724,7 @@ public class DedupWriter {
         // DEBUG: 写入汇总
         log.debug("[writeStockDaily] write batch: total={}, nullOpen={}, nullClose={}, source={}", batch.size(), nullOpenCount, nullCloseCount, source);
         try {
-            stockDailyMapper.batchInsert(batch);
+            insertInChunks(stockDailyMapper::batchInsert, batch, "stock_daily", source);
         } catch (Exception e) {
             log.error("[writeStockDaily] CK batchInsert failed, batch.size={}, source={}: {}", batch.size(), source, e.getMessage(), e);
             throw e;
@@ -768,7 +769,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        stockWeeklyMapper.batchInsert(batch);
+        insertInChunks(stockWeeklyMapper::batchInsert, batch, "stock_weekly", source);
     }
 
     /** 写入指数日线（index_daily）。 */
@@ -802,7 +803,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        indexDailyMapper.batchInsert(batch);
+        insertInChunks(indexDailyMapper::batchInsert, batch, "index_daily", source);
     }
 
     /** 写入主力资金流（main_fund_flow）。 */
@@ -837,7 +838,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        mainFundFlowMapper.batchInsert(batch);
+        insertInChunks(mainFundFlowMapper::batchInsert, batch, "main_fund_flow", source);
     }
 
     /** 写入龙虎榜（dragon_tiger）。 */
@@ -888,7 +889,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        dragonTigerMapper.batchInsert(batch);
+        insertInChunks(dragonTigerMapper::batchInsert, batch, "dragon_tiger", source);
     }
 
     /** 写入龙虎榜席位明细（dt_detail）。 */
@@ -919,7 +920,7 @@ public class DedupWriter {
             e.setUpdateDate(now);
             batch.add(e);
         }
-        dtDetailMapper.batchInsert(batch);
+        insertInChunks(dtDetailMapper::batchInsert, batch, "dt_detail", source);
     }
 
     private static String str(Object o) {
@@ -990,5 +991,27 @@ public class DedupWriter {
             }
         }
         return null;
+    }
+
+    /**
+     * 分片批量插入：把大 batch 按每批 {@code chunkSize} 行拆分后循环调 {@code inserter}，
+     * 避免单次 INSERT 参数过多触发 CK NOT_ENOUGH_SPACE，同时让 application.yml 的 batch 配置真正生效。
+     */
+    private <T> void insertInChunks(Consumer<List<T>> inserter, List<T> batch, String table, SourceType source) {
+        if (batch == null || batch.isEmpty()) {
+            return;
+        }
+        final int chunkSize = 100;
+        int total = batch.size();
+        int insertedChunks = 0;
+        for (int from = 0; from < total; from += chunkSize) {
+            int to = Math.min(from + chunkSize, total);
+            List<T> chunk = batch.subList(from, to);
+            inserter.accept(chunk);
+            insertedChunks++;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("[insertInChunks] table={}, total={}, chunks={}, chunkSize={}", table, total, insertedChunks, chunkSize);
+        }
     }
 }
