@@ -29,28 +29,21 @@ anti-crawl:
   rate-limit-per-sec: 5.0
   proxy-enabled: false
   ua-pool:
-    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   proxy-list: []
+  stealth-mode: CLOAK
+  cloak-humanize: true
+  cloak-local-port: 9222
+  cloak-serve-script: scripts/cloak_serve.py
 
 # 日志级别（排查数据问题时把 eastmoney / DedupWriter 改成 DEBUG）
 logging:
   level:
     com.dunwugudao.crawler.strategy.eastmoney: INFO
     com.dunwugudao.crawler.persistence.service.DedupWriter: INFO
-  # stealth-mode: SELF（默认，现状 JS 注入）| CLOAK（CloakBrowser CDP，C++ 源码级补丁）
-  # stealth-mode: SELF
-  # ---- CloakBrowser(CLOAK 模式)参数 ----
-  # 开启 CLOAK 模式只需取消下面这行注释：
-  # stealth-mode: CLOAK
-  # cloak-license-key: ""                # 免费 key：cloakbrowser.dev/github 登录获取；空=用 v146 公开版
-  # cloak-humanize: true                 # 人类化鼠标/键盘/滚动
-  # cloak-fingerprint-seed: ""           # 固定 seed=同一身份回访；空=每次随机
-  # cloak-local-port: 9222               # 本机 cloakserve 端口（自动拉起）
-  # cloak-serve-script: scripts/cloak_serve.py
-  # cloak-cdp-url: ""                    # 显式 CDP URL；空则按 cloak-local-port 拼 http://127.0.0.1:{port}
 
 # 代理配置(统一用青果短效)
 proxy:
   qg:
-    api-key: 8XMUHNWJ
-    password: 8104A84FB0FC
+    api-key: 1887746F
+    password: 4A752C090EE7

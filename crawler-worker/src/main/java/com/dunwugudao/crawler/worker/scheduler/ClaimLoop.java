@@ -12,6 +12,7 @@ import com.dunwugudao.crawler.core.util.JsonCheckpoint;
 import com.dunwugudao.crawler.persistence.entity.CrawlLog;
 import com.dunwugudao.crawler.persistence.mapper.CrawlLogMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockBackfillStatusMapper;
 import com.dunwugudao.crawler.persistence.service.ClaimService;
 import com.dunwugudao.crawler.persistence.service.DedupWriter;
 import com.dunwugudao.crawler.persistence.service.VolumeValidator;
@@ -23,8 +24,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 认领循环（分布式采集主循环）。
@@ -44,6 +47,7 @@ public class ClaimLoop {
     private final VolumeValidator volumeValidator;
     private final CrawlLogMapper crawlLogMapper;
     private final CrawlTaskMapper crawlTaskMapper;
+    private final StockBackfillStatusMapper backfillStatusMapper;
     private final AntiCrawlConfig antiCrawlConfig;
 
     @Value("${crawler.node-id:${HOSTNAME:worker-node}}")
@@ -103,6 +107,9 @@ public class ClaimLoop {
             claimService.complete(entity.getTaskId(), result.getRowCount(), System.currentTimeMillis() - start);
             LOG.info("[ complete ok");   // TODO M6
 
+            // 日K历史回填：更新进度表（最早/最晚日期 + 行数 + SUCCESS）
+            updateBackfillStatus(core, result.getData());
+
             log.setResultStatus("SUCCESS");
             log.setHttpStatus(result.getHttpStatus());
             log.setParseRows(result.getRowCount());
@@ -119,6 +126,8 @@ public class ClaimLoop {
             claimService.fail(entity.getTaskId(), e.getMessage(), willRetry);
             log.setResultStatus("FAIL");
             log.setErrorMsg(truncate(e.getMessage()));
+            // 日K历史回填失败：标记 FAILED（记录原因，断点续传时重置后可重跑）
+            markBackfillFailed(core, e.getMessage());
         } finally {
             log.setFinishedAt(LocalDateTime.now());
             log.setDurationMs(System.currentTimeMillis() - start);
@@ -154,5 +163,90 @@ public class ClaimLoop {
             return null;
         }
         return s.length() > 500 ? s.substring(0, 500) : s;
+    }
+
+    /**
+     * 日K历史回填成功：从写入行中算出最早/最晚日期，更新进度表为 SUCCESS。
+     * <p>非 STOCK_DAILY_HISTORY 任务直接忽略。</p>
+     */
+    private void updateBackfillStatus(CrawlTask task, List<Map<String, Object>> rows) {
+        if (task == null || !"STOCK_DAILY_HISTORY".equals(task.getTaskType())) {
+            return;
+        }
+        String tsCode = tsCodeFromParams(task.getParamsJson());
+        if (tsCode == null || tsCode.isEmpty()) {
+            return;
+        }
+        try {
+            // 从行中计算最早/最晚日期（kline 已按日期升序）
+            LocalDate earliest = null;
+            LocalDate latest = null;
+            if (rows != null) {
+                for (Map<String, Object> r : rows) {
+                    Object d = r.get("trade_date");
+                    LocalDate ld = toLocalDate(d);
+                    if (ld != null) {
+                        if (earliest == null || ld.isBefore(earliest)) earliest = ld;
+                        if (latest == null || ld.isAfter(latest)) latest = ld;
+                    }
+                }
+            }
+            int rowCount = (rows == null) ? 0 : rows.size();
+            backfillStatusMapper.markSuccess(tsCode, rowCount, earliest, latest);
+            LOG.info("[backfillStatus] SUCCESS tsCode={}, rows={}, earliest={}, latest={}",
+                    tsCode, rowCount, earliest, latest);
+        } catch (Exception e) {
+            LOG.warn("[backfillStatus] update failed tsCode={}, err={}", tsCode, e.getMessage());
+        }
+    }
+
+    /** 日K历史回填失败：标记 FAILED 并记录原因。 */
+    private void markBackfillFailed(CrawlTask task, String errorMsg) {
+        if (task == null || !"STOCK_DAILY_HISTORY".equals(task.getTaskType())) {
+            return;
+        }
+        String tsCode = tsCodeFromParams(task.getParamsJson());
+        if (tsCode == null || tsCode.isEmpty()) {
+            return;
+        }
+        try {
+            backfillStatusMapper.markFailed(tsCode, errorMsg != null && errorMsg.length() > 400
+                    ? errorMsg.substring(0, 400) : errorMsg);
+        } catch (Exception e) {
+            LOG.warn("[backfillStatus] markFailed failed tsCode={}, err={}", tsCode, e.getMessage());
+        }
+    }
+
+    /** 从 params_json 解析 tsCode（STOCK_DAILY_HISTORY 的 params 含 tsCode 字段）。 */
+    private String tsCodeFromParams(String paramsJson) {
+        if (paramsJson == null || paramsJson.isBlank()) {
+            return null;
+        }
+        try {
+            // 简单取值，避免引入 JSON 依赖：找 "tsCode":"xxx"
+            int i = paramsJson.indexOf("\"tsCode\"");
+            if (i < 0) return null;
+            int colon = paramsJson.indexOf(':', i);
+            int q1 = paramsJson.indexOf('"', colon + 1);
+            int q2 = paramsJson.indexOf('"', q1 + 1);
+            if (q1 < 0 || q2 < 0) return null;
+            return paramsJson.substring(q1 + 1, q2);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Object → LocalDate（支持 LocalDate / String yyyy-MM-dd）。 */
+    private LocalDate toLocalDate(Object o) {
+        if (o == null) return null;
+        if (o instanceof LocalDate ld) return ld;
+        if (o instanceof java.sql.Date d) return d.toLocalDate();
+        String s = o.toString();
+        if (s == null || s.isBlank() || "-".equals(s)) return null;
+        try {
+            return LocalDate.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

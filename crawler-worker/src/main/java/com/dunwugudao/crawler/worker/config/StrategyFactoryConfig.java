@@ -7,6 +7,8 @@ import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.QgLongTermProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.WorkerProxyManager;
 import com.dunwugudao.crawler.strategy.tonghuashun.BrowserPool;
+import com.dunwugudao.crawler.strategy.tonghuashun.CloakServerProcess;
+import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateCrawler;
 import com.dunwugudao.crawler.strategy.tonghuashun.TonghuashunBrowserStrategy;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -45,17 +47,36 @@ public class StrategyFactoryConfig {
         return eastmoneyOkHttpProxyManager(qgConfig);
     }
 
+    /**
+     * 青果代理提供者 —— CLOAK 浏览器用(同花顺)。
+     * <p>与 eastmoneyOkHttpProxyManager 共享同一份青果配置,但独立实例(各自维护自己的代理 IP)。</p>
+     */
+    @Bean
+    public ProxyProvider cloakProxyProvider(QgLongTermConfig qgConfig) {
+        return new QgLongTermProxyProvider(qgConfig.getApiKey(), qgConfig.getPassword());
+    }
+
     @Bean
     public StrategyFactory strategyFactory(AntiCrawlConfig cfg, BrowserPool pool,
                                            @org.springframework.beans.factory.annotation.Qualifier("eastmoneyOkHttpProxyManager") WorkerProxyManager okHttpProxyManager,
-                                           @org.springframework.beans.factory.annotation.Qualifier("eastmoneyPlaywrightProxyManager") WorkerProxyManager playwrightProxyManager) {
+                                           @org.springframework.beans.factory.annotation.Qualifier("eastmoneyPlaywrightProxyManager") WorkerProxyManager playwrightProxyManager,
+                                           ProxyProvider cloakProxyProvider) {
         EastmoneyApiStrategy eastmoney = new EastmoneyApiStrategy(cfg);
         eastmoney.setWorkerProxyManager(okHttpProxyManager);
         EastmoneyPlaywrightStrategy playwright = new EastmoneyPlaywrightStrategy(cfg, pool);
         playwright.setWorkerProxyManager(playwrightProxyManager);  // Playwright fallback 用青果长效 IP
         eastmoney.setPlaywrightStrategy(playwright);
+        // CLOAK 浏览器注入青果代理提供者(动态获取代理 IP)
+        CloakServerProcess.setProxyProvider(cloakProxyProvider);
+        // 同花顺板块爬虫(手动实例化，crawler-strategy 模块无 Spring 依赖）
+        ThsPlateCrawler thsPlateCrawler = new ThsPlateCrawler(pool);
+        thsPlateCrawler.setProxyProvider(cloakProxyProvider);
+        // 同花顺板块直连策略(Playwright 直连代理,不用 CloakBrowser)
+        ThsPlateDirectCrawler directCrawler = new ThsPlateDirectCrawler();
+        directCrawler.setProxyProvider(cloakProxyProvider);
         return new StrategyFactory(List.of(
                 eastmoney,
-                new TonghuashunBrowserStrategy(cfg, pool)));
+                new TonghuashunBrowserStrategy(cfg, pool, thsPlateCrawler),
+                new ThsPlateDirectStrategy(directCrawler)));
     }
 }

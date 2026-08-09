@@ -114,6 +114,41 @@ public class JobController {
         return r;
     }
 
+    /**
+     * 仅下发 3 种 THS_PLATE 任务（同花顺板块基础维表：地域/行业/概念），端到端测试用。
+     * <p>浏览器策略（Playwright + cloak），单任务串行跑完，概念页约 375 个板块需 15-25 分钟。
+     * 前置：需先跑 TonghuashunLogin 拿到有效 cookie（cookies/q.10jqka.com.cn.json）。</p>
+     */
+    @PostMapping("/seed-ths-plate")
+    public Map<String, Object> seedThsPlate(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "0") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedThsPlate(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "THS_PLATE");
+        r.put("date", d);
+        r.put("inserted", inserted);
+        return r;
+    }
+
+    /**
+     * 测试同花顺板块爬虫(Playwright 直连代理,不用 CloakBrowser)。
+     * <p>快速验证:每个会话一个新代理,秒级切换。</p>
+     */
+    @PostMapping("/seed-ths-plate-direct")
+    public Map<String, Object> seedThsPlateDirect(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "0") int source) {
+        String d = (date == null ? LocalDate.now() : date).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.seedThsPlateDirect(source, d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "THS_PLATE_DIRECT");
+        r.put("date", d);
+        r.put("inserted", inserted);
+        return r;
+    }
+
     @PostMapping("/backfill")
     public Map<String, Object> backfill(
             @RequestParam String start,
@@ -125,6 +160,27 @@ public class JobController {
                 : Arrays.stream(types.split(",")).map(String::trim).filter(t -> !t.isEmpty()).toList();
         int inserted = seedGenerator.backfill(start, end, source, typeList);
         Map<String, Object> r = new HashMap<>();
+        r.put("inserted", inserted);
+        return r;
+    }
+
+    /**
+     * 个股日K历史回填（断点续传）。
+     * <p>从 stock_daily 取全量股票，每只股票一个任务（push2his kline, lmt 拿满历史）。
+     * 进度记在 crawl_stock_backfill_status，已是 SUCCESS 的股票自动跳过。</p>
+     * <p>示例：POST /api/job/backfill-daily-history?end=2026-08-09&amp;lmt=20000</p>
+     */
+    @PostMapping("/backfill-daily-history")
+    public Map<String, Object> backfillDailyHistory(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate end,
+            @RequestParam(required = false, defaultValue = "1") int source,
+            @RequestParam(required = false, defaultValue = "20000") int lmt) {
+        String e = (end == null ? LocalDate.now() : end).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        int inserted = seedGenerator.backfillDailyHistory(source, e, lmt);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "STOCK_DAILY_HISTORY");
+        r.put("end", e);
+        r.put("lmt", lmt);
         r.put("inserted", inserted);
         return r;
     }

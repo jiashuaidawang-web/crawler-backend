@@ -41,6 +41,7 @@ public class BrowserPool {
             if (browser != null) {
                 return browser;
             }
+            log.info("[BrowserPool] stealthMode='{}', cloakCdpUrl='{}'", cfg.getStealthMode(), cfg.getCloakCdpUrl());
             if ("CLOAK".equalsIgnoreCase(cfg.getStealthMode())) {
                 browser = acquireClover(cfg);
             } else {
@@ -88,8 +89,11 @@ public class BrowserPool {
         // 常驻复用，不做关闭
     }
 
-    /** 关闭全部资源（JVM 关闭钩子）。 */
-    public void closeAll() {
+    /**
+     * 关闭当前浏览器 + 底层 Playwright,下次 acquire 会重新创建。
+     * <p>CLOAK 模式下还会停掉 cloakserve,下次 acquire 会通过 ProxyProvider 获取新代理后重新拉起。</p>
+     */
+    public void closeBrowser() {
         synchronized (lock) {
             if (browser != null) {
                 try {
@@ -105,6 +109,15 @@ public class BrowserPool {
                 }
                 playwright = null;
             }
+            // 停掉 cloakserve,下次 acquire 用新代理重启
+            CloakServerProcess.stopStatic();
+        }
+    }
+
+    /** 关闭全部资源（JVM 关闭钩子）。 */
+    public void closeAll() {
+        synchronized (lock) {
+            closeBrowser();
         }
     }
 }

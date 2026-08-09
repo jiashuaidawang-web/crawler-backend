@@ -45,8 +45,9 @@ public class QgLongTermProxyProvider implements ProxyProvider {
     }
 
     private String apiUrl() {
+        // distinct=false: 相同 key 返回相同 IP(5分钟有效期内保持同一代理)
         return "https://share.proxy.qg.net/get?key=" + apiKey
-                + "&num=1&area=&isp=0&format=json&distinct=true";
+                + "&num=1&area=&isp=0&format=json&distinct=false";
     }
 
     /**

@@ -12,7 +12,6 @@ import com.dunwugudao.crawler.persistence.entity.StrongPool;
 import com.dunwugudao.crawler.persistence.entity.CixinPool;
 import com.dunwugudao.crawler.persistence.entity.MainFundFlow;
 import com.dunwugudao.crawler.persistence.entity.StockBoardRel;
-import com.dunwugudao.crawler.persistence.entity.ThsPlate;
 import com.dunwugudao.crawler.persistence.entity.StockDaily;
 import com.dunwugudao.crawler.persistence.entity.StockWeekly;
 import com.dunwugudao.crawler.persistence.entity.Concept;
@@ -31,7 +30,6 @@ import com.dunwugudao.crawler.persistence.mapper.StrongPoolMapper;
 import com.dunwugudao.crawler.persistence.mapper.CixinPoolMapper;
 import com.dunwugudao.crawler.persistence.mapper.MainFundFlowMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBoardRelMapper;
-import com.dunwugudao.crawler.persistence.mapper.ThsPlateMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockWeeklyMapper;
 import com.dunwugudao.crawler.persistence.mapper.ConceptMapper;
@@ -86,7 +84,6 @@ public class DedupWriter {
     private final DragonTigerMapper dragonTigerMapper;
     private final DtDetailMapper dtDetailMapper;
     private final BoardBasicSyncService boardBasicSyncService;
-    private final ThsPlateMapper thsPlateMapper;
     // 5 张 P0 表 Mapper（T73 已对齐 DDL，本处接入写入路由）
     private final ConceptMapper conceptMapper;
     private final FinancialMapper financialMapper;
@@ -108,7 +105,6 @@ public class DedupWriter {
                        DragonTigerMapper dragonTigerMapper,
                        DtDetailMapper dtDetailMapper,
                        BoardBasicSyncService boardBasicSyncService,
-                       ThsPlateMapper thsPlateMapper,
                        ConceptMapper conceptMapper,
                        FinancialMapper financialMapper,
                        NorthboundFlowMapper northboundFlowMapper,
@@ -129,7 +125,6 @@ public class DedupWriter {
         this.dragonTigerMapper = dragonTigerMapper;
         this.dtDetailMapper = dtDetailMapper;
         this.boardBasicSyncService = boardBasicSyncService;
-        this.thsPlateMapper = thsPlateMapper;
         this.conceptMapper = conceptMapper;
         this.financialMapper = financialMapper;
         this.northboundFlowMapper = northboundFlowMapper;
@@ -477,7 +472,6 @@ public class DedupWriter {
             case "STRONG_POOL" -> writeStrongPool(rows, source, srcDetail);
             case "CIXIN_POOL" -> writeCixinPool(rows, source, srcDetail);
             case "STOCK_DAILY" -> writeStockDaily(rows, source, srcDetail);
-            case "STOCK_DAILY_HISTORY" -> writeStockDaily(rows, source, srcDetail);
             case "STOCK_WEEKLY" -> writeStockWeekly(rows, source, srcDetail);
             case "INDEX_DAILY" -> writeIndexDaily(rows, source, srcDetail);
             case "REGION_DAILY", "INDUSTRY_DAILY", "CONCEPT_DAILY" ->
@@ -486,10 +480,6 @@ public class DedupWriter {
             case "DRAGON_TIGER" -> writeDragonTiger(rows, source, srcDetail);
             case "DRAGON_TIGER_DETAIL" -> writeDtDetail(rows, source, srcDetail);
             case "STOCK_BY_BOARD" -> writeStockBoardRel(rows, source, srcDetail);
-            // 同花顺板块基础维表（THS_PLATE，浏览器策略）
-            case "THS_PLATE" -> writeThsPlate(rows, source, srcDetail);
-            // 同花顺板块基础维表（THS_PLATE_DIRECT，Playwright 直连代理）
-            case "THS_PLATE_DIRECT" -> writeThsPlate(rows, source, srcDetail);
             // 板块基础维表（board_basic）—— 独立抓取，幂等写入
             case "REGION_BOARD", "INDUSTRY_BOARD", "CONCEPT_BOARD" ->
                     writeBoardBasic(rows, source, srcDetail);
@@ -564,65 +554,6 @@ public class DedupWriter {
             batch.add(e);
         }
         insertInChunks(conceptMapper::batchInsert, batch, "concept", source);
-    }
-
-    /**
-     * 写入同花顺板块基础维表（ths_plate）。
-     * <p>⚠️ 第一阶段验证模式：如果行数据只含 plate_name + detail_url（无 cur_price），
-     * 说明是链接验证阶段，只打日志不落库（避免脏数据）。</p>
-     */
-    public void writeThsPlate(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
-        if (rows == null || rows.isEmpty()) {
-            return;
-        }
-        // 检测是否仅为链接验证阶段（无 cur_price 字段）
-        Map<String, Object> first = rows.get(0);
-        if (first.get("cur_price") == null && first.get("detail_url") != null) {
-            log.info("[writeThsPlate] 链接验证阶段，跳过落库: count={}, sample={}", rows.size(), first);
-            return;
-        }
-        LocalDateTime now = DateTimeUtil.nowSeconds();
-        LocalDate today = LocalDate.now();
-        List<ThsPlate> batch = new ArrayList<>(rows.size());
-        for (Map<String, Object> r : rows) {
-            String plateName = str(r.get("plate_name"));
-            String plateCode = str(r.get("plate_index"));
-            Integer plateType = intVal(r.get("plate_type"));
-            if (plateName == null || plateType == null) {
-                log.warn("skip ths_plate row missing plate_name/plate_type: {}", r);
-                continue;
-            }
-            // plateCode 可能为空（详情页抓取失败时），用 plate_name 兜底
-            if (plateCode == null) {
-                plateCode = "N/A_" + plateName;
-            }
-            ThsPlate e = new ThsPlate();
-            e.setPlateType(plateType);
-            e.setPlateCode(plateCode);
-            e.setPlateName(plateName);
-            e.setPlateIndex(str(r.get("plate_index")));
-            e.setLeadStockCode(str(r.get("lead_stock_code")));
-            e.setLeadStockName(str(r.get("lead_stock_name")));
-            e.setCurPrice(bigDec(r.get("cur_price")));
-            e.setIncrease(bigDec(r.get("increase")));
-            e.setTurnover(bigDec(r.get("turnover")));
-            e.setVolume(r.get("volume") instanceof Number n ? n.longValue() : null);
-            e.setUpCount(intVal(r.get("up_count")));
-            e.setDownCount(intVal(r.get("down_count")));
-            e.setTradeDate(toLocalDate(r.get("trade_date")));
-            e.setDataSource(source.getCode());
-            e.setSrcDetail(srcDetail);
-            e.setCreateDate(today);
-            e.setUpdateDate(now);
-            batch.add(e);
-        }
-        try {
-            insertInChunks(thsPlateMapper::batchInsert, batch, "ths_plate", source);
-        } catch (Exception ex) {
-            log.error("[writeThsPlate] CK batchInsert failed, batch.size={}, source={}: {}",
-                    batch.size(), source, ex.getMessage(), ex);
-            throw ex;
-        }
     }
 
     /** 写入财务报表（financial）。 */
@@ -1070,7 +1001,7 @@ public class DedupWriter {
         if (batch == null || batch.isEmpty()) {
             return;
         }
-        final int chunkSize = 100;
+        final int chunkSize = 1;
         int total = batch.size();
         int insertedChunks = 0;
         for (int from = 0; from < total; from += chunkSize) {

@@ -985,6 +985,18 @@ CREATE INDEX IF NOT EXISTS idx_ct_status ON crawl_task(status);
 CREATE INDEX IF NOT EXISTS idx_ct_unique_key ON crawl_task(unique_key);
 CREATE INDEX IF NOT EXISTS idx_ct_task_type ON crawl_task(task_type);
 
+-- 16b. 股票日K历史回填进度（断点续传）：每只股票一行，记录回填到哪天
+CREATE TABLE IF NOT EXISTS crawl_stock_backfill_status (
+    ts_code       VARCHAR(16) NOT NULL PRIMARY KEY,   -- 股票代码 600519.SH
+    status        VARCHAR(16) NOT NULL DEFAULT 'PENDING', -- PENDING/RUNNING/SUCCESS/FAILED
+    earliest_date DATE,   -- 该股票目前已回填的最早日期
+    latest_date   DATE,   -- 该股票目前已回填的最晚日期
+    row_count     INT,    -- 已写入行数
+    error_msg     TEXT,
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+COMMENT ON TABLE crawl_stock_backfill_status IS '股票日K历史回填进度（断点续传）';
+
 -- 17. 爬取日志（每 task 执行一次一条）
 CREATE TABLE IF NOT EXISTS crawl_log (
     log_id                  BIGSERIAL PRIMARY KEY,

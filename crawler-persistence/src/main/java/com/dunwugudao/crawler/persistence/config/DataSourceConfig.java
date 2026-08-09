@@ -130,6 +130,7 @@ public class DataSourceConfig {
     @Bean public MapperFactoryBean<CrawlAlertMapper> crawlAlertMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, CrawlAlertMapper.class); }
     @Bean public MapperFactoryBean<CrawlNodeMapper> crawlNodeMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, CrawlNodeMapper.class); }
     @Bean public MapperFactoryBean<TradeLogMapper> tradeLogMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, TradeLogMapper.class); }
+    @Bean public MapperFactoryBean<StockBackfillStatusMapper> stockBackfillStatusMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockBackfillStatusMapper.class); }
 
     // ==================== ClickHouse mapper beans（分析型） ====================
 
@@ -152,6 +153,7 @@ public class DataSourceConfig {
     @Bean public MapperFactoryBean<NewsEventMapper> newsEventMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, NewsEventMapper.class); }
     @Bean public MapperFactoryBean<NorthboundFlowMapper> northboundFlowMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, NorthboundFlowMapper.class); }
     @Bean public MapperFactoryBean<TradeCalendarMapper> tradeCalendarMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, TradeCalendarMapper.class); }
+    @Bean public MapperFactoryBean<ThsPlateMapper> thsPlateMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, ThsPlateMapper.class); }
 
     private <T> MapperFactoryBean<T> newMapper(SqlSessionFactory f, Class<T> type) throws Exception {
         MapperFactoryBean<T> fb = new MapperFactoryBean<>(type);

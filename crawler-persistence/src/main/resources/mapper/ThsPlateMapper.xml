@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org//DTD/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.ThsPlateMapper">
+
+    <!-- 批量追加（去重由 MergeTree ORDER BY 承接） -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO ths_plate
+        (plate_type, plate_code, plate_name, plate_index, lead_stock_code, lead_stock_name,
+         cur_price, increase, turnover, volume, up_count, down_count,
+         trade_date, data_source, src_detail, create_date, update_date)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.plateType}, #{r.plateCode}, #{r.plateName}, #{r.plateIndex},
+             #{r.leadStockCode}, #{r.leadStockName}, #{r.curPrice}, #{r.increase},
+             #{r.turnover}, #{r.volume}, #{r.upCount}, #{r.downCount},
+             #{r.tradeDate}, #{r.dataSource}, #{r.srcDetail}, #{r.createDate}, #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 按交易日期查板块列表（验证用） -->
+    <select id="selectByTradeDate" resultType="com.dunwugudao.crawler.persistence.entity.ThsPlate">
+        SELECT * FROM ths_plate WHERE trade_date = #{tradeDate} ORDER BY plate_type, plate_code
+    </select>
+
+    <!-- 按交易日期 + 板块类型统计数量（验证用） -->
+    <select id="countByTypeAndDate" resultType="int">
+        SELECT count() FROM ths_plate WHERE plate_type = #{plateType} AND trade_date = #{tradeDate}
+    </select>
+
+</mapper>

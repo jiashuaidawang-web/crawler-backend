@@ -8,6 +8,8 @@ import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.core.strategy.SourceStrategy;
 import com.dunwugudao.crawler.core.util.JsonCheckpoint;
 import com.dunwugudao.crawler.core.util.RateLimiter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
@@ -30,14 +32,19 @@ import java.util.Map;
  */
 public class TonghuashunBrowserStrategy implements SourceStrategy {
 
+    private static final Logger log = LoggerFactory.getLogger(TonghuashunBrowserStrategy.class);
+
     private final AntiCrawlConfig antiCrawlConfig;
     private final BrowserPool browserPool;
     private final BrowserContextFactory contextFactory = new BrowserContextFactory();
     private final RateLimiter rateLimiter;
+    private final ThsPlateCrawler thsPlateCrawler;
 
-    public TonghuashunBrowserStrategy(AntiCrawlConfig antiCrawlConfig, BrowserPool browserPool) {
+    public TonghuashunBrowserStrategy(AntiCrawlConfig antiCrawlConfig, BrowserPool browserPool,
+                                       ThsPlateCrawler thsPlateCrawler) {
         this.antiCrawlConfig = antiCrawlConfig;
         this.browserPool = browserPool;
+        this.thsPlateCrawler = thsPlateCrawler;
         this.rateLimiter = new RateLimiter(antiCrawlConfig.getRateLimitPerSec());
     }
 
@@ -51,6 +58,12 @@ public class TonghuashunBrowserStrategy implements SourceStrategy {
     public CrawlResult fetch(CrawlContext ctx) {
         CrawlTask task = ctx.getTask();
         Map<String, Object> params = JsonCheckpoint.deserialize(task.getParamsJson());
+
+        // THS_PLATE 路由到 ThsPlateCrawler（板块基础维表）
+        if ("THS_PLATE".equals(task.getTaskType())) {
+            return fetchThsPlate(params);
+        }
+
         String url = task.getUrl();
         if (url == null || url.isBlank()) {
             throw new RuntimeException("Tonghuashun task missing url");
@@ -181,5 +194,72 @@ public class TonghuashunBrowserStrategy implements SourceStrategy {
             v = params.get("date");
         }
         return v == null ? null : String.valueOf(v);
+    }
+
+    /**
+     * THS_PLATE 路由：同花顺板块基础维表。
+     * <p>params: {"plateType": 4|5|6, "tradeDate": "yyyy-MM-dd"}</p>
+     * <p>容错: 每次失败关闭浏览器(下次获取新代理), 最多重试 15 次。</p>
+     */
+    private CrawlResult fetchThsPlate(Map<String, Object> params) {
+        int plateType = parseInt(params.get("plate_type"), 6);
+        String tradeDate = String.valueOf(params.getOrDefault("tradeDate",
+                java.time.LocalDate.now().toString()));
+
+        final int MAX_RETRIES = 15;
+        int attempt = 0;
+        Exception lastException = null;
+
+        while (attempt < MAX_RETRIES) {
+            attempt++;
+            rateLimiter.acquire();
+            try {
+                log.info("[TonghuashunBrowserStrategy] THS_PLATE 开始: plateType={}, tradeDate={}, 第{}/{}次",
+                        plateType, tradeDate, attempt, MAX_RETRIES);
+                List<Map<String, Object>> rows = thsPlateCrawler.crawl(plateType, tradeDate, antiCrawlConfig);
+                log.info("[TonghuashunBrowserStrategy] THS_PLATE 完成: plateType={}, rows={}, 第{}次成功",
+                        plateType, rows.size(), attempt);
+                CrawlResult result = new CrawlResult();
+                result.setSuccess(true);
+                result.setData(rows);
+                result.setRowCount(rows.size());
+                result.setHttpStatus(200);
+                return result;
+            } catch (Exception e) {
+                lastException = e;
+                log.warn("[TonghuashunBrowserStrategy] THS_PLATE 第{}/{}次失败: {}",
+                        attempt, MAX_RETRIES, e.getMessage());
+                // 关闭浏览器,下次会获取新代理
+                try {
+                    thsPlateCrawler.closeBrowser();
+                } catch (Exception ignored) {
+                }
+                // 还有重试次数则继续
+                if (attempt < MAX_RETRIES) {
+                    // 短暂延迟后重试
+                    try {
+                        Thread.sleep(1000 + (long) (Math.random() * 1000));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 15 次全部失败
+        throw new RuntimeException("THS_PLATE 重试" + MAX_RETRIES + "次仍失败: " + lastException.getMessage(), lastException);
+    }
+
+    private static int parseInt(Object o, int fallback) {
+        if (o == null) return fallback;
+        if (o instanceof Number n) return n.intValue();
+        String s = String.valueOf(o).trim();
+        if (s.isEmpty() || "-".equals(s)) return fallback;
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 }

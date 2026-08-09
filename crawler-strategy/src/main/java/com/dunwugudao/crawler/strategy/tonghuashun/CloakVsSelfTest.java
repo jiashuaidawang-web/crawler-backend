@@ -6,6 +6,7 @@ import com.dunwugudao.crawler.core.model.CrawlResult;
 import com.dunwugudao.crawler.core.model.CrawlTask;
 import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyPlaywrightStrategy;
+import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateCrawler;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -97,7 +98,8 @@ public class CloakVsSelfTest {
         System.out.println("[cloak-cdp-url] " + cfg.getCloakCdpUrl());
 
         BrowserPool pool = new BrowserPool();
-        TonghuashunBrowserStrategy tonghuashun = new TonghuashunBrowserStrategy(cfg, pool);
+        ThsPlateCrawler thsPlateCrawler = new ThsPlateCrawler(pool);
+        TonghuashunBrowserStrategy tonghuashun = new TonghuashunBrowserStrategy(cfg, pool, thsPlateCrawler);
         EastmoneyPlaywrightStrategy eastmoney = new EastmoneyPlaywrightStrategy(cfg, pool);
 
         List<String[]> rows = new ArrayList<>();

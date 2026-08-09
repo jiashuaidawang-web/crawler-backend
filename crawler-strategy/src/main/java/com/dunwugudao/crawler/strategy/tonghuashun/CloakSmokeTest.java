@@ -5,6 +5,7 @@ import com.dunwugudao.crawler.core.model.CrawlContext;
 import com.dunwugudao.crawler.core.model.CrawlResult;
 import com.dunwugudao.crawler.core.model.CrawlTask;
 import com.dunwugudao.crawler.core.model.SourceType;
+import com.dunwugudao.crawler.strategy.tonghuashun.ThsPlateCrawler;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,7 +40,8 @@ public class CloakSmokeTest {
         System.out.println("[cloak-cdp-url] " + cfg.getCloakCdpUrl());
         System.out.println("[cloak-license-key] " + (cfg.getCloakLicenseKey().isEmpty() ? "(empty=free)" : "***"));
         BrowserPool pool = new BrowserPool();
-        TonghuashunBrowserStrategy strategy = new TonghuashunBrowserStrategy(cfg, pool);
+        ThsPlateCrawler thsPlateCrawler = new ThsPlateCrawler(pool);
+        TonghuashunBrowserStrategy strategy = new TonghuashunBrowserStrategy(cfg, pool, thsPlateCrawler);
 
         try {
             runOnce(strategy, TARGET, "同花顺个股页(600519)");

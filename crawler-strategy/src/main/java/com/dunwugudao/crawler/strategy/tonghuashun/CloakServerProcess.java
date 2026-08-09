@@ -1,6 +1,7 @@
 package com.dunwugudao.crawler.strategy.tonghuashun;
 
 import com.dunwugudao.crawler.core.config.AntiCrawlConfig;
+import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,12 +37,21 @@ public class CloakServerProcess {
 
     private Process process;
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private int port = 9222; // 默认端口,doStart 时更新
+
+    /** 代理提供者(青果等),用于动态获取代理 IP */
+    private static volatile ProxyProvider proxyProvider;
 
     private CloakServerProcess() {
     }
 
     public static CloakServerProcess getInstance() {
         return INSTANCE;
+    }
+
+    /** 设置代理提供者(需在首次 ensureRunning 前调用) */
+    public static void setProxyProvider(ProxyProvider provider) {
+        proxyProvider = provider;
     }
 
     /**
@@ -72,10 +82,26 @@ public class CloakServerProcess {
                 started.set(true);
                 return;
             }
+            // started=false 但端口仍监听 → 旧进程未被完全杀死,先 kill 端口上所有进程再重启(获取新代理)
             if (isPortListening(port)) {
-                log.info("[CloakServerProcess] port {} already listening, reuse existing cloakserve", port);
-                started.set(true);
-                return;
+                log.info("[CloakServerProcess] port {} still listening (stale cloakserve), killing all processes on port", port);
+                killProcessOnPort(port);
+                // 等待端口释放
+                long deadline = System.currentTimeMillis() + 10_000;
+                while (isPortListening(port) && System.currentTimeMillis() < deadline) {
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                if (isPortListening(port)) {
+                    log.warn("[CloakServerProcess] port {} still occupied after kill, reusing existing cloakserve", port);
+                    started.set(true);
+                    return;
+                }
+                log.info("[CloakServerProcess] port {} freed, will restart with new proxy", port);
             }
             doStart(cfg);
             started.set(true);
@@ -112,6 +138,7 @@ public class CloakServerProcess {
                     + "or place scripts/cloak_serve.py in the working directory.");
         }
         int port = cfg.getCloakLocalPort();
+        this.port = port;
         log.info("[CloakServerProcess] starting cloakserve via {} (port {})", scriptPath, port);
 
         ProcessBuilder pb = new ProcessBuilder(buildCommand(cfg, scriptPath));
@@ -121,9 +148,36 @@ public class CloakServerProcess {
         if (cfg.getCloakLicenseKey() != null && !cfg.getCloakLicenseKey().isBlank()) {
             pb.environment().put("CLOAKBROWSER_LICENSE_KEY", cfg.getCloakLicenseKey());
         }
-        String proxy = cfg.getProxyFor(com.dunwugudao.crawler.core.model.SourceType.TONGHUASHUN);
+        // 优先用静态注入的 ProxyProvider(动态获取青果代理),回退到 cfg 的 per-source-proies
+        String proxy = null;
+        if (proxyProvider != null) {
+            // 代理获取重试(青果 API 可能暂时不可用)
+            for (int i = 1; i <= 3; i++) {
+                try {
+                    proxy = proxyProvider.acquire();
+                    if (proxy != null && !proxy.isBlank()) {
+                        break;
+                    }
+                } catch (Exception e) {
+                    log.warn("[CloakServerProcess] proxyProvider.acquire() 第{}/3次失败: {}", i, e.getMessage());
+                }
+                if (i < 3) {
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+        if (proxy == null || proxy.isBlank()) {
+            proxy = cfg.getProxyFor(com.dunwugudao.crawler.core.model.SourceType.TONGHUASHUN);
+        }
         if (proxy != null && !proxy.isBlank()) {
             pb.environment().put("CLOAK_PROXY", proxy);
+            log.info("[CloakServerProcess] cloakserve using proxy: {}", proxy.replaceAll("://.*@", "://***@"));
+        } else {
+            log.warn("[CloakServerProcess] no proxy available, cloakserve will run without proxy");
         }
         pb.environment().put("CLOAK_HEADLESS", "true");
         pb.environment().put("CLOAK_HUMANIZE", String.valueOf(cfg.isCloakHumanize()));
@@ -205,16 +259,105 @@ public class CloakServerProcess {
     }
 
     private void stopQuietly() {
-        if (process != null && process.isAlive()) {
+        if (process != null) {
             try {
                 process.destroy();
-                if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                if (!process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
                     process.destroyForcibly();
+                    try {
+                        process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (InterruptedException ie2) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
+            } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * 强制 kill 占用指定端口的进程(包括不是自己启动的)。
+     * <p>先用 lsof 找到 PID,再 kill -9。</p>
+     */
+    private static void killProcessOnPort(int port) {
+        try {
+            // lsof -ti:9222 输出占用端口的 PID
+            ProcessBuilder pb = new ProcessBuilder("lsof", "-ti", ":" + port);
+            pb.redirectErrorStream(true);
+            Process lsof = pb.start();
+            String output = new String(lsof.getInputStream().readAllBytes()).trim();
+            int exitCode = lsof.waitFor();
+            if (exitCode != 0 || output.isEmpty()) {
+                log.debug("[CloakServerProcess] no process found on port {}", port);
+                return;
+            }
+            // 可能有多个 PID(子进程),逐行 kill
+            for (String pidStr : output.split("\\n")) {
+                pidStr = pidStr.trim();
+                if (pidStr.isEmpty()) continue;
+                try {
+                    int pid = Integer.parseInt(pidStr);
+                    log.info("[CloakServerProcess] killing process {} on port {}", pid, port);
+                    Runtime.getRuntime().exec(new String[]{"kill", "-9", String.valueOf(pid)});
+                } catch (NumberFormatException e) {
+                    log.warn("[CloakServerProcess] invalid PID: {}", pidStr);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[CloakServerProcess] killProcessOnPort({}) failed: {}", port, e.getMessage());
+        }
+    }
+
+    /** 静态方法:停掉 cloakserve 并重置 started 标记,下次 ensureRunning 会重新拉起(用新代理)。 */
+    public static void stopStatic() {
+        INSTANCE.stopQuietly();
+        // 强制 kill 端口上所有进程(包括不是自己启动的)
+        killProcessOnPort(INSTANCE.port);
+        INSTANCE.started.set(false);
+    }
+
+    /**
+     * 强制重启 cloakserve:杀掉旧进程,获取新代理,启动新进程。
+     * <p>代理失效(407/连接超时/连接失败)时调用。</p>
+     */
+    public static void restartWithNewProxy(AntiCrawlConfig cfg) {
+        log.info("[CloakServerProcess] restartWithNewProxy: killing old process and fetching new proxy");
+        INSTANCE.forceKill();
+        INSTANCE.started.set(false);
+        // 等待端口释放
+        int port = cfg.getCloakLocalPort();
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (isPortListening(port) && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        if (isPortListening(port)) {
+            log.warn("[CloakServerProcess] port {} still occupied after force kill", port);
+        }
+        // 重新启动(会获取新代理)
+        ensureRunning(cfg);
+    }
+
+    /** 强制 kill 进程(包括子进程)。 */
+    private void forceKill() {
+        if (process != null) {
+            try {
+                process.destroyForcibly();
+                process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                log.warn("[CloakServerProcess] forceKill error: {}", e.getMessage());
+            } finally {
+                process = null;
+            }
+        }
+        // 额外:kill 端口上所有进程(防止子进程残留)
+        killProcessOnPort(this.port);
     }
 }

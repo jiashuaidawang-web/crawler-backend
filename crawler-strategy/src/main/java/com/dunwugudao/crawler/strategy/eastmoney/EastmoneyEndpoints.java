@@ -233,6 +233,10 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("INDEX_DAILY", new EndpointSpec(
                 "INDEX_DAILY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
                 ParserType.KLINE, null, null, null));
+        // 个股日K历史回填（push2his kline, klt=101 日线，lmt 设大一次拿满历史）
+        SPEC_BY_TYPE.put("STOCK_DAILY_HISTORY", new EndpointSpec(
+                "STOCK_DAILY_HISTORY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                ParserType.KLINE, null, null, null));
         // 地域板块日线（board_type=1）
         SPEC_BY_TYPE.put("REGION_DAILY", new EndpointSpec(
                 "REGION_DAILY", "http://push2.eastmoney.com/api/qt/clist/get",

@@ -25,7 +25,7 @@ import java.util.Scanner;
  */
 public class TonghuashunLogin {
 
-    private static final String COOKIE_DIR = "/data/crawler/cookies";
+    private static final String COOKIE_DIR = "cookies";
     private static final String PROXY = "http://124.223.220.245:8088";
 
     public static void main(String[] args) throws Exception {
@@ -36,26 +36,48 @@ public class TonghuashunLogin {
             return;
         }
 
+        // 用 CLOAK 模式(连接本机 cloakserve)还是 SELF 模式(自管 Playwright)
+        String stealthMode = System.getenv().getOrDefault("STEALTH_MODE", "CLOAK");
+        System.out.println("[模式] " + stealthMode);
+
         // 用 proxy-pool 拿一个代理
         String proxyStr = acquireProxy();
         System.out.println("[代理] " + (proxyStr != null ? mask(proxyStr) : "无"));
 
         try (Playwright pw = Playwright.create()) {
-            BrowserType.LaunchOptions launch = new BrowserType.LaunchOptions().setHeadless(false);
-            try (Browser browser = pw.chromium().launch(launch)) {
-                Browser.NewContextOptions opts = new Browser.NewContextOptions()
-                        .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                        .setViewportSize(1366, 900)
-                        .setLocale("zh-CN")
-                        .setTimezoneId("Asia/Shanghai");
-                if (proxyStr != null) {
-                    URI u = URI.create(proxyStr);
-                    String[] up = u.getUserInfo().split(":", 2);
-                    opts.setProxy(new Proxy(u.getHost() + ":" + u.getPort())
-                            .setUsername(up[0]).setPassword(up[1]));
+            Browser browser;
+            if ("CLOAK".equalsIgnoreCase(stealthMode)) {
+                // CLOAK: 连接本机 cloakserve(CDP 9222)
+                System.out.println("[CLOAK] 连接 cloakserve CDP...");
+                browser = pw.chromium().connectOverCDP("http://127.0.0.1:9222");
+            } else {
+                // SELF: 自管 Playwright
+                BrowserType.LaunchOptions launch = new BrowserType.LaunchOptions().setHeadless(false);
+                browser = pw.chromium().launch(launch);
+            }
+            try (browser) {
+                Browser.NewContextOptions opts = new Browser.NewContextOptions();
+                if ("CLOAK".equalsIgnoreCase(stealthMode)) {
+                    // CLOAK: 指纹/代理/时区全由 cloakserve 处理,这里只建上下文
+                    opts.setJavaScriptEnabled(true);
+                } else {
+                    // SELF: 手动注入 stealth + 代理
+                    opts.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                            .setViewportSize(1366, 900)
+                            .setLocale("zh-CN")
+                            .setTimezoneId("Asia/Shanghai")
+                            .setJavaScriptEnabled(true);
+                    if (proxyStr != null) {
+                        URI u = URI.create(proxyStr);
+                        String[] up = u.getUserInfo().split(":", 2);
+                        opts.setProxy(new Proxy(u.getHost() + ":" + u.getPort())
+                                .setUsername(up[0]).setPassword(up[1]));
+                    }
                 }
                 BrowserContext ctx = browser.newContext(opts);
-                ctx.addInitScript(BrowserContextFactory.STEALTH_JS);
+                if (!"CLOAK".equalsIgnoreCase(stealthMode)) {
+                    ctx.addInitScript(BrowserContextFactory.STEALTH_JS);
+                }
 
                 Page page = ctx.newPage();
                 System.out.println("[打开] 同花顺登录页...");

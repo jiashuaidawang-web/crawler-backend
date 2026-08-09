@@ -61,7 +61,9 @@ public final class TaskTypeCatalog {
             new TaskSpec("STOCK_DAILY", 1, true, false, null, "个股日线（市场级，按页拆任务，每页 100 条）"),
             new TaskSpec("STOCK_WEEKLY", 1, false, true, 1, "个股周线（逐券）"),
             new TaskSpec("INDEX_DAILY", 1, false, true, 1, "指数日线（逐券）"),
-            new TaskSpec("STOCK_BY_BOARD", 1, false, false, null, "板块-个股关系（逐板块，需 board_basic 表）")
+            new TaskSpec("STOCK_DAILY_HISTORY", 1, false, true, 1, "个股日K历史回填（逐券，push2his kline 拿满历史）"),
+            new TaskSpec("STOCK_BY_BOARD", 1, false, false, null, "板块-个股关系（逐板块，需 board_basic 表）"),
+            new TaskSpec("THS_PLATE", 0, true, false, null, "同花顺板块基础维表（地域/行业/概念，浏览器策略）")
     );
 
     public static List<TaskSpec> marketWideTypes() {

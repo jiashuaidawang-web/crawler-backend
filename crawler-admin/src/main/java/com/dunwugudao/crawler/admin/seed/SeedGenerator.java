@@ -4,9 +4,12 @@ import com.dunwugudao.crawler.admin.service.BoardBasicService;
 import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
+import com.dunwugudao.crawler.persistence.entity.StockBackfillStatus;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockBackfillStatusMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -53,6 +56,8 @@ public class SeedGenerator {
     private final DragonTigerMapper dragonTigerMapper;
     private final ProxyManager proxyManager;
     private final EastmoneyClient eastmoneyClient;
+    private final StockBackfillStatusMapper backfillStatusMapper;
+    private final StockDailyMapper stockDailyMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
@@ -67,6 +72,8 @@ public class SeedGenerator {
                          DragonTigerMapper dragonTigerMapper,
                          ProxyManager proxyManager,
                          EastmoneyClient eastmoneyClient,
+                         StockBackfillStatusMapper backfillStatusMapper,
+                         StockDailyMapper stockDailyMapper,
                          org.springframework.core.env.Environment env) {
         this.mapper = mapper;
         this.universe = universe;
@@ -74,6 +81,8 @@ public class SeedGenerator {
         this.dragonTigerMapper = dragonTigerMapper;
         this.proxyManager = proxyManager;
         this.eastmoneyClient = eastmoneyClient;
+        this.backfillStatusMapper = backfillStatusMapper;
+        this.stockDailyMapper = stockDailyMapper;
         // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
         // 探测失败兜底全市场股票数(默认 5545,保证 task 数)
@@ -716,6 +725,66 @@ public class SeedGenerator {
         return total;
     }
 
+    /**
+     * 个股日K历史回填（断点续传）。
+     * <p>从 stock_daily 取全量股票（distinct ts_code），每只股票一个任务：
+     * push2his kline, lmt=20000（约 80 年，覆盖 A 股全历史），一次拿满。</p>
+     * <p>断点续传：{@code crawl_stock_backfill_status} 记录每只股票进度，
+     * 已是 SUCCESS 的股票自动跳过；重启后从断点继续。</p>
+     *
+     * @param source 数据源（1=东财）
+     * @param end    截止日期（yyyy-MM-dd），通常填今天
+     * @param lmt    拉取天数上限（默认 20000，约 80 年）
+     * @return 新插入的任务数
+     */
+    public int backfillDailyHistory(int source, String end, int lmt) {
+        // 1. 全量股票：从 stock_daily 取 distinct ts_code
+        List<String> allCodes = stockDailyMapper.selectDistinctTsCode();
+        if (allCodes == null || allCodes.isEmpty()) {
+            log.warn("[backfillDailyHistory] stock_daily 无股票数据，跳过");
+            return 0;
+        }
+        log.info("[backfillDailyHistory] 全量股票 {} 只，end={}, lmt={}", allCodes.size(), end, lmt);
+
+        // 2. 过滤：排除已是 SUCCESS 的股票（断点续传）
+        List<String> pendingCodes = new ArrayList<>();
+        for (String tsCode : allCodes) {
+            StockBackfillStatus st = backfillStatusMapper.selectByTsCode(tsCode);
+            if (st != null && "SUCCESS".equals(st.getStatus())) {
+                continue; // 已回填成功，跳过
+            }
+            pendingCodes.add(tsCode);
+        }
+        log.info("[backfillDailyHistory] 需回填 {} 只（跳过 {} 只已 SUCCESS）",
+                pendingCodes.size(), allCodes.size() - pendingCodes.size());
+        if (pendingCodes.isEmpty()) {
+            return 0;
+        }
+
+        // 3. 初始化进度表（幂等，已存在则忽略）+ 下发任务
+        int inserted = 0;
+        List<CrawlTask> batch = new ArrayList<>(BATCH);
+        for (String tsCode : pendingCodes) {
+            backfillStatusMapper.insertIfAbsent(tsCode); // 进度表幂等初始化
+            String params = buildDailyHistoryParams(tsCode, end, lmt);
+            CrawlTask task = buildTask("STOCK_DAILY_HISTORY", source, end, tsCode, 1, params);
+            task.setUniqueKey("STOCK_DAILY_HISTORY|" + source + "|" + tsCode);
+            batch.add(task);
+            if (batch.size() >= BATCH) {
+                inserted += flush(batch);
+                batch.clear();
+            }
+        }
+        inserted += flush(batch);
+        log.info("[backfillDailyHistory] 下发 {} 个日K历史回填任务", inserted);
+        return inserted;
+    }
+
+    /** 个股日K历史回填 params：{"tsCode":"CODE","end":"YYYY-MM-DD","lmt":20000} */
+    private String buildDailyHistoryParams(String tsCode, String end, int lmt) {
+        return "{\"tsCode\":\"" + tsCode + "\",\"end\":\"" + end + "\",\"lmt\":" + lmt + "}";
+    }
+
     private int backfillMarketWide(String date, int source, List<String> typeFilter) {
         List<CrawlTask> batch = new ArrayList<>();
         int inserted = 0; // 池子任务即时入库的计数
@@ -775,6 +844,40 @@ public class SeedGenerator {
             total += flush(batch);
         }
         return total;
+    }
+
+    /** 龙虎榜明细子任务（需先爬完 DRAGON_TIGER 拿到代码列表再调用）。M3 未自动串联，留 TODO。 */
+    public int seedThsPlate(int source, String date) {
+        // 同花顺板块基础维表（THS_PLATE）：每日 3 个任务（地域/行业/概念，plate_type=4/5/6）。
+        // 浏览器策略，单任务串行跑完所有板块（375 个概念单线程约 15-25 分钟）。
+        int inserted = 0;
+        int[] plateTypes = {4, 5, 6};
+        for (int plateType : plateTypes) {
+            String params = "{\"plate_type\":" + plateType + ",\"tradeDate\":\"" + date + "\"}";
+            CrawlTask task = buildTask("THS_PLATE", source, date, null, null, params);
+            task.setUniqueKey("THS_PLATE|" + source + "|" + date + "|" + plateType);
+            task.setPriority(3); // 浏览器任务优先级调低（耗时长）
+            task.setMaxRetry(2);
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedThsPlate] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
+    }
+
+    /** 同花顺板块基础维表(THS_PLATE_DIRECT,Playwright 直连代理,不用 CloakBrowser)。 */
+    public int seedThsPlateDirect(int source, String date) {
+        int inserted = 0;
+        int[] plateTypes = {4, 5, 6};
+        for (int plateType : plateTypes) {
+            String params = "{\"plate_type\":" + plateType + ",\"tradeDate\":\"" + date + "\"}";
+            CrawlTask task = buildTask("THS_PLATE_DIRECT", source, date, null, null, params);
+            task.setUniqueKey("THS_PLATE_DIRECT|" + source + "|" + date + "|" + plateType);
+            task.setPriority(3);
+            task.setMaxRetry(2);
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedThsPlateDirect] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
     }
 
     /** 龙虎榜明细子任务（需先爬完 DRAGON_TIGER 拿到代码列表再调用）。M3 未自动串联，留 TODO。 */
