@@ -133,7 +133,27 @@ PARTITION BY toYYYYMM(trade_date)
 ORDER BY (ts_code, trade_date)
 SETTINGS index_granularity = 8192;
 
--- 3. 指数日线
+-- 2b. 个股分钟K线（量价数据，精确到分钟）
+CREATE TABLE IF NOT EXISTS stock_kline_minute (
+    trade_date      Date NOT NULL,
+    ts_code         String NOT NULL,
+    stock_name      Nullable(String),
+    minute_time     DateTime NOT NULL,       -- 精确到分钟，如 2026-08-07 09:31:00
+    open            Nullable(Decimal64(4)),   -- 开盘价
+    high            Nullable(Decimal64(4)),   -- 最高价
+    low             Nullable(Decimal64(4)),   -- 最低价
+    close           Nullable(Decimal64(4)),   -- 收盘价
+    vol             Nullable(Decimal64(4)),   -- 成交量(手)
+    amount          Nullable(Decimal64(2)),   -- 成交额(元)
+    amplitude       Nullable(Decimal64(4)),   -- 振幅%
+    pct_chg         Nullable(Decimal64(4)),   -- 涨跌幅%
+    turnover        Nullable(Decimal64(4)),   -- 换手率%
+    data_source     UInt8 NOT NULL DEFAULT 1, -- 1=东财
+    create_date     Date DEFAULT today()
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(trade_date)
+ORDER BY (ts_code, minute_time)
+SETTINGS index_granularity = 8192;
 CREATE TABLE IF NOT EXISTS index_daily (
     trade_date              Date NOT NULL,
     index_code              String NOT NULL,

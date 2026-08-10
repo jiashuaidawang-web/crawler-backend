@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org/DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.StockKlineMinuteMapper">
+
+    <!--
+        个股分钟K线批量追加（ClickHouse MergeTree 纯追加）。
+        注意：ClickHouse JDBC 0.6.x 不支持 InsertGenerator 风格的批量，
+        这里用 UNION ALL 方式拼多行 VALUES，单次建议 ≤ 1000 行（由调用方切片）。
+    -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO stock_kline_minute
+        (trade_date, ts_code, stock_name, minute_time, open, high, low, close, vol, amount,
+         amplitude, pct_chg, turnover, data_source, create_date)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.tradeDate}, #{r.tsCode}, #{r.stockName}, #{r.minuteTime}, #{r.open}, #{r.high},
+             #{r.low}, #{r.close}, #{r.vol}, #{r.amount}, #{r.amplitude}, #{r.pctChg}, #{r.turnover},
+             #{r.dataSource}, #{r.createDate})
+        </foreach>
+    </insert>
+
+</mapper>

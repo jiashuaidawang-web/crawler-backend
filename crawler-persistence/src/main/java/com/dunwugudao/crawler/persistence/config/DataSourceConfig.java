@@ -136,6 +136,7 @@ public class DataSourceConfig {
 
     @Bean public MapperFactoryBean<StockDailyMapper> stockDailyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockDailyMapper.class); }
     @Bean public MapperFactoryBean<StockWeeklyMapper> stockWeeklyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockWeeklyMapper.class); }
+    @Bean public MapperFactoryBean<StockKlineMinuteMapper> stockKlineMinuteMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockKlineMinuteMapper.class); }
     @Bean public MapperFactoryBean<IndexDailyMapper> indexDailyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, IndexDailyMapper.class); }
     @Bean public MapperFactoryBean<BoardDailyMapper> boardDailyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, BoardDailyMapper.class); }
     @Bean public MapperFactoryBean<BoardBasicMapper> boardBasicMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, BoardBasicMapper.class); }

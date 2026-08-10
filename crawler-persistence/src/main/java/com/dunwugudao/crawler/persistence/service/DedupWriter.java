@@ -14,6 +14,7 @@ import com.dunwugudao.crawler.persistence.entity.MainFundFlow;
 import com.dunwugudao.crawler.persistence.entity.StockBoardRel;
 import com.dunwugudao.crawler.persistence.entity.ThsPlate;
 import com.dunwugudao.crawler.persistence.entity.StockDaily;
+import com.dunwugudao.crawler.persistence.entity.StockKlineMinute;
 import com.dunwugudao.crawler.persistence.entity.StockWeekly;
 import com.dunwugudao.crawler.persistence.entity.Concept;
 import com.dunwugudao.crawler.persistence.entity.Financial;
@@ -33,6 +34,7 @@ import com.dunwugudao.crawler.persistence.mapper.MainFundFlowMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBoardRelMapper;
 import com.dunwugudao.crawler.persistence.mapper.ThsPlateMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockKlineMinuteMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockWeeklyMapper;
 import com.dunwugudao.crawler.persistence.mapper.ConceptMapper;
 import com.dunwugudao.crawler.persistence.mapper.FinancialMapper;
@@ -81,6 +83,7 @@ public class DedupWriter {
     private final BoardDailyMapper boardDailyMapper;
     private final StockDailyMapper stockDailyMapper;
     private final StockWeeklyMapper stockWeeklyMapper;
+    private final StockKlineMinuteMapper stockKlineMinuteMapper;
     private final IndexDailyMapper indexDailyMapper;
     private final MainFundFlowMapper mainFundFlowMapper;
     private final DragonTigerMapper dragonTigerMapper;
@@ -103,6 +106,7 @@ public class DedupWriter {
                        BoardDailyMapper boardDailyMapper,
                        StockDailyMapper stockDailyMapper,
                        StockWeeklyMapper stockWeeklyMapper,
+                       StockKlineMinuteMapper stockKlineMinuteMapper,
                        IndexDailyMapper indexDailyMapper,
                        MainFundFlowMapper mainFundFlowMapper,
                        DragonTigerMapper dragonTigerMapper,
@@ -124,6 +128,7 @@ public class DedupWriter {
         this.stockBoardRelMapper = stockBoardRelMapper;
         this.stockDailyMapper = stockDailyMapper;
         this.stockWeeklyMapper = stockWeeklyMapper;
+        this.stockKlineMinuteMapper = stockKlineMinuteMapper;
         this.indexDailyMapper = indexDailyMapper;
         this.mainFundFlowMapper = mainFundFlowMapper;
         this.dragonTigerMapper = dragonTigerMapper;
@@ -478,6 +483,7 @@ public class DedupWriter {
             case "CIXIN_POOL" -> writeCixinPool(rows, source, srcDetail);
             case "STOCK_DAILY" -> writeStockDaily(rows, source, srcDetail);
             case "STOCK_DAILY_HISTORY" -> writeStockDaily(rows, source, srcDetail);
+            case "STOCK_KLINE_MINUTE" -> writeStockKlineMinute(rows, source, srcDetail);
             case "STOCK_WEEKLY" -> writeStockWeekly(rows, source, srcDetail);
             case "INDEX_DAILY" -> writeIndexDaily(rows, source, srcDetail);
             case "REGION_DAILY", "INDUSTRY_DAILY", "CONCEPT_DAILY" ->
@@ -841,7 +847,39 @@ public class DedupWriter {
         insertInChunks(stockWeeklyMapper::batchInsert, batch, "stock_weekly", source);
     }
 
-    /** 写入指数日线（index_daily）。 */
+    /** 写入个股分钟K线（stock_kline_minute）。 */
+    public void writeStockKlineMinute(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDateTime now = DateTimeUtil.nowSeconds();
+        LocalDate today = LocalDate.now();
+        List<StockKlineMinute> batch = new ArrayList<>(rows.size());
+        for (Map<String, Object> r : rows) {
+            String tsCode = str(r.get("ts_code"));
+            // minute_time: "2026-08-07 09:31" → LocalDateTime
+            LocalDateTime minuteTime = toLocalDateTime(r.get("minute_time"));
+            if (tsCode == null || minuteTime == null) {
+                log.warn("skip stock_kline_minute row missing ts_code/minute_time: {}", r);
+                continue;
+            }
+            StockKlineMinute e = new StockKlineMinute();
+            e.setTradeDate(minuteTime.toLocalDate());
+            e.setTsCode(tsCode);
+            e.setStockName(str(r.get("stock_name")));
+            e.setMinuteTime(minuteTime);
+            e.setOpen(bigDec(r.get("open")));
+            e.setHigh(bigDec(r.get("high")));
+            e.setLow(bigDec(r.get("low")));
+            e.setClose(bigDec(r.get("close")));
+            e.setVol(bigDec(r.get("vol")));
+            e.setAmount(bigDec(r.get("amount")));
+            e.setAmplitude(bigDec(r.get("amplitude")));
+            e.setPctChg(bigDec(r.get("pct_chg")));
+            e.setTurnover(bigDec(r.get("turnover")));
+            e.setDataSource(source.getCode());
+            e.setCreateDate(today);
+            batch.add(e);
+        }
+        insertInChunks(stockKlineMinuteMapper::batchInsert, batch, "stock_kline_minute", source);
+    }
     public void writeIndexDaily(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();

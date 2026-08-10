@@ -79,7 +79,15 @@ public final class EastmoneyEndpoints {
                 }
                 case KLINE: {
                     String secid = secidFor(taskType, params);
-                    String klt = "STOCK_WEEKLY".equals(taskType) ? "102" : "101";
+                    // klt：101=日线, 102=周线, 1=分钟线
+                    String klt;
+                    if ("STOCK_WEEKLY".equals(taskType)) {
+                        klt = "102";
+                    } else if ("STOCK_KLINE_MINUTE".equals(taskType)) {
+                        klt = "1";
+                    } else {
+                        klt = "101"; // STOCK_DAILY / STOCK_DAILY_HISTORY / INDEX_DAILY
+                    }
                     // 严格按 market 项目 URL 格式：ut + cb + _ + lmt=50000 + end=20500101（固定值，不从 params 读）
                     String cb = "jQuery" + System.currentTimeMillis() + "_" + new Random().nextLong();
                     long ts = System.currentTimeMillis();
@@ -243,6 +251,10 @@ public final class EastmoneyEndpoints {
         // 个股日K历史回填（push2his kline, klt=101 日线，lmt 设大一次拿满历史）
         SPEC_BY_TYPE.put("STOCK_DAILY_HISTORY", new EndpointSpec(
                 "STOCK_DAILY_HISTORY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+                ParserType.KLINE, null, null, null));
+        // 个股分钟K线（push2his kline, klt=1 分钟线，量价数据）
+        SPEC_BY_TYPE.put("STOCK_KLINE_MINUTE", new EndpointSpec(
+                "STOCK_KLINE_MINUTE", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
                 ParserType.KLINE, null, null, null));
         // 地域板块日线（board_type=1）
         SPEC_BY_TYPE.put("REGION_DAILY", new EndpointSpec(
