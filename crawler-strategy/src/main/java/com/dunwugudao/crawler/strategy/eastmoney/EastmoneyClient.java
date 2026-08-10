@@ -128,16 +128,17 @@ public class EastmoneyClient {
                 .connectTimeout(Duration.ofSeconds(15))
                 .readTimeout(Duration.ofSeconds(30));
 
-        // 设置代理认证(主动添加 Proxy-Authorization 头,不等 407 触发)
-        // 必须用 addNetworkInterceptor: HTTPS 代理 CONNECT 隧道阶段不走应用拦截器,
-        // 只有网络拦截器才能给 CONNECT 请求加上 Proxy-Authorization 头,否则会 407 认证失败
+        // 代理认证：用 Authenticator 在收到 407 时动态提供凭证（隧道代理的标准做法）
         if (username != null && password != null) {
             final String credential = Credentials.basic(username, password);
-            builder.addNetworkInterceptor(chain -> {
-                Request request = chain.request().newBuilder()
-                        .header("Proxy-Authorization", credential)
-                        .build();
-                return chain.proceed(request);
+            builder.authenticator((Route route, Response response) -> {
+                // 代理明确要求认证时，带上凭证重试
+                if (response.code() == 407) {
+                    return response.request().newBuilder()
+                            .header("Proxy-Authorization", credential)
+                            .build();
+                }
+                return null;
             });
         }
 

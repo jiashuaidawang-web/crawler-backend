@@ -1103,12 +1103,14 @@ public class DedupWriter {
     /**
      * 分片批量插入：把大 batch 按每批 {@code chunkSize} 行拆分后循环调 {@code inserter}，
      * 避免单次 INSERT 参数过多触发 CK NOT_ENOUGH_SPACE，同时让 application.yml 的 batch 配置真正生效。
+     * <p>chunkSize=20：每批 20 行 × 43 列 ≈ 860 参数，生成的 SQL ≈ 50KB，
+     * 远低于 ClickHouse 默认 max_query_size(1MB) 和 max_memory_usage，避免服务端超时断连。</p>
      */
     private <T> void insertInChunks(Consumer<List<T>> inserter, List<T> batch, String table, SourceType source) {
         if (batch == null || batch.isEmpty()) {
             return;
         }
-        final int chunkSize = 100;
+        final int chunkSize = 20;
         int total = batch.size();
         int insertedChunks = 0;
         for (int from = 0; from < total; from += chunkSize) {
