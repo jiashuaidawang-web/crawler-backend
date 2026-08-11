@@ -12,8 +12,8 @@
         INSERT INTO stock_daily
         (trade_date, ts_code, stock_name, open, high, low, close, pre_close, pct_chg, vol, amount,
          turnover, total_mv, circ_mv, pe, is_limit_up, is_limit_down, chg_amount, amplitude,
-         volume_ratio, avg_price, main_net, pe_static, leader_code, industry_code, concept_code,
-         market_code, reserved_f24, reserved_f25, reserved_f107, reserved_f136, reserved_f173,
+         volume_ratio, avg_price, main_net, super_big, big_net, mid_net, small_net, pe_static, leader_code, industry_code, concept_code,
+         market_code, turn_speed, reserved_f24, reserved_f25, reserved_f107, reserved_f136, reserved_f173,
          velocity, is_new_high, chg_60d, seal_fund, board_days, board_stat, first_seal_time,
          last_seal_time, limit_type, data_source, src_detail, create_date, update_date)
         VALUES
@@ -21,8 +21,8 @@
             (#{r.tradeDate}, #{r.tsCode}, #{r.stockName}, #{r.open}, #{r.high}, #{r.low}, #{r.close},
              #{r.preClose}, #{r.pctChg}, #{r.vol}, #{r.amount}, #{r.turnover}, #{r.totalMv}, #{r.circMv},
              #{r.pe}, #{r.isLimitUp}, #{r.isLimitDown}, #{r.chgAmount}, #{r.amplitude}, #{r.volumeRatio},
-             #{r.avgPrice}, #{r.mainNet}, #{r.peStatic}, #{r.leaderCode}, #{r.industryCode}, #{r.conceptCode},
-             #{r.marketCode}, #{r.reservedF24}, #{r.reservedF25}, #{r.reservedF107}, #{r.reservedF136},
+             #{r.avgPrice}, #{r.mainNet}, #{r.superBig}, #{r.bigNet}, #{r.midNet}, #{r.smallNet}, #{r.peStatic}, #{r.leaderCode}, #{r.industryCode}, #{r.conceptCode},
+             #{r.marketCode}, #{r.turnSpeed}, #{r.reservedF24}, #{r.reservedF25}, #{r.reservedF107}, #{r.reservedF136},
              #{r.reservedF173}, #{r.velocity}, #{r.isNewHigh}, #{r.chg60d}, #{r.sealFund}, #{r.boardDays},
              #{r.boardStat}, #{r.firstSealTime}, #{r.lastSealTime}, #{r.limitType}, #{r.dataSource},
              #{r.srcDetail}, #{r.createDate}, #{r.updateDate})

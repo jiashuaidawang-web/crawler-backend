@@ -782,6 +782,17 @@ public class DedupWriter {
             e.setVolumeRatio(bigDec(r.get("volume_ratio")));
             e.setChg60d(bigDec(r.get("chg_60d")));
             e.setMarketCode(intVal(r.get("market_code")));
+            e.setMainNet(bigDec(r.get("main_net")));
+            e.setSuperBig(bigDec(r.get("super_big")));
+            e.setBigNet(bigDec(r.get("big_net")));
+            e.setMidNet(bigDec(r.get("mid_net")));
+            e.setSmallNet(bigDec(r.get("small_net")));
+            e.setPeStatic(bigDec(r.get("pe_static")));
+            e.setVelocity(bigDec(r.get("velocity")));
+            e.setTurnSpeed(bigDec(r.get("turn_speed")));
+            e.setReservedF24(bigDec(r.get("reserved_f24")));
+            e.setReservedF25(bigDec(r.get("reserved_f25")));
+            e.setReservedF173(bigDec(r.get("reserved_f173")));
             e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);

@@ -35,6 +35,10 @@ public class StockDaily {
     private BigDecimal volumeRatio;  // f10 量比
     private BigDecimal avgPrice;     // f11 均价
     private BigDecimal mainNet;      // f62 主力净流入
+    private BigDecimal superBig;     // f66 超大单净流入
+    private BigDecimal bigNet;       // f72 大单净流入
+    private BigDecimal midNet;       // f78 中单净流入
+    private BigDecimal smallNet;     // f84 小单净流入
     private BigDecimal peStatic;     // f115 静态市盈率
     private String leaderCode;       // f128 领涨股代码
     private String industryCode;     // f140 所属行业代码
@@ -47,6 +51,7 @@ public class StockDaily {
     private BigDecimal reservedF173; // f173 涨速%
     // push2 clist 完整投影新增字段（2026-08-02）
     private BigDecimal velocity;        // f11 涨速%
+    private BigDecimal turnSpeed;       // f22 涨速(另一口径)
     private Integer isNewHigh;          // f22 是否新高 1/0
     private BigDecimal chg60d;          // f23 60日涨跌幅%
     private BigDecimal sealFund;        // f62 封单资金(元)

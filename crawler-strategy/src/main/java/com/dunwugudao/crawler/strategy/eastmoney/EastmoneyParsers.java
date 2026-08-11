@@ -129,6 +129,17 @@ public final class EastmoneyParsers {
                     row.put("circ_mv", num(n, "f21"));       // f21 流通市值(元)
                     row.put("chg_60d", num(n, "f23"));       // f23 60日涨跌幅%
                     row.put("market_code", num(n, "f152"));  // f152 市场码(0深/1沪/2京)
+                    row.put("main_net", num(n, "f62"));      // f62 主力净流入
+                    row.put("super_big", num(n, "f66"));     // f66 超大单净流入
+                    row.put("big_net", num(n, "f72"));       // f72 大单净流入
+                    row.put("mid_net", num(n, "f78"));       // f78 中单净流入
+                    row.put("small_net", num(n, "f84"));     // f84 小单净流入
+                    row.put("pe_static", num(n, "f115"));    // f115 静态市盈率
+                    row.put("velocity", num(n, "f11"));       // f11 涨速%
+                    row.put("turn_speed", num(n, "f22"));     // f22 涨速(另一口径)
+                    row.put("reserved_f24", num(n, "f24"));   // f24 年初至今涨跌幅
+                    row.put("reserved_f25", num(n, "f25"));   // f25 待确认
+                    row.put("reserved_f173", num(n, "f173")); // f173 涨速%
                     // 涨跌停标记（pct_chg 近似判定，创业板/科创板 20% 与主板 10% 统一阈值，TODO M6 精确）
                     Double pct = num(n, "f3");
                     row.put("is_limit_up", (pct != null && pct >= 9.8) ? 1 : 0);

@@ -1,10 +1,14 @@
 历史日K线
 https://73.push2his.eastmoney.com/api/qt/stock/kline/get?cb=jQuery112406372499186416041_1635909263466&secid=0.300059&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&klt=101&fqt=0&end=20500101&lmt=50000&_=1635909263511
 
+每日日K
+http://83.push2.eastmoney.com/api/qt/clist/get?cb=jQuery&pn=40&pz=5&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m:0+t:6,m:0+t:80,m:1+t
+:2,m:1+t:23&fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f20,f21,f22,f23,f24,f25,f62,f66,f72,f78,f84,f115,f128,f140,f141,f136,f152,f173
+&_=1754900000000
+
 分时量能
 https://73.push2his.eastmoney.com/api/qt/stock/kline/get?cb=jQuery112406372499186416041_1635909263466&secid=0.300059&ut=fa5fd1943c7b386f172d6893dbfba10b&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61&klt=1&fqt=0&end=20500101&lmt=50000&_=1635909263511
 
-日k
 klt        │       含义        │
 ├──────────────────┼───────────────────┤
 │ 1                │ 分时（1分钟）     │
