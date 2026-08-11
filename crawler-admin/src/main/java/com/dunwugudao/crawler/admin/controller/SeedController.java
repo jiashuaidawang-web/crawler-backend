@@ -11,10 +11,7 @@ import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -73,6 +70,42 @@ public class SeedController {
         r.put("taskId", task.getTaskId());
         r.put("status", "PENDING");
         r.put("inserted", rows);  // 1=新插入, 0=已存在
+        return r;
+    }
+
+    /**
+     * 下发个股分钟K线（STOCK_KLINE_MINUTE）—— 东方财富 push2his kline klt=1。
+     * <p>极简接口：source 固定东财(1)，只需 tsCode（路径）+ tradeDate（可选，默认今天）。</p>
+     * <p>curl: POST /api/crawl/seed-minute/600000.SH?tradeDate=2026-08-10</p>
+     */
+    @PostMapping("/seed-minute/{tsCode}")
+    public Map<String, Object> seedMinuteKline(@PathVariable String tsCode,
+            @RequestParam(required = false) String tradeDate) {
+        String date = (tradeDate != null && !tradeDate.isBlank()) ? tradeDate : LocalDate.now().toString();
+        int source = 1; // 东方财富
+        String paramsJson = "{\"tsCode\":\"" + tsCode + "\",\"tradeDate\":\"" + date + "\"}";
+        String uniqueKey = "STOCK_KLINE_MINUTE|" + source + "|" + tsCode + "|" + date;
+
+        CrawlTask task = new CrawlTask();
+        task.setTaskType("STOCK_KLINE_MINUTE");
+        task.setSource(SourceType.fromCode(source));
+        task.setParamsJson(paramsJson);
+        task.setUniqueKey(uniqueKey);
+        task.setExpectedCount(1);
+        task.setStatus("PENDING");
+        task.setPriority(5);
+        task.setRetryCount(0);
+        task.setMaxRetry(3);
+        task.setCreatedAt(LocalDateTime.now());
+        task.setUpdatedAt(LocalDateTime.now());
+        int rows = crawlTaskMapper.insertIfAbsent(task);
+
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "STOCK_KLINE_MINUTE");
+        r.put("tsCode", tsCode);
+        r.put("tradeDate", date);
+        r.put("inserted", rows);
+        r.put("taskId", task.getTaskId());
         return r;
     }
 

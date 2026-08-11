@@ -303,6 +303,8 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             if (msg.contains("407") || msg.contains("proxy authentication")) return true;
             // 无法建立隧道（HTTPS through proxy）
             if (msg.contains("unable to tunnel") || msg.contains("tunnel")) return true;
+            // 代理认证失败（407 / Failed to authenticate with proxy）
+            if (msg.contains("authenticate") || msg.contains("407") || msg.contains("auth")) return true;
             // 连接超时（读）通常是代理慢/挂了
             if (cls.contains("sockettimeout") && msg.contains("read")) return true;
             // 东财 TLS 指纹拦截（446/460 等）
