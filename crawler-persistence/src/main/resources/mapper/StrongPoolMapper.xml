@@ -57,4 +57,10 @@
         </foreach>
     </insert>
 
+    <select id="selectDistinctTsCodeAndName" resultType="java.util.Map">
+        SELECT DISTINCT ts_code, stock_name
+        FROM strong_pool
+        WHERE ts_code IS NOT NULL AND stock_name IS NOT NULL
+    </select>
+
 </mapper>

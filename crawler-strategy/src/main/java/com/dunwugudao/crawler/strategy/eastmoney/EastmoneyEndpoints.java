@@ -151,7 +151,10 @@ public final class EastmoneyEndpoints {
                                     + "BILLBOARD_DEAL_AMT,ACCUM_AMOUNT,DEAL_NET_RATIO,DEAL_AMOUNT_RATIO,TURNOVERRATE,"
                                     + "FREE_MARKET_CAP,EXPLANATION,MARKET,SECURITY_TYPE_CODE,SECURITY_INNER_CODE,"
                                     + "TRADE_ID,TRADE_MARKET,TRADE_MARKET_CODE,BUY_SEAT,SELL_SEAT,BUY_SEAT_NEW,"
-                                    + "SELL_SEAT_NEW,BUY_RATIO,SELL_RATIO,CHANGE_TYPE";
+                                    + "SELL_SEAT_NEW,BUY_RATIO,SELL_RATIO,CHANGE_TYPE,"
+                                    + "NET_BS_AMT,SUM_BUY_AMT,SUM_SELL_AMT,"
+                                    + "D1_CLOSE_ADJCHRATE,D2_CLOSE_ADJCHRATE,D5_CLOSE_ADJCHRATE,"
+                                    + "D10_CLOSE_ADJCHRATE,D20_CLOSE_ADJCHRATE,D30_CLOSE_ADJCHRATE";
                             String filter = "(TRADE_DATE<='" + tdDash + "')(TRADE_DATE>='" + tdDash + "')";
                             return "https://datacenter-web.eastmoney.com/api/data/v1/get"
                                     + "?reportName=RPT_DAILYBILLBOARD_DETAILSNEW"

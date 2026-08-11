@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0#EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.StockTaskConfigMapper">
+
+    <select id="selectByTypeAndStatus" resultType="com.dunwugudao.crawler.persistence.entity.StockTaskConfig">
+        SELECT type, code, stock_name AS stockName, status, create_date AS createDate, update_date AS updateDate
+        FROM stock_task_config
+        WHERE type = #{type} AND status = #{status}
+        ORDER BY code
+    </select>
+
+    <insert id="batchInsertIfAbsent" parameterType="java.util.List">
+        INSERT INTO stock_task_config (type, code, stock_name, status, create_date, update_date)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.type}, #{r.code}, #{r.stockName}, #{r.status}, #{r.createDate}, #{r.updateDate})
+        </foreach>
+    </insert>
+
+</mapper>

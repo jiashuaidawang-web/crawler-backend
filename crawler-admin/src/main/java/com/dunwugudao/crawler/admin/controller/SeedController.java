@@ -171,6 +171,35 @@ public class SeedController {
     }
 
     /**
+     * 初始化分时配置表:从5个池子取 distinct 股票,type=minute 插入 stock_task_config。
+     * <p>curl: POST /api/crawl/init-task-config</p>
+     */
+    @PostMapping("/init-task-config")
+    public Map<String, Object> initTaskConfig() {
+        int n = seedGenerator.initTaskConfigFromPools();
+        Map<String, Object> r = new HashMap<>();
+        r.put("action", "init-task-config");
+        r.put("inserted", n);
+        return r;
+    }
+
+    /**
+     * 下发分时分钟线任务(STOCK_KLINE_MINUTE):从配置表取 type=minute 的股票,逐个生成任务。
+     * <p>curl: POST /api/crawl/seed-stock-kline-minute?tradeDate=2026-08-11&amp;source=1</p>
+     */
+    @PostMapping("/seed-stock-kline-minute")
+    public Map<String, Object> seedStockKlineMinute(@RequestBody(required = false) SeedRequest req) {
+        String date = req != null && req.tradeDate() != null ? req.tradeDate() : LocalDate.now().toString();
+        int source = req != null && req.source() != null ? req.source() : 1;
+        int n = seedGenerator.seedStockKlineMinute(source, date);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "STOCK_KLINE_MINUTE");
+        r.put("date", date);
+        r.put("inserted", n);
+        return r;
+    }
+
+    /**
      * 下发龙虎榜主表抓取任务（DRAGON_TIGER）—— 经东财 datacenter 新版接口（reportName=RPT_DAILYBILLBOARD_DETAILSNEW）。
      * worker 认领后落 dragon_tiger 表。市场级，每日一条。
      */

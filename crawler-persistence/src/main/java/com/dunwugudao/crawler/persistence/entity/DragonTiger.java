@@ -41,6 +41,16 @@ public class DragonTiger {
     private Long tradeId;
     private String tradeMarket;
     private String tradeMarketCode;
+    // 接口 columns=ALL 暴露的补充字段（榜后涨跌幅 + 买卖额补充口径）
+    private BigDecimal netBsAmt;           // NET_BS_AMT          龙虎榜净买卖额(另一口径)
+    private BigDecimal sumBuyAmt;          // SUM_BUY_AMT         买入总额(含非龙虎榜部分)
+    private BigDecimal sumSellAmt;         // SUM_SELL_AMT        卖出总额
+    private BigDecimal d1CloseAdjchrate;   // D1_CLOSE_ADJCHRATE  上榜后1日复权涨跌幅
+    private BigDecimal d2CloseAdjchrate;   // D2_CLOSE_ADJCHRATE  上榜后2日复权涨跌幅
+    private BigDecimal d5CloseAdjchrate;   // D5_CLOSE_ADJCHRATE  上榜后5日复权涨跌幅
+    private BigDecimal d10CloseAdjchrate;  // D10_CLOSE_ADJCHRATE 上榜后10日复权涨跌幅
+    private BigDecimal d20CloseAdjchrate;  // D20_CLOSE_ADJCHRATE 上榜后20日复权涨跌幅
+    private BigDecimal d30CloseAdjchrate;  // D30_CLOSE_ADJCHRATE 上榜后30日复权涨跌幅
     // 基础字段
     private Integer dataSource;          // data_source: 0=东财 1=同花顺
     private String srcDetail;        // src_detail: 来源URL/接口/备注

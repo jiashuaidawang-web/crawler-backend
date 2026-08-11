@@ -5,11 +5,18 @@ import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
 import com.dunwugudao.crawler.persistence.entity.StockBackfillStatus;
+import com.dunwugudao.crawler.persistence.entity.StockTaskConfig;
 import com.dunwugudao.crawler.persistence.mapper.BoardBasicMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.DragonTigerMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBackfillStatusMapper;
+import com.dunwugudao.crawler.persistence.mapper.CixinPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.LimitDownPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.LimitUpPoolMapper;
+import com.dunwugudao.crawler.persistence.mapper.StrongPoolMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
+import com.dunwugudao.crawler.persistence.mapper.StockTaskConfigMapper;
+import com.dunwugudao.crawler.persistence.mapper.ZhabanPoolMapper;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +67,12 @@ public class SeedGenerator {
     private final EastmoneyClient eastmoneyClient;
     private final StockBackfillStatusMapper backfillStatusMapper;
     private final StockDailyMapper stockDailyMapper;
+    private final StockTaskConfigMapper taskConfigMapper;
+    private final LimitUpPoolMapper limitUpPoolMapper;
+    private final LimitDownPoolMapper limitDownPoolMapper;
+    private final ZhabanPoolMapper zhabanPoolMapper;
+    private final StrongPoolMapper strongPoolMapper;
+    private final CixinPoolMapper cixinPoolMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
@@ -75,6 +89,12 @@ public class SeedGenerator {
                          EastmoneyClient eastmoneyClient,
                          StockBackfillStatusMapper backfillStatusMapper,
                          StockDailyMapper stockDailyMapper,
+                         StockTaskConfigMapper taskConfigMapper,
+                         LimitUpPoolMapper limitUpPoolMapper,
+                         LimitDownPoolMapper limitDownPoolMapper,
+                         ZhabanPoolMapper zhabanPoolMapper,
+                         StrongPoolMapper strongPoolMapper,
+                         CixinPoolMapper cixinPoolMapper,
                          org.springframework.core.env.Environment env) {
         this.mapper = mapper;
         this.universe = universe;
@@ -84,6 +104,12 @@ public class SeedGenerator {
         this.eastmoneyClient = eastmoneyClient;
         this.backfillStatusMapper = backfillStatusMapper;
         this.stockDailyMapper = stockDailyMapper;
+        this.taskConfigMapper = taskConfigMapper;
+        this.limitUpPoolMapper = limitUpPoolMapper;
+        this.limitDownPoolMapper = limitDownPoolMapper;
+        this.zhabanPoolMapper = zhabanPoolMapper;
+        this.strongPoolMapper = strongPoolMapper;
+        this.cixinPoolMapper = cixinPoolMapper;
         // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
         // 探测失败兜底全市场股票数(默认 5545,保证 task 数)
@@ -308,6 +334,80 @@ public class SeedGenerator {
         CrawlTask task = buildTask("INDEX_DAILY", source, date, null, null);
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedIndexDaily] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
+    }
+
+    /** 分时分钟线:从配置表取 type='minute' 的启用股票,逐个生成 STOCK_KLINE_MINUTE 任务。 */
+    public int seedStockKlineMinute(int source, String date) {
+        List<StockTaskConfig> configs = taskConfigMapper.selectByTypeAndStatus("minute", 1);
+        if (configs == null || configs.isEmpty()) {
+            log.info("[seedStockKlineMinute] 配置表无 minute 类型股票,跳过");
+            return 0;
+        }
+        int inserted = 0;
+        List<CrawlTask> batch = new ArrayList<>(100);
+        for (StockTaskConfig cfg : configs) {
+            String params = "{\"tsCode\":\"" + cfg.getCode() + "\",\"tradeDate\":\"" + date + "\"}";
+            CrawlTask task = buildTask("STOCK_KLINE_MINUTE", source, date, cfg.getCode(), 1, params);
+            task.setUniqueKey("STOCK_KLINE_MINUTE|" + source + "|" + cfg.getCode() + "|" + date);
+            batch.add(task);
+            if (batch.size() >= 100) {
+                inserted += flush(batch);
+                batch.clear();
+            }
+        }
+        inserted += flush(batch);
+        log.info("[seedStockKlineMinute] date={} source={} stocks={} inserted={}", date, source, configs.size(), inserted);
+        return inserted;
+    }
+
+    /** 从5个池子初始化配置表(type=minute):取所有池子的 distinct 股票,幂等插入配置表。 */
+    public int initTaskConfigFromPools() {
+        List<List<Map<String, Object>>> allPoolRows = new ArrayList<>();
+        allPoolRows.add(limitUpPoolMapper.selectDistinctTsCodeAndName());
+        allPoolRows.add(limitDownPoolMapper.selectDistinctTsCodeAndName());
+        allPoolRows.add(zhabanPoolMapper.selectDistinctTsCodeAndName());
+        allPoolRows.add(strongPoolMapper.selectDistinctTsCodeAndName());
+        allPoolRows.add(cixinPoolMapper.selectDistinctTsCodeAndName());
+        Map<String, String> codeToName = new LinkedHashMap<>();
+        for (List<Map<String, Object>> rows : allPoolRows) {
+            if (rows == null) continue;
+            for (Map<String, Object> r : rows) {
+                Object codeObj = r.get("ts_code");
+                Object nameObj = r.get("stock_name");
+                if (codeObj == null || nameObj == null) continue;
+                String code = codeObj.toString();
+                if (!codeToName.containsKey(code)) {
+                    codeToName.put(code, nameObj.toString());
+                }
+            }
+        }
+        if (codeToName.isEmpty()) {
+            log.info("[initTaskConfigFromPools] 5个池子均无数据,跳过");
+            return 0;
+        }
+        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        List<StockTaskConfig> batch = new ArrayList<>(100);
+        int inserted = 0;
+        for (Map.Entry<String, String> e : codeToName.entrySet()) {
+            StockTaskConfig cfg = new StockTaskConfig();
+            cfg.setType("minute");
+            cfg.setCode(e.getKey());
+            cfg.setStockName(e.getValue());
+            cfg.setStatus(1);
+            cfg.setCreateDate(today);
+            cfg.setUpdateDate(now);
+            batch.add(cfg);
+            if (batch.size() >= 100) {
+                inserted += taskConfigMapper.batchInsertIfAbsent(batch);
+                batch.clear();
+            }
+        }
+        if (!batch.isEmpty()) {
+            inserted += taskConfigMapper.batchInsertIfAbsent(batch);
+        }
+        log.info("[initTaskConfigFromPools] pools=5, distinctStocks={}, inserted={}", codeToName.size(), inserted);
         return inserted;
     }
 

@@ -141,12 +141,9 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 allRows.addAll(rows);
                 break;
             } else {
-                rows = EastmoneyParsers.parseDatacenter(root.path("data"), spec, params);
-                if (rows.isEmpty()) {
-                    break;
-                }
+                rows = EastmoneyParsers.parseDatacenter(root.path("result").path("data"), spec, params);
                 allRows.addAll(rows);
-                pageIdx++;
+                break; // datacenter 接口 pageSize=5000 一次返回全部（响应 pages: 1），无需翻页
             }
         }
         return buildResult(allRows, lastRaw, lastUrl);

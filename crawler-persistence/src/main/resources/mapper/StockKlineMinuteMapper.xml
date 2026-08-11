@@ -20,4 +20,11 @@
         </foreach>
     </insert>
 
+    <!-- 查某股票某交易日已有的 minute_time(去重用) -->
+    <select id="selectMinutesByCodeAndDate" resultType="java.time.LocalDateTime">
+        SELECT minute_time
+        FROM stock_kline_minute
+        WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
+    </select>
+
 </mapper>

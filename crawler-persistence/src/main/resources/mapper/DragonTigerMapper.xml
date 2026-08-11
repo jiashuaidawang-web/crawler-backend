@@ -39,7 +39,16 @@
         security_type_code,
         trade_id,
         trade_market,
-        trade_market_code
+        trade_market_code,
+        net_bs_amt,
+        sum_buy_amt,
+        sum_sell_amt,
+        d1_close_adjchrate,
+        d2_close_adjchrate,
+        d5_close_adjchrate,
+        d10_close_adjchrate,
+        d20_close_adjchrate,
+        d30_close_adjchrate
         )
         VALUES
         <foreach collection="list" item="r" separator=",">
@@ -76,7 +85,16 @@
              #{r.securityTypeCode},
              #{r.tradeId},
              #{r.tradeMarket},
-             #{r.tradeMarketCode}
+             #{r.tradeMarketCode},
+             #{r.netBsAmt},
+             #{r.sumBuyAmt},
+             #{r.sumSellAmt},
+             #{r.d1CloseAdjchrate},
+             #{r.d2CloseAdjchrate},
+             #{r.d5CloseAdjchrate},
+             #{r.d10CloseAdjchrate},
+             #{r.d20CloseAdjchrate},
+             #{r.d30CloseAdjchrate}
             )
         </foreach>
     </insert>

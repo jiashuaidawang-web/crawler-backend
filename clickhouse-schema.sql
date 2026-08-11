@@ -663,3 +663,15 @@ SETTINGS index_granularity = 8192;
 --    用 ALTER MODIFY COLUMN 把非键列改为 Nullable（仅放宽约束，不丢数据），
 --    专项修复 main_fund_flow 三维度列与全部 update_date/create_date 的"空校验"报错。
 -- ============================================================================
+
+-- 股票任务配置表(分时/日K等任务的股票列表)
+CREATE TABLE IF NOT EXISTS stock_task_config (
+    type String COMMENT '任务类型(如 minute=分时)',
+    code String COMMENT '股票代码(600000.SH)',
+    stock_name String COMMENT '股票名称',
+    status UInt8 DEFAULT 1 COMMENT '1=启用 0=禁用',
+    create_date Date COMMENT '创建日期',
+    update_date DateTime COMMENT '更新时间'
+) ENGINE = MergeTree()
+ORDER BY (type, code)
+COMMENT '股票任务配置表';

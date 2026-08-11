@@ -156,6 +156,8 @@ public class DataSourceConfig {
     @Bean public MapperFactoryBean<TradeCalendarMapper> tradeCalendarMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, TradeCalendarMapper.class); }
     @Bean public MapperFactoryBean<ThsPlateMapper> thsPlateMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, ThsPlateMapper.class); }
 
+    @Bean public MapperFactoryBean<StockTaskConfigMapper> stockTaskConfigMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockTaskConfigMapper.class); }
+
     private <T> MapperFactoryBean<T> newMapper(SqlSessionFactory f, Class<T> type) throws Exception {
         MapperFactoryBean<T> fb = new MapperFactoryBean<>(type);
         fb.setSqlSessionFactory(f);

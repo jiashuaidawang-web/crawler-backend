@@ -30,7 +30,6 @@ public class ThsPlateDirectStrategy implements SourceStrategy {
         return source == SourceType.TONGHUASHUN;
     }
 
-    @Override
     public boolean supports(String taskType) {
         return "THS_PLATE_DIRECT".equals(taskType);
     }

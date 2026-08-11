@@ -365,6 +365,15 @@ public final class EastmoneyParsers {
                 row.put("trade_id", txt(n, "TRADE_ID"));
                 row.put("trade_market", txt(n, "TRADE_MARKET"));
                 row.put("trade_market_code", txt(n, "TRADE_MARKET_CODE"));
+                row.put("net_bs_amt", num(n, "NET_BS_AMT"));
+                row.put("sum_buy_amt", num(n, "SUM_BUY_AMT"));
+                row.put("sum_sell_amt", num(n, "SUM_SELL_AMT"));
+                row.put("d1_close_adjchrate", num(n, "D1_CLOSE_ADJCHRATE"));
+                row.put("d2_close_adjchrate", num(n, "D2_CLOSE_ADJCHRATE"));
+                row.put("d5_close_adjchrate", num(n, "D5_CLOSE_ADJCHRATE"));
+                row.put("d10_close_adjchrate", num(n, "D10_CLOSE_ADJCHRATE"));
+                row.put("d20_close_adjchrate", num(n, "D20_CLOSE_ADJCHRATE"));
+                row.put("d30_close_adjchrate", num(n, "D30_CLOSE_ADJCHRATE"));
                 row.put("trade_date", tradeDate);
                 rows.add(row);
             }
