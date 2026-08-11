@@ -2,7 +2,6 @@ package com.dunwugudao.crawler.worker.config;
 
 import com.dunwugudao.crawler.core.strategy.StrategyFactory;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyApiStrategy;
-import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyPlaywrightStrategy;
 import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.QgLongTermProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.WorkerProxyManager;
@@ -44,11 +43,6 @@ public class StrategyFactoryConfig {
         return new WorkerProxyManager(provider::acquire, -1);
     }
 
-    @Bean
-    public WorkerProxyManager eastmoneyPlaywrightProxyManager(QgLongTermConfig qgConfig) {
-        return eastmoneyOkHttpProxyManager(qgConfig);
-    }
-
     /**
      * 青果代理提供者 —— CLOAK 浏览器用(同花顺)。
      * <p>与 eastmoneyOkHttpProxyManager 共享同一份青果配置,但独立实例(各自维护自己的代理 IP)。</p>
@@ -61,13 +55,9 @@ public class StrategyFactoryConfig {
     @Bean
     public StrategyFactory strategyFactory(AntiCrawlConfig cfg, BrowserPool pool,
                                            @org.springframework.beans.factory.annotation.Qualifier("eastmoneyOkHttpProxyManager") WorkerProxyManager okHttpProxyManager,
-                                           @org.springframework.beans.factory.annotation.Qualifier("eastmoneyPlaywrightProxyManager") WorkerProxyManager playwrightProxyManager,
                                            ProxyProvider cloakProxyProvider) {
         EastmoneyApiStrategy eastmoney = new EastmoneyApiStrategy(cfg);
         eastmoney.setWorkerProxyManager(okHttpProxyManager);
-        EastmoneyPlaywrightStrategy playwright = new EastmoneyPlaywrightStrategy(cfg, pool);
-        playwright.setWorkerProxyManager(playwrightProxyManager);  // Playwright fallback 用青果长效 IP
-        eastmoney.setPlaywrightStrategy(playwright);
         // CLOAK 浏览器注入青果代理提供者(动态获取代理 IP)
         CloakServerProcess.setProxyProvider(cloakProxyProvider);
         // 同花顺板块爬虫(手动实例化，crawler-strategy 模块无 Spring 依赖）

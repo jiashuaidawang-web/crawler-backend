@@ -33,10 +33,7 @@ import org.slf4j.LoggerFactory;
  * <p>能力：分页(clist 用 pages；池/Datacenter 用「返回空即停」)、字段映射对齐 PART A 原始表、
  * UA 随机 + 代理(perSource) + 令牌桶限速。失败抛 RuntimeException 交 worker RetryPolicy。</p>
  *
- * <p>STOCK_DAILY / STOCK_WEEKLY / INDEX_DAILY 因 TLS 指纹拦截，委托
- * {@link EastmoneyPlaywrightStrategy} 走 Playwright 路径（本类不执行）。</p>
- *
- * <p>策略：OkHttp + 快代理优先；失败自动 fallback 到 Playwright + 青果长效 IP。</p>
+ * <p>策略：纯 OkHttp + 快代理。</p>
  */
 public class EastmoneyApiStrategy implements SourceStrategy {
 
@@ -62,17 +59,10 @@ public class EastmoneyApiStrategy implements SourceStrategy {
     private WorkerProxyManager workerProxyManager;
     private final RateLimiter rateLimiter;
     private final Random random = new Random();
-    /** Playwright 策略（用于 push2his / push2 端点绕过 TLS 指纹拦截）。 */
-    private EastmoneyPlaywrightStrategy playwrightStrategy;
 
     public EastmoneyApiStrategy(AntiCrawlConfig antiCrawlConfig) {
         this.antiCrawlConfig = antiCrawlConfig;
         this.rateLimiter = new RateLimiter(antiCrawlConfig.getRateLimitPerSec());
-    }
-
-    /** 注入 Playwright 策略（由 StrategyFactoryConfig 装配）。 */
-    public void setPlaywrightStrategy(EastmoneyPlaywrightStrategy playwrightStrategy) {
-        this.playwrightStrategy = playwrightStrategy;
     }
 
     /**
@@ -90,41 +80,12 @@ public class EastmoneyApiStrategy implements SourceStrategy {
 
     @Override
     public CrawlResult fetch(CrawlContext ctx) {
-        CrawlTask task = ctx.getTask();
-        String taskType = task.getTaskType();
-
-        // STOCK_WEEKLY / INDEX_DAILY：kline 端点，OkHttp 一贯被 TLS 指纹拦截，直接走 Playwright + 青果
-        if ("STOCK_WEEKLY".equals(taskType) || "INDEX_DAILY".equals(taskType)) {
-            return playwrightStrategy.fetch(ctx);
-        }
-
-        // 其他东财请求（含 STOCK_DAILY）：先试 OkHttp + 快代理
-        // STOCK_DAILY 纯 OkHttp（push2 clist 不被 TLS 拦截，无需 Playwright 兜底）；
-        // 其它 CLIST 类型保留 Playwright + 青果 fallback 安全网
-        try {
-            return fetchWithOkHttp(ctx, taskType);
-        } catch (Exception e) {
-            if ("STOCK_DAILY".equals(taskType) || "NORTHBOUND_FLOW".equals(taskType)) {
-                // STOCK_DAILY / NORTHBOUND_FLOW 不 fallback：前者走 Playwright 会 TLS 拦截，
-                // 后者 Playwright 路径无 KAMT 解析器（会静空），均直接抛交 worker 重试/死亡
-                log.error("[{}] OkHttp failed ({})，无 Playwright fallback，交 worker 重试", taskType, e.getMessage(), e);
-                throw e;
-            }
-            // OkHttp 路径失败（代理级错误/446/EMPTY_RESPONSE 等）→ 立即 fallback Playwright + 青果长效 IP
-            log.warn("[{}] OkHttp failed ({}), fallback to Playwright + QgLongTerm", taskType, e.getMessage());
-            try {
-                return playwrightStrategy.fetch(ctx);
-            } catch (Exception e2) {
-                // Playwright 也失败 → 抛出异常，让 worker 重试/死亡
-                log.error("[{}] Playwright fallback also failed: {}", taskType, e2.getMessage(), e2);
-                throw e2;
-            }
-        }
+        return fetchWithOkHttp(ctx, ctx.getTask().getTaskType());
     }
 
     /**
      * OkHttp 路径（快代理私密代理）。
-     * <p>成功直接返回；抛异常由 {@link #fetch(CrawlContext)} 捕获并 fallback 到 Playwright。</p>
+     * <p>成功直接返回；抛异常交 worker 的 RetryPolicy 裁决。</p>
      */
     private CrawlResult fetchWithOkHttp(CrawlContext ctx, String taskType) {
         CrawlTask task = ctx.getTask();
