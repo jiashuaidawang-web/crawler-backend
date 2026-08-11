@@ -308,29 +308,108 @@ public final class EastmoneyEndpoints {
                 ParserType.KAMT, null, null, null));
     }
 
-    private static final Map<String, String> INDEX_SECIDS = new HashMap<>();
+
+    /**
+     * 指数代码(东财 f12 裸码) → 后缀。后缀跟东财 secid market 走: 1→.SH 0→.SZ 2→.CSI。
+     * <p>北交所指数(899050/899601)f13=0 归 .SZ。index_code 后续作东财接口入参,必须与东财一致。</p>
+     */
+    private static final Map<String, String> INDEX_CODE_SUFFIX = new HashMap<>();
 
     static {
-        // 指数代码 → 东财 secid（market.code）
-        INDEX_SECIDS.put("000001.SH", "1.000001");
-        INDEX_SECIDS.put("399001.SZ", "0.399001");
-        INDEX_SECIDS.put("399006.SZ", "0.399006");
-        INDEX_SECIDS.put("000300.SH", "1.000300");
-        INDEX_SECIDS.put("000905.SH", "1.000905");
-        INDEX_SECIDS.put("000852.SH", "1.000852");
-        INDEX_SECIDS.put("932000.CSI", "1.932000");
+        // f13=1 → .SH（沪市）
+        INDEX_CODE_SUFFIX.put("000001", ".SH"); // 上证指数
+        INDEX_CODE_SUFFIX.put("000300", ".SH"); // 沪深300
+        INDEX_CODE_SUFFIX.put("000016", ".SH"); // 上证50
+        INDEX_CODE_SUFFIX.put("000888", ".SH"); // 上证综合全收益
+        INDEX_CODE_SUFFIX.put("000680", ".SH"); // 科创综指
+        INDEX_CODE_SUFFIX.put("000688", ".SH"); // 科创50
+        INDEX_CODE_SUFFIX.put("000903", ".SH"); // 中证A100
+        INDEX_CODE_SUFFIX.put("000510", ".SH"); // 中证A500
+        INDEX_CODE_SUFFIX.put("000904", ".SH"); // 中证200
+        INDEX_CODE_SUFFIX.put("000905", ".SH"); // 中证500
+        INDEX_CODE_SUFFIX.put("000906", ".SH"); // 中证800
+        INDEX_CODE_SUFFIX.put("000852", ".SH"); // 中证1000
+        INDEX_CODE_SUFFIX.put("000985", ".SH"); // 中证全指
+        INDEX_CODE_SUFFIX.put("000010", ".SH"); // 上证180
+        INDEX_CODE_SUFFIX.put("000009", ".SH"); // 上证380
+        INDEX_CODE_SUFFIX.put("000132", ".SH"); // 上证100
+        INDEX_CODE_SUFFIX.put("000133", ".SH"); // 上证150
+        INDEX_CODE_SUFFIX.put("000003", ".SH"); // Ｂ股指数
+        INDEX_CODE_SUFFIX.put("000012", ".SH"); // 国债指数
+        INDEX_CODE_SUFFIX.put("000013", ".SH"); // 企债指数
+        INDEX_CODE_SUFFIX.put("000011", ".SH"); // 基金指数
+        // f13=0 → .SZ（深市/创业板/北交所）
+        INDEX_CODE_SUFFIX.put("399001", ".SZ"); // 深证成指
+        INDEX_CODE_SUFFIX.put("399006", ".SZ"); // 创业板指
+        INDEX_CODE_SUFFIX.put("899050", ".SZ"); // 北证50
+        INDEX_CODE_SUFFIX.put("399330", ".SZ"); // 深证100
+        INDEX_CODE_SUFFIX.put("399673", ".SZ"); // 创业板50
+        INDEX_CODE_SUFFIX.put("399750", ".SZ"); // 深主板50
+        INDEX_CODE_SUFFIX.put("899601", ".SZ"); // 北证专精特新
+        INDEX_CODE_SUFFIX.put("399002", ".SZ"); // 深成指R
+        INDEX_CODE_SUFFIX.put("399850", ".SZ"); // 深证50
+        INDEX_CODE_SUFFIX.put("399005", ".SZ"); // 中小100
+        INDEX_CODE_SUFFIX.put("399003", ".SZ"); // 成份Ｂ指
+        INDEX_CODE_SUFFIX.put("399106", ".SZ"); // 深证综指
+        INDEX_CODE_SUFFIX.put("399004", ".SZ"); // 深证100R
+        INDEX_CODE_SUFFIX.put("399007", ".SZ"); // 深证300
+        INDEX_CODE_SUFFIX.put("399008", ".SZ"); // 中小300
+        INDEX_CODE_SUFFIX.put("399293", ".SZ"); // 创业大盘
+        INDEX_CODE_SUFFIX.put("399019", ".SZ"); // 创业200
+        INDEX_CODE_SUFFIX.put("399020", ".SZ"); // 创业500
+        INDEX_CODE_SUFFIX.put("399100", ".SZ"); // 新指数
+        INDEX_CODE_SUFFIX.put("399550", ".SZ"); // 央视50
+        // f13=2 → .CSI（中证系）
+        INDEX_CODE_SUFFIX.put("930050", ".CSI"); // 中证A50
+        INDEX_CODE_SUFFIX.put("932000", ".CSI"); // 中证2000
     }
 
     private static final Map<String, String> INDEX_NAMES = new HashMap<>();
 
     static {
-        INDEX_NAMES.put("000001.SH", "上证综指");
-        INDEX_NAMES.put("399001.SZ", "深证成指");
-        INDEX_NAMES.put("399006.SZ", "创业板指");
-        INDEX_NAMES.put("000300.SH", "沪深300");
-        INDEX_NAMES.put("000905.SH", "中证500");
-        INDEX_NAMES.put("000852.SH", "中证1000");
-        INDEX_NAMES.put("932000.CSI", "中证2000");
+        INDEX_NAMES.put("000001", "上证指数");
+        INDEX_NAMES.put("399001", "深证成指");
+        INDEX_NAMES.put("899050", "北证50");
+        INDEX_NAMES.put("399006", "创业板指");
+        INDEX_NAMES.put("000680", "科创综指");
+        INDEX_NAMES.put("000688", "科创50");
+        INDEX_NAMES.put("399330", "深证100");
+        INDEX_NAMES.put("000300", "沪深300");
+        INDEX_NAMES.put("000016", "上证50");
+        INDEX_NAMES.put("399673", "创业板50");
+        INDEX_NAMES.put("000888", "上证综合全收益");
+        INDEX_NAMES.put("399750", "深主板50");
+        INDEX_NAMES.put("899601", "北证专精特新");
+        INDEX_NAMES.put("930050", "中证A50");
+        INDEX_NAMES.put("000903", "中证A100");
+        INDEX_NAMES.put("000510", "中证A500");
+        INDEX_NAMES.put("000904", "中证200");
+        INDEX_NAMES.put("000905", "中证500");
+        INDEX_NAMES.put("000906", "中证800");
+        INDEX_NAMES.put("000852", "中证1000");
+        INDEX_NAMES.put("932000", "中证2000");
+        INDEX_NAMES.put("000985", "中证全指");
+        INDEX_NAMES.put("000010", "上证180");
+        INDEX_NAMES.put("000009", "上证380");
+        INDEX_NAMES.put("000132", "上证100");
+        INDEX_NAMES.put("000133", "上证150");
+        INDEX_NAMES.put("000003", "Ｂ股指数");
+        INDEX_NAMES.put("000012", "国债指数");
+        INDEX_NAMES.put("000013", "企债指数");
+        INDEX_NAMES.put("000011", "基金指数");
+        INDEX_NAMES.put("399002", "深成指R");
+        INDEX_NAMES.put("399850", "深证50");
+        INDEX_NAMES.put("399005", "中小100");
+        INDEX_NAMES.put("399003", "成份Ｂ指");
+        INDEX_NAMES.put("399106", "深证综指");
+        INDEX_NAMES.put("399004", "深证100R");
+        INDEX_NAMES.put("399007", "深证300");
+        INDEX_NAMES.put("399008", "中小300");
+        INDEX_NAMES.put("399293", "创业大盘");
+        INDEX_NAMES.put("399019", "创业200");
+        INDEX_NAMES.put("399020", "创业500");
+        INDEX_NAMES.put("399100", "新指数");
+        INDEX_NAMES.put("399550", "央视50");
     }
 
     public static EndpointSpec get(String taskType) {
@@ -385,15 +464,6 @@ public final class EastmoneyEndpoints {
 
     /** 解析 secid（需 taskType 上下文）。 */
     static String secidFor(String taskType, Map<String, Object> params) {
-        if ("INDEX_DAILY".equals(taskType)) {
-            String idx = String.valueOf(params.get("indexCode"));
-            String s = INDEX_SECIDS.get(idx);
-            if (s == null) {
-                throw new RuntimeException("Eastmoney 无该指数 secid 映射: indexCode=" + idx
-                        + " TODO M6 补充指数映射");
-            }
-            return s;
-        }
         String ts = String.valueOf(params.get("tsCode"));
         String market;
         if (ts.endsWith(".SH")) {
@@ -426,7 +496,27 @@ public final class EastmoneyEndpoints {
     }
 
     static String indexName(String indexCode) {
-        return INDEX_NAMES.get(indexCode);
+        if (indexCode == null) {
+            return null;
+        }
+        String raw = indexCode.contains(".") ? indexCode.substring(0, indexCode.indexOf('.')) : indexCode;
+        return INDEX_NAMES.get(raw);
+    }
+
+    /** 东财 f12 裸码 + f13 市场码 → 带后缀指数代码(后缀跟东财 secid market 走)。 */
+    static String indexCodeFor(String f12Raw, String f13) {
+        if (f12Raw == null || f12Raw.isEmpty() || "-".equals(f12Raw)) {
+            return null;
+        }
+        String suffix;
+        if ("1".equals(f13)) {
+            suffix = ".SH";
+        } else if ("0".equals(f13)) {
+            suffix = ".SZ";
+        } else {
+            suffix = ".CSI"; // f13=2 中证系(930050/932000)
+        }
+        return f12Raw + suffix;
     }
 
     /** Object → int，解析失败返回 fallback。 */
