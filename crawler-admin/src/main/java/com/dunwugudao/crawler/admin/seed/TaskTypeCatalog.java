@@ -60,7 +60,7 @@ public final class TaskTypeCatalog {
             new TaskSpec("STRONG_POOL", 1, true, false, null, "强势股池（市场级）"),
             new TaskSpec("STOCK_DAILY", 1, true, false, null, "个股日线（市场级，按页拆任务，每页 100 条）"),
             new TaskSpec("STOCK_WEEKLY", 1, false, true, 1, "个股周线（逐券）"),
-            new TaskSpec("INDEX_DAILY", 1, false, true, 1, "指数日线（逐券）"),
+            new TaskSpec("INDEX_DAILY", 1, true, false, null, "指数日线（市场级, push2 clist 全市场快照 43 只）"),
             new TaskSpec("STOCK_DAILY_HISTORY", 1, false, true, 1, "个股日K历史回填（逐券，push2his kline 拿满历史）"),
             new TaskSpec("STOCK_KLINE_MINUTE", 1, false, true, 1, "个股分钟K线（逐券，push2his kline klt=1，量价数据）"),
             new TaskSpec("STOCK_BY_BOARD", 1, false, false, null, "板块-个股关系（逐板块，需 board_basic 表）"),

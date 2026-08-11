@@ -244,10 +244,10 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("STOCK_WEEKLY", new EndpointSpec(
                 "STOCK_WEEKLY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
                 ParserType.KLINE, null, null, null));
-        // 指数日线
+        // 指数日线（push2 clist 全市场指数快照，fs=b:MK0010 一次拿 43 只）
         SPEC_BY_TYPE.put("INDEX_DAILY", new EndpointSpec(
-                "INDEX_DAILY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-                ParserType.KLINE, null, null, null));
+                "INDEX_DAILY", "http://push2.eastmoney.com/api/qt/clist/get",
+                ParserType.CLIST, "b:MK0010", null, null));
         // 个股日K历史回填（push2his kline, klt=101 日线，lmt 设大一次拿满历史）
         SPEC_BY_TYPE.put("STOCK_DAILY_HISTORY", new EndpointSpec(
                 "STOCK_DAILY_HISTORY", "https://push2his.eastmoney.com/api/qt/stock/kline/get",
@@ -440,6 +440,9 @@ public final class EastmoneyEndpoints {
             case "STOCK_BY_BOARD":
                 // f12=股票代码, f14=股票名称, f2=权重, f3=类型标识
                 return "f12,f14,f2,f3";
+            case "INDEX_DAILY":
+                // 全市场指数快照完整投影(含行情/状态,实测 2026-08-11)
+                return "f12,f13,f14,f1,f2,f4,f152,f5,f6,f18,f17,f15,f16";
             default:
                 return "f12,f14,f3,f62";
         }

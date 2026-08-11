@@ -111,7 +111,8 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         resp = cleanJsonp(resp);
         JsonNode root = readTree(resp);
         JsonNode data = root.path("data");
-        // DEBUG: 打印 CLIST 解析摘要（total/diff数量）
+        // 打印完整请求 URL（便于排查字段/参数问题）
+        log.info("[fetchClist] taskType={}, pn={}, url={}", taskType, pn, url);
         log.debug("[fetchClist] taskType={}, pn={}, total={}, diffSize={}", taskType, pn,
                 data.path("total").asInt(-1),
                 data.path("diff").isArray() ? data.path("diff").size() : 0);

@@ -13,17 +13,20 @@ public class IndexDaily {
     private LocalDate tradeDate;
     private String indexCode;        // 指数代码(如 000001.SH)
     private String indexName;        // 指数名称
+    private Integer secType;         // f1 证券类型: 2=指数
     private BigDecimal open;
     private BigDecimal high;
     private BigDecimal low;
     private BigDecimal close;
     private BigDecimal preClose;
     private BigDecimal pctChg;       // 涨跌幅%
+    private BigDecimal changeAmt;    // f4 涨跌额(元)
     private BigDecimal vol;          // 成交量(手)
     private BigDecimal amount;       // 成交额(元)
     private BigDecimal turnover;     // 换手率%
     private Integer dataSource;          // data_source: 0=东财 1=同花顺          // 0=东财 1=同花顺
     private String srcDetail;        // src_detail: 来源URL/接口/备注
+    private String dataStatus;       // f152 数据状态: 1盘前/2盘中/3盘后
     private LocalDate createDate;
     private LocalDateTime updateDate;    // 修改日期
 }

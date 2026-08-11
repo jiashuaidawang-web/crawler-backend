@@ -107,6 +107,31 @@ public final class EastmoneyParsers {
                     row.put("is_leader", null);                  // TODO M6
                     row.put("is_midarm", null);                  // TODO M6
                     break;
+                case "INDEX_DAILY":
+                    // 全市场指数快照（push2 clist, fs=b:MK0010, 43 只一次拿完）
+                    // clist 返回的价格已是元(非分),不除 100
+                    Double closeVal = num(n, "f2");
+                    Double preCloseVal = num(n, "f18");
+                    row.put("sec_type", toInt(num(n, "f1")));                 // f1  证券类型(2=指数)
+                    row.put("index_code", indexCodeFor(txt(n, "f12"), txt(n, "f13")));
+                    row.put("index_name", txt(n, "f14"));
+                    row.put("close", closeVal);                              // f2  收盘价(元)
+                    row.put("open", num(n, "f17"));                          // f17 开盘价(元)
+                    row.put("high", num(n, "f15"));                          // f15 最高价(元)
+                    row.put("low", num(n, "f16"));                           // f16 最低价(元)
+                    row.put("pre_close", preCloseVal);                       // f18 昨收价(元)
+                    // 涨跌幅自己算:(close - pre_close) / pre_close * 100
+                    Double pctChg = null;
+                    if (closeVal != null && preCloseVal != null && preCloseVal != 0) {
+                        pctChg = (closeVal - preCloseVal) / preCloseVal * 100;
+                    }
+                    row.put("pct_chg", pctChg);
+                    // 涨跌额:直接取 f4(元,不除 100)
+                    row.put("change_amt", num(n, "f4"));
+                    row.put("vol", num(n, "f5"));                            // f5  成交量(股)
+                    row.put("amount", num(n, "f6"));                         // f6  成交额(元)
+                    row.put("data_status", dataStatusText(txt(n, "f152")));  // f152 数据状态
+                    break;
                 case "STOCK_DAILY":
                     // 全市场快照（push2 clist）：18 字段精简版(用户终稿 2026-08-04)
                     // 价格类接口单位已是元,直接取(不÷100)
@@ -507,5 +532,39 @@ public final class EastmoneyParsers {
             return code + ".BJ";
         }
         return code;
+    }
+
+    /** 东财 f12 裸码 + f13 市场码 → 带后缀指数代码(后缀跟东财 secid market 走)。 */
+    private static String indexCodeFor(String f12Raw, String f13) {
+        if (f12Raw == null || f12Raw.isEmpty() || "-".equals(f12Raw)) {
+            return null;
+        }
+        String suffix;
+        if ("1".equals(f13)) {
+            suffix = ".SH";
+        } else if ("0".equals(f13)) {
+            suffix = ".SZ";
+        } else {
+            suffix = ".CSI"; // f13=2 中证系(930050/932000)
+        }
+        return f12Raw + suffix;
+    }
+
+    /** 分→元:除以 100,原值 null 返回 null。 */
+    private static Double div100(Double d) {
+        return d == null ? null : d / 100.0;
+    }
+
+    /** f152 数据状态枚举 → 中文描述(未知值返回 null)。 */
+    private static String dataStatusText(String f152) {
+        if (f152 == null || f152.isEmpty()) {
+            return null;
+        }
+        return switch (f152) {
+            case "1" -> "盘前";
+            case "2" -> "盘中";
+            case "3" -> "盘后";
+            default -> null;
+        };
     }
 }

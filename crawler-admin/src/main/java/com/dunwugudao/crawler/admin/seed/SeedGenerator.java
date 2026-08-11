@@ -114,6 +114,8 @@ public class SeedGenerator {
         n += seedLimitPool(source, date);
         // 北向资金（东财 kamt 实时端点，每日一条；历史回填需 datacenter 报告，当前 API 变更暂不可回填）
         n += seedNorthbound(source, date);
+        // 指数日线（push2 clist 全市场快照 43 只，市场级单任务）
+        n += seedIndexDaily(source, date);
         // 逐板块：从 board_basic 表读去重 boardCode，每个板块一个任务（板块-个股关联初始化）
         n += seedByBoard(source, date);
         log.info("dailySeed date={} source={} inserted={}", date, source, n);
@@ -298,6 +300,14 @@ public class SeedGenerator {
         CrawlTask task = buildTask("NORTHBOUND_FLOW", source, date, null, 1);
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedNorthbound] date={} source={} inserted={}", date, source, inserted);
+        return inserted;
+    }
+
+    /** 指数日线（INDEX_DAILY）单独处理：市场级单任务（push2 clist fs=b:MK0010, 43 只一次拿完）。 */
+    public int seedIndexDaily(int source, String date) {
+        CrawlTask task = buildTask("INDEX_DAILY", source, date, null, null);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedIndexDaily] date={} source={} inserted={}", date, source, inserted);
         return inserted;
     }
 
@@ -854,13 +864,7 @@ public class SeedGenerator {
             if (typeFilter != null && !typeFilter.contains(spec.taskType())) {
                 continue;
             }
-            // STOCK_WEEKLY / INDEX_DAILY 走 Playwright 浏览器路径，暂不种子
-            if ("STOCK_WEEKLY".equals(spec.taskType()) || "INDEX_DAILY".equals(spec.taskType())) {
-                log.info("[backfillPerInstrument] 跳过 {}（Playwright 路径，暂不种子）", spec.taskType());
-                continue;
-            }
-            List<String> codes = "INDEX_DAILY".equals(spec.taskType())
-                    ? universe.indexCodes() : universe.stockCodes();
+            List<String> codes = universe.stockCodes();
             if (codes.isEmpty()) {
                 continue;
             }

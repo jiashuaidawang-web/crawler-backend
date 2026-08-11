@@ -865,10 +865,10 @@ public class DedupWriter {
         List<StockKlineMinute> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            // minute_time: "2026-08-07 09:31" → LocalDateTime
-            LocalDateTime minuteTime = toLocalDateTime(r.get("minute_time"));
+            // 与其它写入器一致，读通用字段 trade_date；分钟级时间戳（"yyyy-MM-dd HH:mm:ss"）由 parseMinuteTime 保留时分。
+            LocalDateTime minuteTime = DateTimeUtil.parseMinuteTime(r.get("trade_date"));
             if (tsCode == null || minuteTime == null) {
-                log.warn("skip stock_kline_minute row missing ts_code/minute_time: {}", r);
+                log.warn("skip stock_kline_minute row missing ts_code/trade_date: {}", r);
                 continue;
             }
             StockKlineMinute e = new StockKlineMinute();
@@ -906,6 +906,7 @@ public class DedupWriter {
             e.setTradeDate(tradeDate);
             e.setIndexCode(indexCode);
             e.setIndexName(str(r.get("index_name")));
+            e.setSecType(intVal(r.get("sec_type")));              // f1 证券类型
             e.setOpen(bigDec(r.get("open")));
             e.setHigh(bigDec(r.get("high")));
             e.setLow(bigDec(r.get("low")));
@@ -913,12 +914,14 @@ public class DedupWriter {
             e.setPreClose(bigDec(r.get("pre_close")));
             e.setPctChg(bigDec(r.get("pct_chg")));
             e.setVol(bigDec(r.get("vol")));
+            e.setChangeAmt(bigDec(r.get("change_amt")));             // f4 涨跌额(元)
             e.setAmount(bigDec(r.get("amount")));
             e.setTurnover(bigDec(r.get("turnover")));
             e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
             e.setUpdateDate(now);
+            e.setDataStatus(str(r.get("data_status")));               // f152 数据状态
             batch.add(e);
         }
         insertInChunks(indexDailyMapper::batchInsert, batch, "index_daily", source);

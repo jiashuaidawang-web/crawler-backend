@@ -141,6 +141,23 @@ public class SeedController {
      * 下发北向资金抓取任务（NORTHBOUND_FLOW）—— 真实东财 kamt 端点，worker 认领后落 northbound_flow 表。
      * <p>注意：kamt 为实时端点（返回当日数据），历史回填需用 datacenter 报告（当前 API 变更暂不可回填）。</p>
      */
+
+    /**
+     * 下发指数日线全市场快照任务(INDEX_DAILY)—— 东财 push2 clist fs=b:MK0010,一次拿 43 只。
+     * <p>市场级单任务,worker 认领后落 index_daily 表。</p>
+     * <p>curl: POST /api/crawl/seed-index-daily?tradeDate=2026-08-11&amp;source=1</p>
+     */
+    @PostMapping("/seed-index-daily")
+    public Map<String, Object> seedIndexDaily(@RequestBody(required = false) SeedRequest req) {
+        String date = req != null && req.tradeDate() != null ? req.tradeDate() : LocalDate.now().toString();
+        int source = req != null && req.source() != null ? req.source() : 1;
+        int n = seedGenerator.seedIndexDaily(source, date);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "INDEX_DAILY");
+        r.put("date", date);
+        r.put("inserted", n);
+        return r;
+    }
     @PostMapping("/seed-northbound")
     public Map<String, Object> seedNorthbound(@RequestBody(required = false) SeedRequest req) {
         String date = req != null && req.tradeDate() != null ? req.tradeDate() : "2026-08-07";

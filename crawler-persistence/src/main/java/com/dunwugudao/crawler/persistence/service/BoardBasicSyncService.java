@@ -40,8 +40,11 @@ public class BoardBasicSyncService {
         if (boardCode == null || boardCode.isBlank() || boardType <= 0) {
             return;
         }
-        // 先查是否已存在，减少无意义写入（最终幂等仍由 ReplacingMergeTree 保证）
-        Integer existingDs = boardBasicMapper.selectDataSource(boardType, boardCode, dataSource);
+        // 先查是否已存在，减少无意义写入（最终幂等仍由 ReplacingMergeTree 保证）。
+        // 查询偶发失败时(CH 间歇性 "target server failed to respond")，异常会冒泡到
+        // writeBoardBasic 被 catch 吞掉、该行白白丢失，故对查询做短时重试，仅抗瞬时抖动。
+        // 慢一点无所谓，不能少数据：最多 5 次尝试，秒级退避(1s/2s/4s/8s)。
+        Integer existingDs = selectDataSourceWithRetry(boardType, boardCode, dataSource);
         if (existingDs != null) {
             return;
         }
@@ -65,5 +68,32 @@ public class BoardBasicSyncService {
             log.warn("BoardBasicSyncService.syncBoard 新增失败(boardCode={}, boardType={}, ds={}): {}",
                     boardCode, boardType, dataSource, ex.getMessage());
         }
+    }
+
+    /**
+     * 带秒级重试的"是否存在"查询——只抗 CH 瞬时抖动。
+     * 慢一点无所谓，不能少数据：最多 5 次尝试，退避 1s/2s/4s/8s；仍失败则抛出让调用方决定。
+     */
+    private Integer selectDataSourceWithRetry(int boardType, String boardCode, int dataSource) {
+        int maxAttempts = 5;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return boardBasicMapper.selectDataSource(boardType, boardCode, dataSource);
+            } catch (Exception e) {
+                if (attempt == maxAttempts) {
+                    throw e;
+                }
+                long delaySeconds = 1L << (attempt - 1); // 1, 2, 4, 8
+                log.warn("BoardBasicSyncService.selectDataSource 查询失败，第 {}/{} 次重试(boardType={}, boardCode={}, ds={}), {}s 后重试: {}",
+                        attempt, maxAttempts, boardType, boardCode, dataSource, delaySeconds, e.getMessage());
+                try {
+                    Thread.sleep(delaySeconds * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+        return null; // 不可达
     }
 }
