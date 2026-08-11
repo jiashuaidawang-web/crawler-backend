@@ -184,6 +184,22 @@ public class SeedController {
     }
 
     /**
+     * 下发龙虎榜席位明细子任务（DRAGON_TIGER_DETAIL）—— 从 dragon_tiger 表读 TRADE_ID 逐任务下发。
+     * <p>依赖 DRAGON_TIGER 主表已爬完并落库，通常在 seed-dragon-tiger 跑完后调用。</p>
+     * <p>curl: POST /api/crawl/chain-seat-details?tradeDate=2026-08-11</p>
+     */
+    @PostMapping("/chain-seat-details")
+    public Map<String, Object> chainSeatDetails(@RequestBody(required = false) SeedRequest req) {
+        String date = req != null && req.tradeDate() != null ? req.tradeDate() : LocalDate.now().toString();
+        int n = seedGenerator.chainDragonTigerDetails(date);
+        Map<String, Object> r = new HashMap<>();
+        r.put("action", "chain-seat-details");
+        r.put("date", date);
+        r.put("inserted", n);
+        return r;
+    }
+
+    /**
      * 下发分时分钟线任务(STOCK_KLINE_MINUTE):从配置表取 type=minute 的股票,逐个生成任务。
      * <p>curl: POST /api/crawl/seed-stock-kline-minute?tradeDate=2026-08-11&amp;source=1</p>
      */

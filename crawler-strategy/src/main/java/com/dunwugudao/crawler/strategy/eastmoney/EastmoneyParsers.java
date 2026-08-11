@@ -377,19 +377,38 @@ public final class EastmoneyParsers {
                 row.put("trade_date", tradeDate);
                 rows.add(row);
             }
-        } else { // DRAGON_TIGER_DETAIL
-            String tsCode = tsCodeFromRaw(String.valueOf(params.get("code")));
+        } else { // DRAGON_TIGER_DETAIL —— 龙虎榜席位明细（RPT_BILLBOARD_SEAT）
             for (JsonNode n : data) {
                 Map<String, Object> row = new HashMap<>();
-                row.put("ts_code", tsCode);
-                row.put("seat_name", txt(n, "SEAT_NAME"));
-                String seatType = txt(n, "SEAT_TYPE");
-                row.put("seat_type", seatType);
-                row.put("buy", num(n, "BUY"));
-                row.put("sell", num(n, "SELL"));
-                row.put("is_institution", (seatType != null && seatType.contains("机构")) ? 1 : 0);
-                // TODO M6: is_famous 需维护知名游资名单，当前置 0
-                row.put("is_famous", 0);
+                String secucode = txt(n, "SECUCODE");
+                row.put("ts_code", (secucode != null && !secucode.isEmpty()) ? secucode : tsCodeFromRaw(txt(n, "SECURITY_CODE")));
+                row.put("seat_name", txt(n, "OPERATEDEPT_NAME"));
+                row.put("seat_type", operateDeptTypeText(txt(n, "OPERATEDEPT_TYPE")));
+                row.put("rank", toInt(num(n, "RANK")));
+                row.put("buy", num(n, "BUY_AMT"));
+                row.put("sell", num(n, "SELL_AMT"));
+                row.put("net_buy", num(n, "NET_BUY"));
+                row.put("buy_ratio", num(n, "BUY_RATIO"));
+                row.put("sell_ratio", num(n, "SELL_RATIO"));
+                row.put("net_buy_ratio", num(n, "NET_BUY_RATIO"));
+                row.put("trade_amt", num(n, "TRADE_AMT"));
+                row.put("trade_ratio", num(n, "TRADE_RATIO"));
+                row.put("accum_volume", num(n, "ACCUM_VOLUME"));
+                row.put("accum_amount", num(n, "ACCUM_AMOUNT"));
+                row.put("change_rate", num(n, "CHANGE_RATE"));
+                row.put("turnoverrate_ratio", num(n, "TURNOVERRATE_RATIO"));
+                row.put("trade_direction", toInt(num(n, "TRADE_DIRECTION")));
+                row.put("statistics_days", toInt(num(n, "STATISTICS_DAYS")));
+                row.put("onlist_times", toInt(num(n, "ONLIST_TIMES")));
+                row.put("start_date", txt(n, "START_DATE"));
+                row.put("end_date", txt(n, "END_DATE"));
+                row.put("operate_dept_code", txt(n, "OPERATEDEPT_CODE"));
+                row.put("operate_dept_type", toInt(num(n, "OPERATEDEPT_TYPE")));
+                row.put("change_type", txt(n, "CHANGE_TYPE"));
+                row.put("explanation", txt(n, "EXPLANATION"));
+                row.put("trade_id", txt(n, "TRADE_ID"));
+                row.put("security_inner_code", txt(n, "SECURITY_INNER_CODE"));
+                row.put("sec_type", toInt(num(n, "STR_MAI")));
                 row.put("trade_date", tradeDate);
                 rows.add(row);
             }
@@ -573,6 +592,21 @@ public final class EastmoneyParsers {
             case "1" -> "盘前";
             case "2" -> "盘中";
             case "3" -> "盘后";
+            default -> null;
+        };
+    }
+
+    /** 席位类型码(OPERATEDEPT_TYPE) → 中文描述(未知值返回 null)。 */
+    static String operateDeptTypeText(String type) {
+        if (type == null || type.isEmpty()) {
+            return null;
+        }
+        return switch (type) {
+            case "1" -> "营业部";
+            case "2" -> "游资";
+            case "3" -> "机构";
+            case "4" -> "深股通";
+            case "5" -> "沪股通";
             default -> null;
         };
     }

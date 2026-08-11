@@ -163,16 +163,21 @@ public final class EastmoneyEndpoints {
                                     + "&pageSize=5000&pageNumber=1"
                                     + "&source=WEB&client=WEB"
                                     + "&filter=" + URLEncoder.encode(filter, "UTF-8");
-                        } else { // DRAGON_TIGER_DETAIL —— 同样切新版；reportName/列名待单独验证（M6）
-                            String code = String.valueOf(params.get("code"));
-                            String filter = "(TRADE_DATE<='" + tdDash + "')(TRADE_DATE>='" + tdDash
-                                    + "')(SECURITY_CODE='" + code + "')";
+                        } else { // DRAGON_TIGER_DETAIL —— 龙虎榜席位明细（RPT_BILLBOARD_SEAT）
+                            // 按主表 TRADE_ID 关联（RPT_BILLBOARD_SEAT 不支持 SECURITY_CODE 过滤）
+                            String tradeId = String.valueOf(params.get("tradeId"));
+                            String filter = "(TRADE_ID=" + tradeId + ")";
                             return "https://datacenter-web.eastmoney.com/api/data/v1/get"
-                                    + "?reportName=RPT_BILLBOARD_DETAIL"
+                                    + "?reportName=RPT_BILLBOARD_SEAT"
                                     + "&columns=" + URLEncoder.encode(
-                                            "SEAT_NAME,SEAT_TYPE,BUY,SELL,TRADE_DATE,SECURITY_CODE", "UTF-8")
-                                    + "&sortColumns=TRADE_DATE&sortTypes=-1"
-                                    + "&pageSize=5000&pageNumber=1"
+                                            "SECUCODE,SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_ID,TRADE_DATE,"
+                                            + "CHANGE_TYPE,EXPLANATION,START_DATE,END_DATE,STATISTICS_DAYS,"
+                                            + "ACCUM_VOLUME,ACCUM_AMOUNT,CHANGE_RATE,TURNOVERRATE_RATIO,TRADE_DIRECTION,"
+                                            + "RANK,OPERATEDEPT_CODE,OPERATEDEPT_NAME,OPERATEDEPT_TYPE,"
+                                            + "BUY_AMT,BUY_RATIO,SELL_AMT,SELL_RATIO,NET_BUY,NET_BUY_RATIO,"
+                                            + "TRADE_AMT,TRADE_RATIO,STR_YEAR,STR_MAI,ONLIST_TIMES,SECURITY_INNER_CODE", "UTF-8")
+                                    + "&sortColumns=RANK&sortTypes=1"
+                                    + "&pageSize=500&pageNumber=1"
                                     + "&source=WEB&client=WEB"
                                     + "&filter=" + URLEncoder.encode(filter, "UTF-8");
                         }

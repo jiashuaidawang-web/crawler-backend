@@ -1024,7 +1024,7 @@ public class DedupWriter {
             e.setDealNetRatio(bigDec(r.get("deal_net_ratio")));
             e.setSecurityInnerCode(str(r.get("security_inner_code")));
             e.setSecurityTypeCode(str(r.get("security_type_code")));
-            e.setTradeId(r.get("trade_id") instanceof Number n ? n.longValue() : null);
+            e.setTradeId(toLong(r.get("trade_id")));
             e.setTradeMarket(str(r.get("trade_market")));
             e.setTradeMarketCode(str(r.get("trade_market_code")));
             e.setNetBsAmt(bigDec(r.get("net_bs_amt")));
@@ -1063,10 +1063,31 @@ public class DedupWriter {
             e.setTsCode(tsCode);
             e.setSeatName(seatName);
             e.setSeatType(str(r.get("seat_type")));
+            e.setRank(intVal(r.get("rank")));
             e.setBuy(bigDec(r.get("buy")));
             e.setSell(bigDec(r.get("sell")));
-            e.setIsInstitution(intVal(r.get("is_institution")));
-            e.setIsFamous(intVal(r.get("is_famous")));
+            e.setNetBuy(bigDec(r.get("net_buy")));
+            e.setBuyRatio(bigDec(r.get("buy_ratio")));
+            e.setSellRatio(bigDec(r.get("sell_ratio")));
+            e.setNetBuyRatio(bigDec(r.get("net_buy_ratio")));
+            e.setTradeAmt(bigDec(r.get("trade_amt")));
+            e.setTradeRatio(bigDec(r.get("trade_ratio")));
+            e.setAccumVolume(bigDec(r.get("accum_volume")));
+            e.setAccumAmount(bigDec(r.get("accum_amount")));
+            e.setChangeRate(bigDec(r.get("change_rate")));
+            e.setTurnoverrateRatio(bigDec(r.get("turnoverrate_ratio")));
+            e.setTradeDirection(intVal(r.get("trade_direction")));
+            e.setStatisticsDays(intVal(r.get("statistics_days")));
+            e.setOnlistTimes(intVal(r.get("onlist_times")));
+            e.setStartDate(toLocalDate(r.get("start_date")));
+            e.setEndDate(toLocalDate(r.get("end_date")));
+            e.setOperateDeptCode(str(r.get("operate_dept_code")));
+            e.setOperateDeptType(intVal(r.get("operate_dept_type")));
+            e.setChangeType(str(r.get("change_type")));
+            e.setExplanation(str(r.get("explanation")));
+            e.setTradeId(toLong(r.get("trade_id")));
+            e.setSecurityInnerCode(str(r.get("security_inner_code")));
+            e.setSecType(intVal(r.get("sec_type")));
             e.setDataSource(source.getCode());
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
@@ -1082,6 +1103,14 @@ public class DedupWriter {
 
     private static Integer intVal(Object o) {
         return o instanceof Number n ? n.intValue() : null;
+    }
+
+    private static Long toLong(Object o) {
+        if (o instanceof Number n) return n.longValue();
+        if (o instanceof String s && !s.isEmpty()) {
+            try { return Long.parseLong(s); } catch (NumberFormatException e) { return null; }
+        }
+        return null;
     }
 
     private static BigDecimal bigDec(Object o) {

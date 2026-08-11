@@ -1037,7 +1037,7 @@ public class SeedGenerator {
     }
 
     /**
-     * 自动串联：从 dragon_tiger 表读某交易日上榜代码 → 批量下发 DRAGON_TIGER_DETAIL 子任务。
+     * 自动串联：从 dragon_tiger 表读某交易日上榜记录的 TRADE_ID → 批量下发 DRAGON_TIGER_DETAIL 子任务。
      * <p>设计为显式调用（XXL-JOB / REST），而非 dailySeed 自动触发，原因：</p>
      * <ul>
      *   <li>依赖「DRAGON_TIGER 已爬完并落库 dragon_tiger 表」，dailySeed 触发时数据未就绪；</li>
@@ -1048,13 +1048,27 @@ public class SeedGenerator {
      */
     public int chainDragonTigerDetails(String date) {
         LocalDate d = LocalDate.parse(date, FMT);
-        List<String> codes = dragonTigerMapper.selectDistinctCodes(d);
-        if (codes.isEmpty()) {
-            log.info("chainDragonTigerDetails date={} 无上榜代码（dragon_tiger 表无记录），跳过", date);
+        List<Long> tradeIds = dragonTigerMapper.selectDistinctTradeIds(d);
+        if (tradeIds.isEmpty()) {
+            log.info("chainDragonTigerDetails date={} 无上榜记录（dragon_tiger 表无记录），跳过", date);
             return 0;
         }
-        log.info("chainDragonTigerDetails date={} 读到 {} 个上榜代码，开始下发 DRAGON_TIGER_DETAIL", date, codes.size());
-        return seedDragonTigerDetails(date, codes);
+        List<CrawlTask> batch = new ArrayList<>(100);
+        int total = 0;
+        for (Long tradeId : tradeIds) {
+            // DRAGON_TIGER_DETAIL 的 params 带 tradeId（RPT_BILLBOARD_SEAT 按 TRADE_ID 过滤）
+            String params = "{\"tradeId\":" + tradeId + ",\"tradeDate\":\"" + date + "\"}";
+            CrawlTask task = buildTask("DRAGON_TIGER_DETAIL", 1, date, null, 1, params);
+            task.setUniqueKey("DRAGON_TIGER_DETAIL|1|" + date + "|" + tradeId);
+            batch.add(task);
+            if (batch.size() >= 100) {
+                total += flush(batch);
+                batch.clear();
+            }
+        }
+        total += flush(batch);
+        log.info("chainDragonTigerDetails date={} tradeIds={} inserted={}", date, tradeIds.size(), total);
+        return total;
     }
 
     private int flush(List<CrawlTask> batch) {
