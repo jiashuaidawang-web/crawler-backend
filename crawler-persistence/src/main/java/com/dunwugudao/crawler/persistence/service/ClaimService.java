@@ -39,13 +39,14 @@ public class ClaimService {
 
     /** 任务成功完成，并写入耗时（毫秒）。 */
     public void complete(Long taskId, int actualCount, Long durationMs) {
-        // 状态守卫：仅当任务仍为 CLAIMED 时才置 SUCCESS，避免与 retryScan 的 reclaim/promote 竞态
+        // 状态守卫：允许 CLAIMED/PENDING/RETRY → SUCCESS，避免与 retryScan 的 reclaim 竞态
+        // （retryScan 可能把超时 CLAIMED 重置为 PENDING，此时 complete 仍可更新为 SUCCESS）
         int updated = pgJdbcTemplate.update(
                 "UPDATE crawl_task SET status='SUCCESS', actual_count=?, finished_at=now(), duration_ms=? " +
-                "WHERE task_id=? AND status='CLAIMED'",
+                "WHERE task_id=? AND status IN ('CLAIMED','PENDING','RETRY')",
                 actualCount, durationMs, taskId);
         if (updated == 0) {
-            log.warn("task {} complete 跳过（已非 CLAIMED，可能被 retryScan 回收/耗尽）", taskId);
+            log.warn("task {} complete 跳过（已非 CLAIMED/PENDING/RETRY，可能已被 retryScan 耗尽）", taskId);
         }
     }
 

@@ -61,11 +61,11 @@ public class XxlJobHandlers {
                 start, end, source, types, n);
     }
 
-    /** 僵尸回收 + 耗尽重试置 DEAD。param: timeoutMin=（默认 15）。 */
+    /** 僵尸回收 + 耗尽重试置 DEAD。param: timeoutMin=（默认 60）。 */
     @XxlJob("retryScan")
     public void retryScan() {
         Map<String, String> p = parse(XxlJobHelper.getJobParam());
-        int timeoutMin = parseInt(p.get("timeoutMin"), 15);
+        int timeoutMin = parseInt(p.get("timeoutMin"), 60);
         int reclaimed = retryScanService.reclaimZombies(timeoutMin);
         int promoted = retryScanService.promoteExhausted();
         XxlJobHelper.log("retryScan reclaimed={} promoted={}", reclaimed, promoted);
