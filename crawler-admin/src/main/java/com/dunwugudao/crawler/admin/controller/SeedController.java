@@ -171,6 +171,39 @@ public class SeedController {
     }
 
     /**
+     * 下发个股周K任务(STOCK_WEEKLY)—— 每个股票一个任务,一次拿满历史(lmt=50000)。
+     * <p>幂等:uniqueKey=STOCK_WEEKLY|source|tsCode,重复调用不产生重复任务。</p>
+     * <p>curl: POST /api/crawl/seed-weekly?source=1&amp;tsCode=300059.SZ</p>
+     */
+    @PostMapping("/seed-weekly")
+    public Map<String, Object> seedWeekly(@RequestBody(required = false) SeedRequest req,
+                                          @RequestParam(required = false) String tsCode) {
+        int source = req != null && req.source() != null ? req.source() : 1;
+        int n = seedGenerator.seedStockWeekly(source, tsCode);
+        Map<String, Object> r = new HashMap<>();
+        r.put("taskType", "STOCK_WEEKLY");
+        r.put("source", source);
+        r.put("tsCode", tsCode);
+        r.put("inserted", n);
+        return r;
+    }
+
+    /**
+     * 聚合指定股票或全量的周K(从日K聚合,补全 stock_weekly 扩展字段)。
+     * <p>前置:stock_daily 表有数据(日K是聚合数据源)。</p>
+     * <p>curl: POST /api/crawl/aggregate-weekly?tsCode=300059.SZ</p>
+     */
+    @PostMapping("/aggregate-weekly")
+    public Map<String, Object> aggregateWeekly(@RequestParam(required = false) String tsCode) {
+        int n = seedGenerator.aggregateWeeklyForStock(tsCode);
+        Map<String, Object> r = new HashMap<>();
+        r.put("action", "aggregate_weekly");
+        r.put("tsCode", tsCode);
+        r.put("aggregatedWeeks", n);
+        return r;
+    }
+
+    /**
      * 初始化分时配置表:从5个池子取 distinct 股票,type=minute 插入 stock_task_config。
      * <p>curl: POST /api/crawl/init-task-config</p>
      */

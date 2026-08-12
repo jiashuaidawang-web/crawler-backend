@@ -825,39 +825,80 @@ public class DedupWriter {
         LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<StockWeekly> batch = new ArrayList<>(rows.size());
+        // 按 tsCode 分组(同一批可能多只股票),每组单独去重
+        Map<String, List<Map<String, Object>>> byTsCode = new HashMap<>();
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) {
-                log.warn("skip stock_weekly row missing ts_code/trade_date: {}", r);
+            if (tsCode == null) {
+                log.warn("skip stock_weekly row missing ts_code: {}", r);
                 continue;
             }
-            StockWeekly e = new StockWeekly();
-            e.setTradeDate(tradeDate);
-            e.setTsCode(tsCode);
-            e.setStockName(str(r.get("stock_name")));
-            e.setOpen(bigDec(r.get("open")));
-            e.setHigh(bigDec(r.get("high")));
-            e.setLow(bigDec(r.get("low")));
-            e.setClose(bigDec(r.get("close")));
-            e.setVol(bigDec(r.get("vol")));
-            e.setAmount(bigDec(r.get("amount")));
-            e.setChgAmount(bigDec(r.get("chg_amount")));
-            e.setAmplitude(bigDec(r.get("amplitude")));
-            e.setVolumeRatio(bigDec(r.get("volume_ratio")));
-            e.setAvgPrice(bigDec(r.get("avg_price")));
-            e.setMainNet(bigDec(r.get("main_net")));
-            e.setPeStatic(bigDec(r.get("pe_static")));
-            e.setLeaderCode(str(r.get("leader_code")));
-            e.setIndustryCode(str(r.get("industry_code")));
-            e.setConceptCode(str(r.get("concept_code")));
-            e.setMarketCode(intVal(r.get("market_code")));
-            e.setDataSource(source.getCode());
-            e.setSrcDetail(srcDetail);
-            e.setCreateDate(today);
-            e.setUpdateDate(now);
-            batch.add(e);
+            byTsCode.computeIfAbsent(tsCode, k -> new ArrayList<>()).add(r);
         }
+        int skipped = 0;
+        LocalDate currentWeekStart = LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        for (var entry : byTsCode.entrySet()) {
+            String tsCode = entry.getKey();
+            List<Map<String, Object>> group = entry.getValue();
+            // 查询该股票已存在的交易日期(去重:有则跳过,无则插入)
+            Set<LocalDate> existing = new HashSet<>();
+            try {
+                List<LocalDate> dates = stockWeeklyMapper.selectExistingTradeDates(tsCode);
+                if (dates != null) existing.addAll(dates);
+            } catch (Exception e) {
+                log.warn("[writeStockWeekly] 查询已存在日期失败(tsCode={}): {}", tsCode, e.getMessage());
+            }
+            for (Map<String, Object> r : group) {
+                LocalDate tradeDate = toLocalDate(r.get("trade_date"));
+                if (tradeDate == null) {
+                    log.warn("skip stock_weekly row missing trade_date: {}", r);
+                    continue;
+                }
+                // 判断是否是本周(本周数据每天变化,需要覆盖更新)
+                LocalDate weekStart = tradeDate.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                boolean isCurrentWeek = weekStart.equals(currentWeekStart);
+                if (isCurrentWeek) {
+                    // 本周:覆盖更新(先删后插)
+                    try {
+                        stockWeeklyMapper.deleteByTsCodeAndTradeDate(tsCode, tradeDate);
+                    } catch (Exception e) {
+                        log.warn("[writeStockWeekly] 删除本周旧数据失败(tsCode={}, tradeDate={}): {}", tsCode, tradeDate, e.getMessage());
+                    }
+                } else {
+                    // 历史周(已收盘):有则跳过,无则插入
+                    if (existing.contains(tradeDate)) {
+                        skipped++;
+                        continue;
+                    }
+                }
+                StockWeekly e = new StockWeekly();
+                e.setTradeDate(tradeDate);
+                e.setTsCode(tsCode);
+                e.setStockName(str(r.get("stock_name")));
+                e.setOpen(bigDec(r.get("open")));
+                e.setHigh(bigDec(r.get("high")));
+                e.setLow(bigDec(r.get("low")));
+                e.setClose(bigDec(r.get("close")));
+                e.setVol(bigDec(r.get("vol")));
+                e.setAmount(bigDec(r.get("amount")));
+                e.setChgAmount(bigDec(r.get("chg_amount")));
+                e.setAmplitude(bigDec(r.get("amplitude")));
+                e.setVolumeRatio(bigDec(r.get("volume_ratio")));
+                e.setAvgPrice(bigDec(r.get("avg_price")));
+                e.setMainNet(bigDec(r.get("main_net")));
+                e.setPeStatic(bigDec(r.get("pe_static")));
+                e.setLeaderCode(str(r.get("leader_code")));
+                e.setIndustryCode(str(r.get("industry_code")));
+                e.setConceptCode(str(r.get("concept_code")));
+                e.setMarketCode(intVal(r.get("market_code")));
+                e.setDataSource(source.getCode());
+                e.setSrcDetail(srcDetail);
+                e.setCreateDate(today);
+                e.setUpdateDate(now);
+                batch.add(e);
+            }
+        }
+        log.info("[writeStockWeekly] 总 {} 行, 跳过已存在 {} 行, 实际写入 {} 行", rows.size(), skipped, batch.size());
         insertInChunks(stockWeeklyMapper::batchInsert, batch, "stock_weekly", source);
     }
 

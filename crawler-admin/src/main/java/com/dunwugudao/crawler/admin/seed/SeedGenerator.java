@@ -17,6 +17,7 @@ import com.dunwugudao.crawler.persistence.mapper.StrongPoolMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockDailyMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockTaskConfigMapper;
 import com.dunwugudao.crawler.persistence.mapper.ZhabanPoolMapper;
+import com.dunwugudao.crawler.persistence.service.StockWeeklyAggregator;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyEndpoints;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -67,6 +68,7 @@ public class SeedGenerator {
     private final EastmoneyClient eastmoneyClient;
     private final StockBackfillStatusMapper backfillStatusMapper;
     private final StockDailyMapper stockDailyMapper;
+    private final StockWeeklyAggregator stockWeeklyAggregator;
     private final StockTaskConfigMapper taskConfigMapper;
     private final LimitUpPoolMapper limitUpPoolMapper;
     private final LimitDownPoolMapper limitDownPoolMapper;
@@ -89,6 +91,7 @@ public class SeedGenerator {
                          EastmoneyClient eastmoneyClient,
                          StockBackfillStatusMapper backfillStatusMapper,
                          StockDailyMapper stockDailyMapper,
+                         StockWeeklyAggregator stockWeeklyAggregator,
                          StockTaskConfigMapper taskConfigMapper,
                          LimitUpPoolMapper limitUpPoolMapper,
                          LimitDownPoolMapper limitDownPoolMapper,
@@ -104,6 +107,7 @@ public class SeedGenerator {
         this.eastmoneyClient = eastmoneyClient;
         this.backfillStatusMapper = backfillStatusMapper;
         this.stockDailyMapper = stockDailyMapper;
+        this.stockWeeklyAggregator = stockWeeklyAggregator;
         this.taskConfigMapper = taskConfigMapper;
         this.limitUpPoolMapper = limitUpPoolMapper;
         this.limitDownPoolMapper = limitDownPoolMapper;
@@ -417,6 +421,73 @@ public class SeedGenerator {
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedDragonTiger] date={} source={} inserted={}", date, source, inserted);
         return inserted;
+    }
+
+    /**
+     * 个股周线（STOCK_WEEKLY）独立种子：每个股票一个任务,一次拿满历史(lmt=50000,约 80 年)。
+     * <p>幂等:uniqueKey=STOCK_WEEKLY|source|tsCode,insertIfAbsent 保证重复调用不产生重复任务。</p>
+     *
+     * @param source 数据源(1=东财)
+     * @param tsCode 指定股票(如 "300059.SZ"),为 null 则全量
+     */
+    public int seedStockWeekly(int source, String tsCode) {
+        List<String> codes;
+        if (tsCode != null && !tsCode.isBlank()) {
+            codes = List.of(tsCode.trim());
+            log.info("[seedStockWeekly] 指定单只股票 {}, source={}", tsCode, source);
+        } else {
+            codes = stockDailyMapper.selectDistinctTsCode();
+            if (codes == null || codes.isEmpty()) {
+                log.warn("[seedStockWeekly] stock_daily 无股票数据,跳过");
+                return 0;
+            }
+        }
+        int inserted = 0;
+        for (String code : codes) {
+            if (code == null || code.isBlank()) continue;
+            String params = "{\"tsCode\":\"" + code + "\"}";  // 不带 tradeDate,一次拿满
+            CrawlTask task = buildTask("STOCK_WEEKLY", source, null, code, null, params);
+            task.setUniqueKey("STOCK_WEEKLY|" + source + "|" + code);
+            task.setPriority(5);
+            task.setMaxRetry(3);
+            inserted += mapper.insertIfAbsent(task);
+        }
+        log.info("[seedStockWeekly] 下发 {} 个周K任务(股票池 {} 只)", inserted, codes.size());
+        return inserted;
+    }
+
+    /**
+     * 聚合指定股票或全量的周K(从日K表聚合,补全 stock_weekly 的扩展字段)。
+     *
+     * @param tsCode 股票代码(如 "300059.SZ"),为 null 则全量
+     */
+    public int aggregateWeeklyForStock(String tsCode) {
+        if (tsCode != null && !tsCode.isBlank()) {
+            return stockWeeklyAggregator.aggregateWeeklyForStock(tsCode.trim());
+        }
+        return aggregateAllWeekly();
+    }
+
+    /**
+     * 聚合所有股票的周K(从日K表聚合,补全 stock_weekly 的扩展字段)。
+     * <p>触发时机:周K端点任务跑完后调用(手动或定时)。</p>
+     */
+    public int aggregateAllWeekly() {
+        List<String> codes = stockDailyMapper.selectDistinctTsCode();
+        if (codes == null || codes.isEmpty()) {
+            log.warn("[aggregateAllWeekly] stock_daily 无股票数据,跳过");
+            return 0;
+        }
+        int totalWeeks = 0;
+        for (String code : codes) {
+            try {
+                totalWeeks += stockWeeklyAggregator.aggregateWeeklyForStock(code);
+            } catch (Exception e) {
+                log.error("[aggregateAllWeekly] 聚合失败(tsCode={}): {}", code, e.getMessage());
+            }
+        }
+        log.info("[aggregateAllWeekly] 聚合完成,共 {} 只股票, {} 周", codes.size(), totalWeeks);
+        return totalWeeks;
     }
 
     /** 逐板块种子：读 board_basic 表去重 boardCode，每个板块先请求 total 再按页拆任务。 */

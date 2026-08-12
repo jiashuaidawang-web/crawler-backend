@@ -61,4 +61,15 @@
         </foreach>
     </insert>
 
+    <!-- 查询某股票已存在的交易日期集合(供写入前去重,避免重复数据)。 -->
+    <select id="selectExistingTradeDates" resultType="java.time.LocalDate">
+        SELECT DISTINCT trade_date
+        FROM stock_weekly
+        WHERE ts_code = #{tsCode}
+    </select>
+
+    <!-- 删除单只股票单周数据(供本周覆盖更新:本周数据每天变化,需要先删后插)。 -->
+    <delete id="deleteByTsCodeAndTradeDate">
+        ALTER TABLE stock_weekly DELETE WHERE ts_code = #{tsCode} AND trade_date = #{tradeDate}
+    </delete>
 </mapper>

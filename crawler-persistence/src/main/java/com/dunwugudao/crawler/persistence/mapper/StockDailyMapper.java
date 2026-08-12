@@ -39,4 +39,11 @@ public interface StockDailyMapper {
      */
     @Select("SELECT DISTINCT ts_code FROM stock_daily WHERE trade_date = (SELECT max(trade_date) FROM stock_daily)")
     List<String> selectDistinctTsCode();
+
+    /**
+     * 查询单只股票所有日K(按日期升序)—— 供周K聚合使用。
+     * <p>MergeTree 不支持 FINAL,直接查询。如有重复数据,聚合结果可能不准。</p>
+     */
+    @Select("SELECT * FROM stock_daily WHERE ts_code = #{tsCode} ORDER BY trade_date ASC")
+    List<StockDaily> selectByTsCode(@Param("tsCode") String tsCode);
 }
