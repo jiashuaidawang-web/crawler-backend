@@ -348,6 +348,41 @@ public class DedupWriter {
         return m;
     }
 
+    /**
+     * 批内去重自然键：taskType → 行数据 key 列名。
+     * <p>与 DedupService.REGISTRY 的自然键一致；未列出的 taskType 不做批内去重（如 board_basic 维表本身幂等）。</p>
+     */
+    private static final Map<String, List<String>> DEDUP_KEYS = new HashMap<>();
+
+    static {
+        k("STOCK_DAILY", "ts_code", "trade_date");
+        k("STOCK_DAILY_HISTORY", "ts_code", "trade_date");
+        k("STOCK_WEEKLY", "ts_code", "trade_date");
+        k("STOCK_KLINE_MINUTE", "ts_code", "minute_time");
+        k("INDEX_DAILY", "index_code", "trade_date");
+        k("REGION_DAILY", "board_code", "trade_date");
+        k("INDUSTRY_DAILY", "board_code", "trade_date");
+        k("CONCEPT_DAILY", "board_code", "trade_date");
+        k("LIMIT_UP", "ts_code", "trade_date", "data_source");
+        k("LIMIT_DOWN", "ts_code", "trade_date", "data_source");
+        k("LIMIT_ZHABAN", "ts_code", "trade_date", "data_source");
+        k("STRONG_POOL", "ts_code", "trade_date", "data_source");
+        k("CIXIN_POOL", "ts_code", "trade_date", "data_source");
+        k("MAIN_FUND_STOCK", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
+        k("MAIN_FUND_BOARD", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
+        k("DRAGON_TIGER", "ts_code", "trade_date");
+        k("DRAGON_TIGER_DETAIL", "ts_code", "trade_date", "seat_name");
+        k("STOCK_BY_BOARD", "board_code", "ts_code", "board_type", "data_source");
+        k("NORTHBOUND_FLOW", "trade_date");
+        k("FINANCIAL", "ts_code", "end_date");
+        k("NEWS_EVENT", "event_time", "event_id");
+        k("TRADE_CALENDAR", "trade_date");
+    }
+
+    private static void k(String taskType, String... keys) {
+        DEDUP_KEYS.put(taskType, List.of(keys));
+    }
+
     // 5 个池子独立 writer（插在这里，路由调用）
     public void writeLimitUpPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         LocalDate today = LocalDate.now();
@@ -477,6 +512,15 @@ public class DedupWriter {
     public void write(String taskType, List<Map<String, Object>> rows, SourceType source, String srcDetail) {
         if (rows == null || rows.isEmpty()) {
             return;
+        }
+        // 代码层第一道防线：批内 in-memory 去重（同自然键保留最后一条）
+        List<String> keys = DEDUP_KEYS.get(taskType);
+        if (keys != null) {
+            int before = rows.size();
+            rows = DedupService.dedupInBatch(rows, keys);
+            if (rows.size() < before) {
+                log.info("[DedupWriter] 批内去重 taskType={}, {} -> {} 行", taskType, before, rows.size());
+            }
         }
         switch (taskType) {
             case "LIMIT_UP" -> writeLimitUpPool(rows, source, srcDetail);
