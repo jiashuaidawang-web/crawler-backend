@@ -1,6 +1,6 @@
 # 日批编排:阶段 → URL → CK 表 对照表
 
-## 总览(12 阶段,按编排顺序)
+## 总览(13 阶段(12 主 + 1 链式),按编排顺序)
 
 | # | PipelineStage | 抓取 URL(东财) | 写入 CK 表 | 自然键(去重) | 上游总数来源 |
 |---|--------------|---------------|-----------|------------|------------|
@@ -16,6 +16,7 @@
 | 10 | NORTHBOUND | push2 kamt(实时) | `northbound_flow` | trade_date | data.s2n 数组 size |
 | 11 | INDEX_DAILY | push2 clist(单页) | `index_daily` | index_code, trade_date | data.total |
 | 12 | DRAGON_TIGER | datacenter(单页) | `dragon_tiger` | ts_code, trade_date, reason | result.count |
+| 13 | DRAGON_TIGER_DETAIL | datacenter 按 trade_id(链式) | `dt_detail` | ts_code, trade_date, seat_name, seat_type | 无(随席位数) |
 
 ---
 
@@ -90,6 +91,18 @@
 - **探测**: `fetchDragonTigerCount` → `result.count`(pageSize=1 即得真值)
 - **CK 表**: `dragon_tiger`
 - **自然键**: `ts_code, trade_date, reason`
+
+---
+
+## 链式阶段(依赖前置阶段落库后执行)
+
+### 13. DRAGON_TIGER_DETAIL — 龙虎榜席位明细
+- **触发**:主阶段 DRAGON_TIGER 完成后,`chainDragonTigerDetails` 从 `dragon_tiger` 表读 trade_ids → 每个 trade_id 发一个明细任务
+- **URL**: `https://datacenter-web.eastmoney.com/api/data/v1/get`(`reportName=RPT_BILLBOARD_SEAT`,`filter=(TRADE_ID={id})`)
+- **CK 表**: `dt_detail`
+- **自然键**: `ts_code, trade_date, seat_name, seat_type`
+- **特点**:无独立上游总数(明细行数随席位数波动),以实际下发任务数为期;校验仅做基础量
+- **编排位置**:主 12 阶段跑完后自动执行
 
 ---
 
