@@ -31,13 +31,7 @@ public class StageSeeder {
     }
 
     private SeedResult seedStockDaily(int source, LocalDate date) {
-        // seedStockDailyPages 已探测上游 total 并计算页数,但当前返回 int(任务数)。
-        // Phase 1 为快速验证,用"页数*页大小"作为 expectedTotal 近似值;
-        // Phase 2 改为 SeedGenerator 直接返回 SeedResult(带回真实 total)。
-        int inserted = seedGenerator.seedStockDailyPages(source, date.toString());
-        // 近似上游总数:inserted 个任务 * 100(页大小)。实际 total 可能略小于此值(最后一页不满)。
-        int approxTotal = inserted * 100;
-        return new SeedResult(inserted, approxTotal, List.of(),
-                "STOCK_DAILY 按页下发 " + inserted + " 个任务,近似总数 " + approxTotal);
+        // seedStockDailyPagesResult 带回上游真实总数(total),即使任务已存在(inserted=0)也能校验
+        return seedGenerator.seedStockDailyPagesResult(source, date.toString());
     }
 }

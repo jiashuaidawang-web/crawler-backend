@@ -79,10 +79,15 @@ curl -X POST "http://localhost:8081/api/job/pipeline/resume?date=2026-08-13"
 ```
 
 ### 验证 D:校验逻辑(重点)
-若 08-13 STOCK_DAILY 实际完整,应看到:
-- `pipeline_stage.actual_total` ≈ `expected_total`,`dup_rows`= 重复组数,`lost_rows`=0,`status`=DONE
 
-若想看"真丢失"路径,可手动删几条 CK 数据再跑(Phase 2 重跑机制完善后更方便)。
+重跑(任务已存在,验证"inserted=0 但 expectedTotal 正确"的场景):
+```bash
+curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-13"
+```
+应看到 `expected_total`=5549(上游真实总数),`seeded_count`=0(幂等跳过),`actual_total`=CK 实际行数。
+若 08-13 STOCK_DAILY 完整,`status`=DONE,`dup_rows`=重复组数,`lost_rows`=0。
+
+若想看"真丢失"路径,可手动删几条 CK 的 stock_daily 数据再跑。
 
 ---
 

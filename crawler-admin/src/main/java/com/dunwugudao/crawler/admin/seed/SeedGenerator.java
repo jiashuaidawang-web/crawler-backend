@@ -1,5 +1,6 @@
 package com.dunwugudao.crawler.admin.seed;
 
+import com.dunwugudao.crawler.admin.pipeline.SeedResult;
 import com.dunwugudao.crawler.admin.service.BoardBasicService;
 import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.persistence.entity.BoardBasic;
@@ -154,6 +155,15 @@ public class SeedGenerator {
 
     /** STOCK_DAILY 单独处理:探测 total,按页拆 task */
     public int seedStockDailyPages(int source, String date) {
+        return seedStockDailyPagesResult(source, date).inserted();
+    }
+
+    /**
+     * STOCK_DAILY 按页拆任务,返回 SeedResult(含上游总数 total 作为校验真值)。
+     * <p>幂等:任务已存在时 inserted=0,但 expectedTotal 仍为上游真实总数,
+     * 编排器可依此校验已有任务的数据是否完整。</p>
+     */
+    public SeedResult seedStockDailyPagesResult(int source, String date) {
         // 探测真实全市场总数（最小请求：pz=1, fields=f12），计算页数
         EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get("STOCK_DAILY");
         int total = fetchClistTotalByProxy(spec, date);
@@ -187,7 +197,8 @@ public class SeedGenerator {
         inserted += flush(batch);
         log.info("[seedStockDailyPages] date={} total={} pageSize={} pages={} inserted={}",
                 date, total, stockDailyPageSize, totalPages, inserted);
-        return inserted;
+        return new SeedResult(inserted, total, List.of(),
+                "STOCK_DAILY 上游总数=" + total + ",页数=" + totalPages + ",新插入=" + inserted);
     }
 
     /** REGION_DAILY 单独处理（地域板块日线，board_type=1） */
