@@ -328,6 +328,23 @@ public class SeedGenerator {
         return n;
     }
 
+    /** 板块基础维表种子,返回 SeedResult。 */
+    public SeedResult seedBoardBasicAllResult(int source, String date) {
+        int region = seedBoardBasic("REGION_BOARD", source, date);
+        int industry = seedBoardBasic("INDUSTRY_BOARD", source, date);
+        int concept = seedBoardBasic("CONCEPT_BOARD", source, date);
+        int total = region + industry + concept;
+        return new SeedResult(total, 0, List.of(),
+                String.format("BOARD_BASIC 3类板块下发 %d 个任务(地域/行业/概念=%d/%d/%d)",
+                        total, region, industry, concept));
+    }
+
+    /** 周K聚合(从日K聚合到 stock_weekly)。 */
+    public SeedResult seedWeeklyResult(int source, String date) {
+        int weeks = aggregateAllWeekly();
+        return new SeedResult(weeks, 0, List.of(), String.format("STOCK_WEEKLY 聚合 %d 周", weeks));
+    }
+
     /**
      * 仅下发 5 个池子任务（涨停/跌停/炸板/强势/次新），用于端到端测试。
      * <p>不包含 STOCK_DAILY / REGION_DAILY 等其他任务类型，避免 daily-seed 里一堆无关任务。</p>

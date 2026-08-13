@@ -1,6 +1,6 @@
 # 日批编排:阶段 → URL → CK 表 对照表
 
-## 总览(13 阶段(12 主 + 1 链式),按编排顺序)
+## 总览(16 阶段(14 主 + 1 链式 + 1 周级),按编排顺序)
 
 | # | PipelineStage | 抓取 URL(东财) | 写入 CK 表 | 自然键(去重) | 上游总数来源 |
 |---|--------------|---------------|-----------|------------|------------|
@@ -16,7 +16,10 @@
 | 10 | NORTHBOUND | push2 kamt(实时) | `northbound_flow` | trade_date | data.s2n 数组 size |
 | 11 | INDEX_DAILY | push2 clist(单页) | `index_daily` | index_code, trade_date | data.total |
 | 12 | DRAGON_TIGER | datacenter(单页) | `dragon_tiger` | ts_code, trade_date, reason | result.count |
-| 13 | DRAGON_TIGER_DETAIL | datacenter 按 trade_id(链式) | `dt_detail` | ts_code, trade_date, seat_name, seat_type | 无(随席位数) |
+| 13 | BOARD_BASIC | push2 clist 3类(单页) | `board_basic` | board_type, board_code, data_source | data.total(3类) |
+| 14 | STOCK_BY_BOARD | push2 clist 按板块(分页) | `stock_board_rel` | board_code, ts_code, board_type, data_source | 无(按板块探测) |
+| 15 | STOCK_WEEKLY | 从 stock_weekly 聚合(周级) | `stock_weekly` | ts_code, trade_date, data_source | 无(聚合) |
+| 16 | DRAGON_TIGER_DETAIL | datacenter 按 trade_id(链式) | `dt_detail` | ts_code, trade_date, seat_name, seat_type | 无(随席位数) |
 
 ---
 
@@ -92,11 +95,38 @@
 - **CK 表**: `dragon_tiger`
 - **自然键**: `ts_code, trade_date, reason`
 
+### 13. BOARD_BASIC — 板块基础维表
+- **URL**: `push2 clist`(3 类板块,每类单页 cap 10 页)
+  - REGION_BOARD 地域板块
+  - INDUSTRY_BOARD 行业板块
+  - CONCEPT_BOARD 概念板块
+- **探测**: `data.total`(各类分别探测)
+- **CK 表**: `board_basic`(`ReplacingMergeTree(_ver)`,**无 trade_date 列**)
+- **自然键**: `board_type, board_code, data_source`
+- **说明**: 板块维表(代码/名称/特征),worker 落 writeBoardBasic
+
+### 14. STOCK_BY_BOARD — 板块-个股关联
+- **URL**: `push2 clist`(按板块,每板块先探测 total 再按页拆分)
+- **CK 表**: `stock_board_rel`(`ReplacingMergeTree(_ver)`)
+- **自然键**: `board_code, ts_code, board_type, data_source`
+- **优化**: 对比今日 vs 昨日股票数+板块数,相同→跳过省 IP(详见下方"优化"节)
+
+---
+
+## 周级阶段(仅每周指定日跑,默认周六,配置 crawler.pipeline.weekly-day-of-week)
+
+### 15. STOCK_WEEKLY — 周K(从日K聚合)
+- **触发**: 每周指定日(默认周六)跑,**非每日**
+- **逻辑**: `aggregateAllWeekly` 从 `stock_daily` 按 ts_code 聚合到 `stock_weekly`(补全扩展字段:振幅/量比/均价/主力净流入/PE/领涨股/行业/概念/市场)
+- **CK 表**: `stock_weekly`(`MergeTree`)
+- **自然键**: `ts_code, trade_date, data_source`
+- **说明**: 聚合类任务(非抓取),无上游总数,校验仅做基础量
+
 ---
 
 ## 链式阶段(依赖前置阶段落库后执行)
 
-### 13. DRAGON_TIGER_DETAIL — 龙虎榜席位明细
+### 16. DRAGON_TIGER_DETAIL — 龙虎榜席位明细
 - **触发**:主阶段 DRAGON_TIGER 完成后,`chainDragonTigerDetails` 从 `dragon_tiger` 表读 trade_ids → 每个 trade_id 发一个明细任务
 - **URL**: `https://datacenter-web.eastmoney.com/api/data/v1/get`(`reportName=RPT_BILLBOARD_SEAT`,`filter=(TRADE_ID={id})`)
 - **CK 表**: `dt_detail`
@@ -147,3 +177,18 @@ SELECT count() FROM main_fund_flow WHERE trade_date = ? AND data_source = ? AND 
 | `crawler-persistence/.../DedupWriter.java` | taskType→CK 表写入路由 |
 | `crawler-persistence/.../DedupService.java` | REGISTRY(自然键+引擎) |
 | `crawler-web/src/views/PipelineDashboard.vue` | 前端阶段流程图 |
+
+## 优化:STOCK_BY_BOARD 跳过逻辑(省 IP)
+
+**逻辑**:对比今日 vs 昨日**股票数 + 板块数**,两者均相同 → 关联关系不会变化 → **跳过不发任务,省 IP**。
+
+**实现**:
+1. `StageSeeder.seedBoardRel`:
+   - 查昨日数量:从昨日 `STOCK_BY_BOARD` 阶段的 `check_result` JSON 解析 `stockCount` + `boardCount`
+   - 查今日数量:`stockGenerator.queryStockCodeCount`(CK stock_daily 去重 ts_code) + `queryBoardCodeCount`(board_basic 去重 board_code)
+   - 调 `seedByBoardResult(今日股票,今日板块,昨日股票,昨日板块)`
+2. `SeedGenerator.seedByBoardResult`:数量相同 → 返回 `SeedResult.empty("跳过省 IP")`;否则正常 seed
+3. `DailyPipelineOrchestrator.storeBoardRelCounts`:跑完后存今日数量到 `check_result`,供明天比较
+
+**效果**:大多数交易日股票/板块无变化 → 跳过大量按板块请求(每板块一次 HTTP + 分页),显著省 IP。
+

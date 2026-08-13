@@ -22,8 +22,10 @@ public enum PipelineStage {
     NORTHBOUND         (10, FailurePolicy.SKIP,    Set.of(),                List.of("NORTHBOUND_FLOW")),
     INDEX_DAILY        (11, FailurePolicy.SKIP,    Set.of(),                List.of("INDEX_DAILY")),
     DRAGON_TIGER       (12, FailurePolicy.SKIP,    Set.of(),                List.of("DRAGON_TIGER")),
-    STOCK_BY_BOARD     (13, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_BY_BOARD")),
-    DRAGON_TIGER_DETAIL(13, FailurePolicy.SKIP,    Set.of(DRAGON_TIGER),    List.of("DRAGON_TIGER_DETAIL"));
+    BOARD_BASIC        (13, FailurePolicy.SKIP,    Set.of(),                List.of("REGION_BOARD","INDUSTRY_BOARD","CONCEPT_BOARD")),
+    STOCK_BY_BOARD     (14, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_BY_BOARD")),
+    STOCK_WEEKLY       (15, FailurePolicy.SKIP,    Set.of(),                List.of()),
+    DRAGON_TIGER_DETAIL(16, FailurePolicy.SKIP,    Set.of(DRAGON_TIGER),    List.of("DRAGON_TIGER_DETAIL"));
 
     private final int seq;
     private final FailurePolicy policy;

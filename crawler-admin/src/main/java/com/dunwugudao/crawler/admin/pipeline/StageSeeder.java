@@ -43,7 +43,9 @@ public class StageSeeder {
             case NORTHBOUND -> seedGenerator.seedNorthboundResult(source, date.toString());
             case INDEX_DAILY -> seedGenerator.seedIndexDailyResult(source, date.toString());
             case DRAGON_TIGER -> seedGenerator.seedDragonTigerResult(source, date.toString());
+            case BOARD_BASIC -> seedGenerator.seedBoardBasicAllResult(source, date.toString());
             case STOCK_BY_BOARD -> seedBoardRel(source, date);
+            case STOCK_WEEKLY -> seedGenerator.seedWeeklyResult(source, date.toString());
             // DRAGON_TIGER_DETAIL 依赖 DRAGON_TIGER,由链式阶段触发
             case DRAGON_TIGER_DETAIL -> SeedResult.empty("DRAGON_TIGER_DETAIL 依赖 DRAGON_TIGER,由串联触发");
         };

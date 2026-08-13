@@ -95,15 +95,26 @@ public class TotalCountValidator implements PipelineValidator {
             case DRAGON_TIGER -> new TableQuery("dragon_tiger", null, null);
             case DRAGON_TIGER_DETAIL -> new TableQuery("dt_detail", null, null);
             case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null);
+            case BOARD_BASIC -> new TableQuery("board_basic", null, null, false); // 维表无 trade_date
+            case STOCK_WEEKLY -> new TableQuery("stock_weekly", null, null, true);
         };
     }
 
     private int countActual(TableQuery tq, LocalDate date, int source) {
-        String sql = "SELECT count() FROM " + tq.table + " WHERE trade_date = ? AND data_source = ?";
-        if (tq.extraFilter != null && !tq.extraFilter.isEmpty()) {
-            sql += " AND " + tq.extraFilter;
+        StringBuilder sql = new StringBuilder("SELECT count() FROM ").append(tq.table);
+        List<Object> params = new ArrayList<>();
+        boolean hasWhere = false;
+        // board_basic 等维表无 trade_date,仅用 extraFilter
+        if (tq.tradeDateFilter) {
+            sql.append(" WHERE trade_date = ? AND data_source = ?");
+            params.add(date.toString());
+            params.add(source);
+            hasWhere = true;
         }
-        Long v = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
+        if (tq.extraFilter != null && !tq.extraFilter.isEmpty()) {
+            sql.append(hasWhere ? " AND " : " WHERE ").append(tq.extraFilter);
+        }
+        Long v = chJdbc.queryForObject(sql.toString(), Long.class, params.toArray());
         return v == null ? 0 : v.intValue();
     }
 
@@ -141,5 +152,9 @@ public class TotalCountValidator implements PipelineValidator {
         return cols;
     }
 
-    private record TableQuery(String table, String extraFilter, String ignored) {}
+    private record TableQuery(String table, String extraFilter, String ignored, boolean tradeDateFilter) {
+        TableQuery(String table, String extraFilter, String ignored) {
+            this(table, extraFilter, ignored, true);
+        }
+    }
 }
