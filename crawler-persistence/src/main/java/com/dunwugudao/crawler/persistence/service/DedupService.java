@@ -39,6 +39,7 @@ public class DedupService {
         private long removableRows;    // 可清除行数 = sum(cnt-1)
         private String engine;
         private boolean needsFix;      // 是否仍是 MergeTree（需 engine-fix）
+        private String message;        // 操作结果说明
     }
 
     /** rebuild 结果。 */
@@ -58,6 +59,7 @@ public class DedupService {
         String naturalKey;     // 逗号分隔，如 "ts_code, trade_date"
         String partitionBy;    // 如 "toYYYYMM(trade_date)"，无分区则 null
         String versionCol;     // 用于 _ver 的列名；null 表示无（用 now()）
+        String dateCol;        // 日期列名（用于按日期定向去重）；null 表示不支持
         boolean alreadyReplacing; // 已是 ReplacingMergeTree 则无需改引擎
     }
 
@@ -70,8 +72,8 @@ public class DedupService {
 
     static {
         // 行情/周线/分钟
-        reg("stock_daily", "ts_code, trade_date", "toYYYYMM(trade_date)", "update_date", false);
-        reg("stock_weekly", "ts_code, trade_date", "toYYYYMM(trade_date)", "update_date", false);
+        reg("stock_daily", "ts_code, trade_date, data_source", "toYYYYMM(trade_date)", "update_date", false);
+        reg("stock_weekly", "ts_code, trade_date, data_source", "toYYYYMM(trade_date)", "update_date", false);
         reg("stock_kline_minute", "ts_code, minute_time", "toYYYYMM(trade_date)", null, false);
         reg("index_daily", "index_code, trade_date", "toYYYYMM(trade_date)", "update_date", false);
         reg("board_daily", "board_code, trade_date", "toYYYYMM(trade_date)", "update_date", false);
@@ -84,19 +86,19 @@ public class DedupService {
         reg("cixin_pool", "ts_code, trade_date, data_source", "toYYYYMM(trade_date)", "update_date", false);
 
         // 龙虎榜
-        reg("dragon_tiger", "ts_code, trade_date", "toYYYYMM(trade_date)", "update_date", false);
-        reg("dt_detail", "ts_code, trade_date, seat_name", "toYYYYMM(trade_date)", "update_date", false);
+        reg("dragon_tiger", "ts_code, trade_date, reason", "toYYYYMM(trade_date)", "update_date", false);
+        reg("dt_detail", "ts_code, trade_date, seat_name, seat_type", "toYYYYMM(trade_date)", "update_date", false);
 
         // 资金流 / 板块关联
-        reg("main_fund_flow", "obj_type, ts_code, board_code, index_code, trade_date",
+        reg("main_fund_flow", "obj_type, ts_code, board_code, index_code, trade_date, data_source",
                 "toYYYYMM(trade_date)", "update_date", false);
         reg("stock_board_rel", "board_code, ts_code, board_type, data_source",
                 "toYYYYMM(effective_date)", null, true); // 已是 ReplacingMergeTree(_ver)
 
         // 北向 / 财务 / 新闻
         reg("northbound_flow", "trade_date", null, "update_date", false);
-        reg("financial", "ts_code, end_date", "toYYYYMM(end_date)", "update_date", false);
-        reg("news_event", "event_time, event_id", "toYYYYMM(toDate(event_time))", "update_date", false);
+        reg("financial", "ts_code, end_date", "toYYYYMM(end_date)", "update_date", "end_date", false);
+        reg("news_event", "event_time, event_id", "toYYYYMM(toDate(event_time))", "update_date", "event_time", false);
 
         // 维表（已是 ReplacingMergeTree，无需改引擎，但可 rebuild 去重）
         reg("board_basic", "board_type, board_code, data_source", "toYYYYMM(create_date)", null, true);
@@ -116,9 +118,13 @@ public class DedupService {
     }
 
     private static void reg(String table, String key, String part, String ver, boolean replacing) {
+        reg(table, key, part, ver, "trade_date", replacing);
+    }
+
+    private static void reg(String table, String key, String part, String ver, String dateCol, boolean replacing) {
         TableCfg c = new TableCfg();
         c.table = table; c.naturalKey = key; c.partitionBy = part;
-        c.versionCol = ver; c.alreadyReplacing = replacing;
+        c.versionCol = ver; c.dateCol = dateCol; c.alreadyReplacing = replacing;
         REGISTRY.put(table, c);
     }
 
@@ -178,6 +184,60 @@ public class DedupService {
         return all;
     }
 
+    // -------------------------------------------------------------------------
+    // 按日期定向去重（简单模式：删多余行，不改引擎）
+    // -------------------------------------------------------------------------
+
+    /**
+     * 按指定日期去重：同自然键只保留 update_date 最新的一条，多余行 DELETE。
+     * <p>适用场景：重复集中在少数几天（如重跑种子），比全量 rebuild 轻量得多。
+     * CK 的 DELETE 是异步 mutation，返回后需稍等生效。</p>
+     *
+     * @param table 表名
+     * @param dates 日期列表，如 ["2026-08-07","2026-08-10"]
+     * @param dryRun true=只返回会删多少行，不执行
+     */
+    public DupStats dedupByDate(String table, List<String> dates, boolean dryRun) {
+        TableCfg cfg = REGISTRY.get(table);
+        if (cfg == null) {
+            throw new IllegalArgumentException("未注册的表: " + table);
+        }
+        if (cfg.dateCol == null) {
+            throw new IllegalArgumentException("表 " + table + " 未配置 dateCol，不支持按日期去重");
+        }
+        DupStats s = new DupStats();
+        s.table = table;
+        if (dates == null || dates.isEmpty()) {
+            s.message = "未指定日期";
+            return s;
+        }
+        String dateIn = dates.stream().map(d -> "'" + d + "'").reduce((a, b) -> a + "," + b).orElse("");
+        // 统计这些日期内的重复
+        String statSql = "SELECT countIf(cnt > 1) AS dupGroups, sumIf(cnt - 1, cnt > 1) AS removable "
+                + "FROM (SELECT " + cfg.naturalKey + ", count(*) AS cnt FROM " + table
+                + " WHERE " + cfg.dateCol + " IN (" + dateIn + ") GROUP BY " + cfg.naturalKey + ")";
+        chJdbcTemplate.query(statSql, rs -> {
+            s.dupGroups = rs.getLong("dupGroups");
+            s.removableRows = rs.getLong("removable");
+        });
+        if (dryRun || s.dupGroups == 0) {
+            s.message = (dryRun ? "[dry-run] " : "") + "将清除 " + s.removableRows + " 行重复（" + s.dupGroups + " 组），日期 " + dates;
+            return s;
+        }
+        // DELETE：保留每个自然键中 update_date 最大的一条，删其余
+        String verCol = cfg.versionCol != null ? cfg.versionCol : cfg.dateCol;
+        String delSql = "ALTER TABLE " + table + " DELETE WHERE "
+                + cfg.dateCol + " IN (" + dateIn + ") AND "
+                + "((" + cfg.naturalKey + ", " + verCol + ") NOT IN ("
+                + "SELECT " + cfg.naturalKey + ", max(" + verCol + ") FROM " + table
+                + " WHERE " + cfg.dateCol + " IN (" + dateIn + ") GROUP BY " + cfg.naturalKey
+                + "))";
+        log.info("[dedup] dedupByDate {} dates={} removable={}", table, dates, s.removableRows);
+        chJdbcTemplate.execute(delSql);
+        s.message = "已提交清除 " + s.removableRows + " 行（CK 异步 mutation，稍等生效）";
+        return s;
+    }
+
     /** 查当前引擎。 */
     public String engineOf(String table) {
         try {
@@ -208,8 +268,20 @@ public class DedupService {
             r.table = table; r.message = "已是 " + engine + "，无需改引擎";
             return r;
         }
-        // 改引擎必然伴随全量迁移，直接走 rebuild（dryRun=false 时执行）
-        return rebuild(table, false);
+        // engine-fix：只改引擎，不去重（避免大表 row_number 超时），依赖 ReplacingMergeTree 自身去重
+        RebuildResult result = new RebuildResult();
+        result.table = table;
+        result.before = stats(table);
+        if (result.before.totalRows == 0) {
+            result.message = "表空，无需处理";
+            return result;
+        }
+        result.message = doRebuild(table, cfg, false);
+        try {
+            result.afterRows = chJdbcTemplate.queryForObject("SELECT count(*) FROM " + table, Long.class);
+        } catch (Exception ignored) {
+        }
+        return result;
     }
 
     // -------------------------------------------------------------------------
@@ -283,37 +355,46 @@ public class DedupService {
                 colNames.append(c[0]);
             }
             // _ver 定义：有 versionCol 则 MATERIALIZED，否则 now()
+            // 用 Nullable(DateTime) + assumeNotNull 兼容 update_date 为 NULL 的情况
             String verExpr = cfg.versionCol != null
-                    ? "coalesce(" + cfg.versionCol + ", toDateTime(0))"
+                    ? "assumeNotNull(coalesce(" + cfg.versionCol + ", toDateTime(0)))"
                     : "now()";
             colDefs.append(", _ver DateTime MATERIALIZED ").append(verExpr);
 
             // 2. 建 _new 表
+            // 检测自然键是否包含 Nullable 列，有则需开启 allow_nullable_key（CK 默认禁止 Nullable 做排序键）
+            boolean nullableKey = false;
+            Set<String> keyCols = new HashSet<>(Arrays.asList(cfg.naturalKey.split(",\\s*")));
+            for (String[] c : cols) {
+                if (keyCols.contains(c[0]) && c[1] != null && c[1].contains("Nullable")) {
+                    nullableKey = true; break;
+                }
+            }
             String create = "CREATE TABLE " + newName + " ("
                     + colDefs + ") ENGINE = ReplacingMergeTree(_ver) ";
             if (cfg.partitionBy != null) {
                 create += "PARTITION BY " + cfg.partitionBy + " ";
             }
-            create += "ORDER BY (" + cfg.naturalKey + ") SETTINGS index_granularity = 8192";
+            create += "ORDER BY (" + cfg.naturalKey + ") SETTINGS index_granularity = 8192"
+                    + (nullableKey ? ", allow_nullable_key = 1" : "");
             log.info("[dedup] CREATE {}: {}", newName, create);
             chJdbcTemplate.execute(create);
 
-            // 3. 去重迁移
-            String insert;
+            // 3. 去重迁移（按分区逐块插入，避免单次 INSERT 触及 >100 分区被 CK 拒绝）
+            String verOrder = cfg.versionCol != null ? cfg.versionCol : "1";
+            String baseSelect;
             if (dedup) {
                 // row_number 窗口：同自然键保留 _ver 最大（最新）行
-                String verOrder = cfg.versionCol != null ? cfg.versionCol : "1";
-                insert = "INSERT INTO " + newName + " (" + colNames + ") "
-                        + "SELECT " + colNames + " FROM ("
+                baseSelect = "SELECT " + colNames + " FROM ("
                         + "SELECT " + colNames + ", row_number() OVER ("
                         + "PARTITION BY " + cfg.naturalKey
                         + " ORDER BY " + verOrder + " DESC) AS rn FROM " + table
                         + ") WHERE rn = 1";
             } else {
-                insert = "INSERT INTO " + newName + " (" + colNames + ") SELECT " + colNames + " FROM " + table;
+                // 纯迁移：带 WHERE 1=1 以便按分区 AND 拼接
+                baseSelect = "SELECT " + colNames + " FROM " + table + " WHERE 1=1";
             }
-            log.info("[dedup] INSERT {}", newName);
-            chJdbcTemplate.execute(insert);
+            insertByPartition(newName, colNames.toString(), baseSelect, cfg.partitionBy, table);
 
             // 4. RENAME 原子切换（CK 支持单语句多表重命名）
             log.info("[dedup] RENAME {} -> {}_del, {} -> {}", table, table, newName, table);
@@ -335,11 +416,55 @@ public class DedupService {
         }
     }
 
+    /**
+     * 按分区逐块插入，规避 CK 的 max_partitions_per_insert_block (默认 100) 限制。
+     * <p>无分区表（partitionBy=null）直接一次插入。有分区表按分区表达式值分批，
+     * 每次 INSERT 带 WHERE partitionExpr = value。</p>
+     */
+    private void insertByPartition(String newName, String colNames, String baseSelect,
+                                   String partitionBy, String sourceTable) {
+        if (partitionBy == null) {
+            String sql = "INSERT INTO " + newName + " (" + colNames + ") " + baseSelect;
+            log.info("[dedup] INSERT {} (no partition)", newName);
+            chJdbcTemplate.execute(sql);
+            return;
+        }
+        // 取源表涉及的分区值（toYYYYMM 返回 UInt32 年月，如 202608）
+        List<Long> parts = chJdbcTemplate.queryForList(
+                "SELECT DISTINCT " + partitionBy + " AS p FROM " + sourceTable + " ORDER BY p", Long.class);
+        if (parts.isEmpty()) {
+            log.info("[dedup] {} 无分区数据，跳过插入", newName);
+            return;
+        }
+        log.info("[dedup] INSERT {} 分 {} 个分区批次", newName, parts.size());
+        for (Long p : parts) {
+            // baseSelect 已含 WHERE（去重分支）或不含（纯迁移分支），统一用 AND 拼接分区条件
+            String sql = "INSERT INTO " + newName + " (" + colNames + ") " + baseSelect
+                    + " AND " + partitionBy + " = " + p;
+            chJdbcTemplate.execute(sql);
+        }
+    }
+
     /** 读 system.columns 拿到 [name, typeDef] 列表。 */
     private List<String[]> columnsOf(String table) {
         return chJdbcTemplate.query(
                 "SELECT name, type FROM system.columns WHERE database = currentDatabase() AND table = ? ORDER BY position",
-                (rs, i) -> new String[]{rs.getString("name"), rs.getString("type")}, table);
+                (rs, i) -> new String[]{rs.getString("name"), normalizeType(rs.getString("type"))}, table);
+    }
+
+    /** 归一化 CK 类型字符串：去逗号后空格 + Decimal(P,S) → Decimal64/128/256(S)（建表要求具体类型）。 */
+    private static String normalizeType(String type) {
+        if (type == null) return null;
+        String t = type.replace(", ", ",");
+        // Decimal(18,2) → Decimal64(2) ；按精度选具体类型
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("Decimal\\((\\d+),(\\d+)\\)").matcher(t);
+        if (m.find()) {
+            int precision = Integer.parseInt(m.group(1));
+            String scale = m.group(2);
+            String concrete = precision <= 9 ? "Decimal32" : precision <= 18 ? "Decimal64" : precision <= 38 ? "Decimal128" : "Decimal256";
+            t = t.replaceFirst("Decimal\\(\\d+,\\d+\\)", concrete + "(" + scale + ")");
+        }
+        return t;
     }
 
     // -------------------------------------------------------------------------

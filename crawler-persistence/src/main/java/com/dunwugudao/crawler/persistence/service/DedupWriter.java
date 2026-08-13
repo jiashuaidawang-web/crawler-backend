@@ -355,9 +355,9 @@ public class DedupWriter {
     private static final Map<String, List<String>> DEDUP_KEYS = new HashMap<>();
 
     static {
-        k("STOCK_DAILY", "ts_code", "trade_date");
-        k("STOCK_DAILY_HISTORY", "ts_code", "trade_date");
-        k("STOCK_WEEKLY", "ts_code", "trade_date");
+        k("STOCK_DAILY", "ts_code", "trade_date", "data_source");
+        k("STOCK_DAILY_HISTORY", "ts_code", "trade_date", "data_source");
+        k("STOCK_WEEKLY", "ts_code", "trade_date", "data_source");
         k("STOCK_KLINE_MINUTE", "ts_code", "minute_time");
         k("INDEX_DAILY", "index_code", "trade_date");
         k("REGION_DAILY", "board_code", "trade_date");
@@ -368,10 +368,10 @@ public class DedupWriter {
         k("LIMIT_ZHABAN", "ts_code", "trade_date", "data_source");
         k("STRONG_POOL", "ts_code", "trade_date", "data_source");
         k("CIXIN_POOL", "ts_code", "trade_date", "data_source");
-        k("MAIN_FUND_STOCK", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
-        k("MAIN_FUND_BOARD", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
-        k("DRAGON_TIGER", "ts_code", "trade_date");
-        k("DRAGON_TIGER_DETAIL", "ts_code", "trade_date", "seat_name");
+        k("MAIN_FUND_STOCK", "obj_type", "ts_code", "board_code", "index_code", "trade_date", "data_source");
+        k("MAIN_FUND_BOARD", "obj_type", "ts_code", "board_code", "index_code", "trade_date", "data_source");
+        k("DRAGON_TIGER", "ts_code", "trade_date", "reason");
+        k("DRAGON_TIGER_DETAIL", "ts_code", "trade_date", "seat_name", "seat_type");
         k("STOCK_BY_BOARD", "board_code", "ts_code", "board_type", "data_source");
         k("NORTHBOUND_FLOW", "trade_date");
         k("FINANCIAL", "ts_code", "end_date");

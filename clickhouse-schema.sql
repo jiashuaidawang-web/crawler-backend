@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS stock_daily (
     trade_date              Date NOT NULL,
     ts_code                 String NOT NULL,
     stock_name              Nullable(String),
+    -- 自然键 (ts_code, trade_date, data_source)：预留同花顺等多源共存
     open                    Nullable(Decimal64(4)),
     high                    Nullable(Decimal64(4)),
     low                     Nullable(Decimal64(4)),
@@ -105,7 +106,7 @@ CREATE TABLE IF NOT EXISTS stock_daily (
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (ts_code, trade_date)
+ORDER BY (ts_code, trade_date, data_source)
 SETTINGS index_granularity = 8192;
 
 -- 2. 个股周线
@@ -135,7 +136,7 @@ CREATE TABLE IF NOT EXISTS stock_weekly (
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (ts_code, trade_date)
+ORDER BY (ts_code, trade_date, data_source)
 SETTINGS index_granularity = 8192;
 
 -- 2b. 个股分钟K线（量价数据，精确到分钟）
@@ -419,7 +420,7 @@ CREATE TABLE IF NOT EXISTS dragon_tiger (
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (ts_code, trade_date)
+ORDER BY (ts_code, trade_date, reason)
 SETTINGS index_granularity = 8192;
 
 -- 12. 龙虎榜席位明细
@@ -438,7 +439,7 @@ CREATE TABLE IF NOT EXISTS dt_detail (
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (ts_code, trade_date, seat_name)
+ORDER BY (ts_code, trade_date, seat_name, seat_type)
 SETTINGS index_granularity = 8192;
 
 -- 13. 主力资金流
@@ -461,7 +462,7 @@ CREATE TABLE IF NOT EXISTS main_fund_flow (
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (obj_type, ts_code, board_code, index_code, trade_date)
+ORDER BY (obj_type, ts_code, board_code, index_code, trade_date, data_source)
 SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- 14. 板块-个股关联（需要覆盖 → ReplacingMergeTree）

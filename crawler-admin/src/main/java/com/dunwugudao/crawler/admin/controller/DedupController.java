@@ -104,4 +104,19 @@ public class DedupController {
         }
         return results;
     }
+
+    /**
+     * 按日期定向去重（简单模式）：同自然键只保留最新一条，删多余行。
+     * <p>适用：重复集中在少数几天。CK DELETE 是异步 mutation。</p>
+     *
+     * @param table 表名
+     * @param dates 日期，可多个，如 &dates=2026-08-07&dates=2026-08-10
+     * @param dryRun true=只统计不执行
+     */
+    @PostMapping("/dedup-by-date")
+    public DupStats dedupByDate(@RequestParam String table,
+                                @RequestParam List<String> dates,
+                                @RequestParam(defaultValue = "true") boolean dryRun) {
+        return dedupService.dedupByDate(table, dates, dryRun);
+    }
 }
