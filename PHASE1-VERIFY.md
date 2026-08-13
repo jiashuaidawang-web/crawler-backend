@@ -51,8 +51,8 @@ crawler:
 
 ### 验证 A:跑批骨架 + STOCK_DAILY 总量校验
 ```bash
-# 跑某天(用已有数据的日,如 2026-08-13)
-curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-13"
+# 跑某天(用已有数据的日,如 2026-08-14)
+curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-14"
 # 应返回 JSON:status=RUNNING 或 SUCCESS,stages=[{stage=STOCK_DAILY,status,...}]
 ```
 观察:
@@ -63,18 +63,18 @@ curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-13"
 
 查状态:
 ```bash
-curl "http://localhost:8081/api/job/pipeline/status?date=2026-08-13"
+curl "http://localhost:8081/api/job/pipeline/status?date=2026-08-14"
 ```
 
 ### 验证 B:幂等(重复调)
 ```bash
-curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-13"
+curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-14"
 # 第二次应直接返回 status=SUCCESS(不会重复发种子)
 ```
 
 ### 验证 C:断点续跑
 ```bash
-curl -X POST "http://localhost:8081/api/job/pipeline/resume?date=2026-08-13"
+curl -X POST "http://localhost:8081/api/job/pipeline/resume?date=2026-08-14"
 # 若 STOCK_DAILY 已 DONE,直接返回;若有未完成阶段,从该阶段继续
 ```
 
@@ -82,7 +82,7 @@ curl -X POST "http://localhost:8081/api/job/pipeline/resume?date=2026-08-13"
 
 重跑(任务已存在,验证"inserted=0 但 expectedTotal 正确"的场景):
 ```bash
-curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-13"
+curl -X POST "http://localhost:8081/api/job/pipeline/daily?date=2026-08-14"
 ```
 应看到 `expected_total`=5549(上游真实总数),`seeded_count`=0(幂等跳过),`actual_total`=CK 实际行数。
 若 08-13 STOCK_DAILY 完整,`status`=DONE,`dup_rows`=重复组数,`lost_rows`=0。
