@@ -94,6 +94,7 @@ public class TotalCountValidator implements PipelineValidator {
             case INDEX_DAILY -> new TableQuery("index_daily", null, null);
             case DRAGON_TIGER -> new TableQuery("dragon_tiger", null, null);
             case DRAGON_TIGER_DETAIL -> new TableQuery("dt_detail", null, null);
+            case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null);
         };
     }
 

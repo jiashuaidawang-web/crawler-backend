@@ -19,6 +19,10 @@ public interface BoardBasicMapper {
     @Select("SELECT * FROM board_basic")
     List<BoardBasic> selectList(@Param("unused") Object unused);
 
+    /** 去重 board_code 数(判断板块数是否变化)。 */
+    @Select("SELECT count(DISTINCT board_code) FROM board_basic")
+    Integer countDistinctBoardCodes();
+
     /** 查某 (board_type, board_code, data_source) 是否已存在（存在即跳过写入）。 */
     @Select("SELECT data_source FROM board_basic FINAL " +
             "WHERE board_type = #{boardType} AND board_code = #{boardCode} AND data_source = #{dataSource} " +

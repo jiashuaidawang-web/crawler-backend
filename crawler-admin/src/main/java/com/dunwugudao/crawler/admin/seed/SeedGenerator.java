@@ -77,6 +77,7 @@ public class SeedGenerator {
     private final ZhabanPoolMapper zhabanPoolMapper;
     private final StrongPoolMapper strongPoolMapper;
     private final CixinPoolMapper cixinPoolMapper;
+    private final org.springframework.jdbc.core.JdbcTemplate chJdbcTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** STOCK_DAILY 每页条数（东财 clist pz 最大值 100）。 */
@@ -100,6 +101,7 @@ public class SeedGenerator {
                          ZhabanPoolMapper zhabanPoolMapper,
                          StrongPoolMapper strongPoolMapper,
                          CixinPoolMapper cixinPoolMapper,
+                         @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbcTemplate,
                          org.springframework.core.env.Environment env) {
         this.mapper = mapper;
         this.universe = universe;
@@ -116,6 +118,7 @@ public class SeedGenerator {
         this.zhabanPoolMapper = zhabanPoolMapper;
         this.strongPoolMapper = strongPoolMapper;
         this.cixinPoolMapper = cixinPoolMapper;
+        this.chJdbcTemplate = chJdbcTemplate;
         // 每页 100 条（56 页）；总页数改为探测 data.total 后计算，不再依赖硬编码总股数
         this.stockDailyPageSize = Integer.parseInt(env.getProperty("stock-daily.page-size", "100"));
         // 探测失败兜底全市场股票数(默认 5545,保证 task 数)
@@ -631,19 +634,43 @@ public class SeedGenerator {
             int totalCount = fetchBoardStockTotal(b.getBoardCode(), date);
             int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
             // 按页拆任务：每页一个 task（pn 从 1 开始）
+            String boardCode = b.getBoardCode();
             for (int pn = 1; pn <= totalPages; pn++) {
                 String params = TaskTypeCatalog.buildParams(
                         "STOCK_BY_BOARD", date, null, null,
-                        b.getBoardCode(), b.getBoardName(), b.getBoardType());
+                        boardCode, b.getBoardName(), b.getBoardType());
                 // 追加 pn 到 params（buildParams 没带 pn，这里拼进去）
                 String paramsWithPn = appendPnToParams(params, pn);
                 CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
-                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + b.getBoardCode());
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + boardCode);
                 total += mapper.insertIfAbsent(task);
             }
         }
         log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
         return total;
+    }
+
+    /**
+     * 板块-个股关联种子(带"数量未变则跳过"优化)。
+     *
+     * @param todayStockCount    今日股票数(外部查好传入)
+     * @param todayBoardCount    今日板块数(外部查好传入)
+     * @param yesterdayStockCount 昨日股票数
+     * @param yesterdayBoardCount 昨日板块数
+     * @return SeedResult;跳过时 inserted=0、message 含原因
+     */
+    public SeedResult seedByBoardResult(int source, String date,
+                                        int todayStockCount, int todayBoardCount,
+                                        int yesterdayStockCount, int yesterdayBoardCount) {
+        if (yesterdayStockCount > 0 && yesterdayBoardCount > 0
+                && todayStockCount == yesterdayStockCount
+                && todayBoardCount == yesterdayBoardCount) {
+            return SeedResult.empty(String.format(
+                    "股票数(%d)和板块数(%d)与昨日相同,跳过省 IP", todayStockCount, todayBoardCount));
+        }
+        int inserted = seedByBoard(source, date);
+        return new SeedResult(inserted, 0, List.of(),
+                String.format("STOCK_BOARD_REL 下发 %d 个任务", inserted));
     }
 
     /**
@@ -659,6 +686,30 @@ public class SeedGenerator {
         // 增量同步板块-个股关联（stock_board_rel）：从 board_basic 读板块，探测 total → 按页拆 STOCK_BY_BOARD 任务。
         // worker 幂等，重复跑不重复数据。
         return seedByBoard(source, date);
+    }
+
+    /** 查 CK stock_daily 去重 ts_code 数(指定日期+数据源)。 */
+    public int queryStockCodeCount(int source, LocalDate date) {
+        try {
+            Integer n = chJdbcTemplate.queryForObject(
+                    "SELECT count(DISTINCT ts_code) FROM stock_daily WHERE trade_date = ? AND data_source = ?",
+                    Integer.class, date.toString(), source);
+            return n == null ? 0 : n;
+        } catch (Exception e) {
+            log.warn("queryStockCodeCount 失败: {}", e.getMessage());
+            return 0;
+        }
+    }
+
+    /** 查 openGauss board_basic 去重 board_code 数。 */
+    public int queryBoardCodeCount() {
+        try {
+            Integer n = boardBasicMapper.countDistinctBoardCodes();
+            return n == null ? 0 : n;
+        } catch (Exception e) {
+            log.warn("queryBoardCodeCount 失败: {}", e.getMessage());
+            return 0;
+        }
     }
 
     /**

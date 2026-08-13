@@ -46,7 +46,8 @@ public class DailyPipelineOrchestrator {
             PipelineStage.CIXIN_POOL,
             PipelineStage.NORTHBOUND,
             PipelineStage.INDEX_DAILY,
-            PipelineStage.DRAGON_TIGER
+            PipelineStage.DRAGON_TIGER,
+            PipelineStage.STOCK_BY_BOARD
     );
 
     /** 链式阶段:依赖前置阶段落库后,从 CK 表读 ID 再下发。 */
@@ -60,6 +61,7 @@ public class DailyPipelineOrchestrator {
     private final StageCompletionDetector completionDetector;
     private final List<PipelineValidator> validators;
     private final StageSeeder stageSeeder;
+    private final org.springframework.jdbc.core.JdbcTemplate chJdbc;
 
     @Value("${crawler.pipeline.source:1}")
     private int defaultSource;
@@ -75,13 +77,15 @@ public class DailyPipelineOrchestrator {
                                     SeedGenerator seedGenerator,
                                     StageCompletionDetector completionDetector,
                                     List<PipelineValidator> validators,
-                                    StageSeeder stageSeeder) {
+                                    StageSeeder stageSeeder,
+                                    @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbc) {
         this.pipelineMapper = pipelineMapper;
         this.crawlAlertMapper = crawlAlertMapper;
         this.seedGenerator = seedGenerator;
         this.completionDetector = completionDetector;
         this.validators = validators;
         this.stageSeeder = stageSeeder;
+        this.chJdbc = chJdbc;
     }
 
     /** 幂等入口:跑全日批。FAILED 会 reset 重跑,SUCCESS/RUNNING 直接返回。 */
@@ -193,7 +197,22 @@ public class DailyPipelineOrchestrator {
         return status(date.toString());
     }
 
-    /** 链式阶段:从前置阶段落库结果读 ID 再下发子任务(如龙虎榜明细)。 */
+    /** 记录当日股票数+板块数到 check_result,供明天 STOCK_BY_BOARD 比较(相同则跳过省 IP)。 */
+    private void storeBoardRelCounts(LocalDate date, int source, PipelineStageResult result) {
+        try {
+            Integer stockObj = chJdbc.queryForObject(
+                    "SELECT count(DISTINCT ts_code) FROM stock_daily WHERE trade_date = ? AND data_source = ?",
+                    Integer.class, date.toString(), source);
+            result.boardRelStockCount = stockObj == null ? 0 : stockObj;
+
+            Integer boardObj = seedGenerator.queryBoardCodeCount();
+            result.boardRelBoardCount = boardObj == null ? 0 : boardObj;
+            log.info("[pipeline] date={} STOCK_BY_BOARD 记录数量 stock={} board={}",
+                    date, result.boardRelStockCount, result.boardRelBoardCount);
+        } catch (Exception e) {
+            log.warn("[pipeline] 记录板块关联数量失败: {}", e.getMessage());
+        }
+    }
     private PipelineStageResult executeChainStage(LocalDate date, Long runId, PipelineStage stage) {
         long t0 = System.currentTimeMillis();
         PipelineStageResult result = new PipelineStageResult();
@@ -245,6 +264,11 @@ public class DailyPipelineOrchestrator {
             result.taskIds = seed.taskIds();
             log.info("[pipeline] date={} stage={} seed inserted={} expectedTotal={}",
                     date, stage, seed.inserted(), seed.expectedTotal());
+
+            // STOCK_BY_BOARD:记录今日股票数+板块数供明天比较(数量未变则跳过省 IP)
+            if (stage == PipelineStage.STOCK_BY_BOARD) {
+                storeBoardRelCounts(date, defaultSource, result);
+            }
 
             // 2. 等待完成
             await(date, stage);
@@ -336,12 +360,26 @@ public class DailyPipelineOrchestrator {
             e.setDupRows(result.dupRows);
             e.setLostRows(result.lostRows);
             e.setDurationMs(result.durationMs);
-            e.setCheckResult(toJson(result.checkResults));
+            e.setCheckResult(buildCheckResultJson(result));
             e.setErrorMsg(result.errorMsg);
             pipelineMapper.updateStageByName(e);
         } catch (Exception ex) {
             log.warn("[pipeline] 写阶段结果失败: {}", ex.getMessage());
         }
+    }
+
+    /** 构建 check_result JSON,STOCK_BY_BOARD 时追加股票数+板块数供明天比较。 */
+    private String buildCheckResultJson(PipelineStageResult result) {
+        String base = toJson(result.checkResults);
+        if ("STOCK_BY_BOARD".equals(result.stage) && (result.boardRelStockCount > 0 || result.boardRelBoardCount > 0)) {
+            // 在 JSON 数组末尾追加数量对象
+            if (base.endsWith("]")) {
+                base = base.substring(0, base.length() - 1)
+                        + (base.length() > 1 ? "," : "") + "{\"stockCount\":" + result.boardRelStockCount
+                        + ",\"boardCount\":" + result.boardRelBoardCount + "}]";
+            }
+        }
+        return base;
     }
 
     private void finish(Long runId, String runStatus, Map<String, Object> summary) {
