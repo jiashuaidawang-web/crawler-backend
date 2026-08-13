@@ -15,6 +15,7 @@ public class MainFundFlow {
     private String tsCode;           // 个股级
     private String boardCode;        // 板块级
     private String indexCode;        // 指数级
+    private String name;             // 维度名称（个股名/板块名/指数名，源自 f14）
     private BigDecimal mainNet;      // 主力净流入(元)
     private BigDecimal superBig;     // 超大单净流入
     private BigDecimal bigNet;       // 大单净流入

@@ -78,6 +78,7 @@ public final class EastmoneyParsers {
                     row.put("ts_code", EastmoneyFieldMap.toTsCode(txt(n, "f12"), txt(n, "f13")));
                     row.put("board_code", "0");
                     row.put("index_code", "0");
+                    row.put("name", txt(n, "f14"));
                     row.put("main_net", num(n, "f62"));
                     row.put("super_big", num(n, "f66"));
                     row.put("big_net", num(n, "f72"));
@@ -89,6 +90,7 @@ public final class EastmoneyParsers {
                     row.put("board_code", txt(n, "f12"));
                     row.put("ts_code", "0");
                     row.put("index_code", "0");
+                    row.put("name", txt(n, "f14"));
                     row.put("main_net", num(n, "f62"));
                     row.put("super_big", num(n, "f66"));
                     row.put("big_net", num(n, "f72"));

@@ -414,6 +414,15 @@ CREATE TABLE IF NOT EXISTS dragon_tiger (
     trade_id                Nullable(Int64),
     trade_market            Nullable(String),
     trade_market_code       Nullable(String),
+    net_bs_amt              Nullable(Decimal64(2)),    // NET_BS_AMT          龙虎榜净买卖额(另一口径)
+    sum_buy_amt             Nullable(Decimal64(2)),    // SUM_BUY_AMT         买入总额(含非龙虎榜部分)
+    sum_sell_amt            Nullable(Decimal64(2)),    // SUM_SELL_AMT        卖出总额
+    d1_close_adjchrate      Nullable(Decimal64(4)),    // 上榜后1日复权涨跌幅%
+    d2_close_adjchrate      Nullable(Decimal64(4)),    // 上榜后2日复权涨跌幅%
+    d5_close_adjchrate      Nullable(Decimal64(4)),    // 上榜后5日复权涨跌幅%
+    d10_close_adjchrate     Nullable(Decimal64(4)),    // 上榜后10日复权涨跌幅%
+    d20_close_adjchrate     Nullable(Decimal64(4)),    // 上榜后20日复权涨跌幅%
+    d30_close_adjchrate     Nullable(Decimal64(4)),    // 上榜后30日复权涨跌幅%
     data_source             UInt8 NOT NULL DEFAULT 0,
     src_detail              Nullable(String),
     create_date             Nullable(Date),
@@ -429,8 +438,31 @@ CREATE TABLE IF NOT EXISTS dt_detail (
     ts_code                 String NOT NULL,
     seat_name               String NOT NULL,
     seat_type               Nullable(String),
+    rank                    Nullable(Int32),            // 排名
     buy                     Nullable(Decimal64(2)),
     sell                    Nullable(Decimal64(2)),
+    net_buy                 Nullable(Decimal64(2)),     // 净买入
+    buy_ratio               Nullable(Decimal64(4)),     // 买入占比%
+    sell_ratio              Nullable(Decimal64(4)),     // 卖出占比%
+    net_buy_ratio           Nullable(Decimal64(4)),     // 净买入占比%
+    trade_amt               Nullable(Decimal64(2)),     // 成交额
+    trade_ratio             Nullable(Decimal64(4)),     // 成交额占比%
+    accum_volume            Nullable(Decimal64(2)),     // 累计成交量(手)
+    accum_amount            Nullable(Decimal64(2)),     // 累计成交额
+    change_rate             Nullable(Decimal64(4)),     // 期间涨跌幅%
+    turnoverrate_ratio      Nullable(Decimal64(4)),     // 期间换手率%
+    trade_direction         Nullable(Int32),            // 交易方向
+    statistics_days         Nullable(Int32),            // 统计天数
+    onlist_times            Nullable(Int32),            // 上榜次数
+    start_date              Nullable(Date),             // 统计起始日
+    end_date                Nullable(Date),             // 统计截止日
+    operate_dept_code       Nullable(String),           // 席位编号
+    operate_dept_type       Nullable(Int32),            // 席位类型码
+    change_type             Nullable(String),           // 异常类型码
+    explanation             Nullable(String),           // 上榜原因
+    trade_id                Nullable(Int64),            // 关联主表交易ID
+    security_inner_code     Nullable(String),           // 证券内部编码
+    sec_type                Nullable(Int32),            // 证券类型
     is_institution          Nullable(UInt8),
     is_famous               Nullable(UInt8),
     data_source             UInt8 NOT NULL DEFAULT 0,
@@ -451,6 +483,7 @@ CREATE TABLE IF NOT EXISTS main_fund_flow (
     ts_code                 Nullable(String),
     board_code              Nullable(String),
     index_code              Nullable(String),
+    name                    Nullable(String),
     main_net                Nullable(Decimal64(2)),
     super_big               Nullable(Decimal64(2)),
     big_net                 Nullable(Decimal64(2)),
@@ -566,8 +599,9 @@ CREATE TABLE IF NOT EXISTS sentiment_daily (
     max_board_pos           Nullable(Int32),
     yest_limit_ret          Nullable(Decimal64(4)),
     thermal                 Nullable(Decimal64(4)),
-    regime                  Nullable(String)
-) ENGINE = MergeTree()
+    regime                  Nullable(String),
+    _ver                    DateTime MATERIALIZED now()  -- 版本列：同 trade_date 保留最新
+) ENGINE = ReplacingMergeTree(_ver)
 ORDER BY trade_date
 SETTINGS index_granularity = 8192;
 
@@ -631,24 +665,26 @@ CREATE TABLE IF NOT EXISTS mainline_daily (
     board_code              String NOT NULL,
     main_level              Nullable(String),
     strength                Nullable(Decimal(8, 4)),
-    rank                    Nullable(Int32)
-) ENGINE = MergeTree()
+    rank                    Nullable(Int32),
+    _ver                    DateTime MATERIALIZED now()  -- 版本列：同 (trade_date, board_code) 保留最新
+) ENGINE = ReplacingMergeTree(_ver)
 PARTITION BY toYYYYMM(trade_date)
 ORDER BY (trade_date, board_code)
 SETTINGS index_granularity = 8192;
 
--- 25. 龙头池（S4 计算层产出，trade_date+ts_code 为自然键）
+-- 25. 龙头池（S4 计算层产出，trade_date+ts_code+board_code 为自然键）
 CREATE TABLE IF NOT EXISTS leader_pool_daily (
     trade_date              Date NOT NULL,
     ts_code                 String NOT NULL,
     board_code              Nullable(String),
     board_pos               Nullable(Int16),
     role                    Nullable(String),
-    score                   Nullable(Decimal(8, 4))
-) ENGINE = MergeTree()
+    score                   Nullable(Decimal(8, 4)),
+    _ver                    DateTime MATERIALIZED now()  -- 版本列：同 (trade_date, ts_code, board_code) 保留最新
+) ENGINE = ReplacingMergeTree(_ver)
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (trade_date, ts_code)
-SETTINGS index_granularity = 8192;
+ORDER BY (trade_date, ts_code, board_code)
+SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 -- ============================================================================
 -- 附：与本 SQL 配套的说明
