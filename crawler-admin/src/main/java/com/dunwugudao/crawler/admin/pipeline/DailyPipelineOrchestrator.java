@@ -16,15 +16,21 @@ import java.util.*;
 /**
  * 日批编排器:顺序执行各阶段(seed → 等待完成 → 校验 → 失败策略)。
  *
- * <p>幂等:同日已有 RUNNING/SUCCESS 的 run 则直接返回 resume 点;启动时 abort 旧 RUNNING。
- * 断点续跑:resume() 从首个非 DONE/IGNORED 阶段开始。</p>
- *
- * <p>Phase 1 仅接入 STOCK_DAILY 单阶段验证编排骨架;其余阶段 Phase 2 按需接入。</p>
+ * <p>生命周期模型:</p>
+ * <ul>
+ *   <li>run 初始化时预建所有 stage 行(status=PENDING,幂等:已存在不重复插)</li>
+ *   <li>执行时按 (run_id,stage_name) update 该行(不新建行)</li>
+ *   <li>FAILED 重跑时 reset 所有 stage 为 PENDING(不清零重建,避免行累积)</li>
+ *   <li>幂等:RUNNING/SUCCESS 直接返回 status,不重复执行</li>
+ * </ul>
  */
 @Service
 public class DailyPipelineOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(DailyPipelineOrchestrator.class);
+
+    /** Phase 1 仅 STOCK_DAILY;Phase 2 替换为全部阶段 */
+    private static final List<PipelineStage> ACTIVE_STAGES = List.of(PipelineStage.STOCK_DAILY);
 
     private final PipelineMapper pipelineMapper;
     private final StageCompletionDetector completionDetector;
@@ -50,46 +56,26 @@ public class DailyPipelineOrchestrator {
         this.stageSeeder = stageSeeder;
     }
 
-    /** 幂等入口:跑全日批。 */
+    /** 幂等入口:跑全日批。FAILED 会 reset 重跑,SUCCESS/RUNNING 直接返回。 */
     public PipelineRunResult run(String dateStr) {
         LocalDate date = LocalDate.parse(dateStr);
-        PipelineRun existing = pipelineMapper.selectRunByDate(date);
-        if (existing != null && ("SUCCESS".equals(existing.getStatus()) || "RUNNING".equals(existing.getStatus()))) {
-            return status(dateStr); // 已成功或在跑,直接返回当前状态
-        }
-        // abort 旧 RUNNING,新建
-        pipelineMapper.abortStaleRuns(date);
-        PipelineRun run = new PipelineRun();
-        run.setRunDate(date);
-        pipelineMapper.insertRunIgnoreConflict(run);
-        Long runId = pipelineMapper.selectRunIdByDate(date);
+        Long runId = ensureRun(date, true);
         if (runId == null) {
-            return status(dateStr); // 并发抢到,返回现有
+            return status(dateStr);
         }
-        return execute(date, runId, List.of(PipelineStage.STOCK_DAILY)); // Phase 1:仅 STOCK_DAILY
+        return execute(date, runId, false);
     }
 
-    /** 断点续跑:从首个非终态阶段开始。 */
+    /** 断点续跑:从首个非终态阶段继续(不 reset,用于 RUNNING 中断后继续)。 */
     public PipelineRunResult resume(String dateStr) {
         LocalDate date = LocalDate.parse(dateStr);
         PipelineRun run = pipelineMapper.selectRunByDate(date);
         if (run == null) {
-            return run(dateStr); // 无 run 则全新跑
+            return run(dateStr);
         }
-        List<PipelineStageRecord> stages = pipelineMapper.selectStages(run.getRunId());
-        List<PipelineStage> toRun = new ArrayList<>();
-        for (PipelineStageRecord s : stages) {
-            if (!isTerminal(s.getStatus())) {
-                toRun.add(Enum.valueOf(PipelineStage.class, s.getStageName()));
-            }
-        }
-        if (toRun.isEmpty()) {
-            return status(dateStr);
-        }
-        return execute(date, run.getRunId(), toRun);
+        return execute(date, run.getRunId(), false);
     }
 
-    /** 查当前状态。 */
     public PipelineRunResult status(String dateStr) {
         LocalDate date = LocalDate.parse(dateStr);
         PipelineRun run = pipelineMapper.selectRunByDate(date);
@@ -100,12 +86,62 @@ public class DailyPipelineOrchestrator {
         return new PipelineRunResult(dateStr, run.getStatus(), stages, run.getSummary());
     }
 
+    // ---------------- run 初始化 ----------------
+
+    /**
+     * 确保某日有 RUNNING 的 run(并预建 stage 行)。
+     *
+     * @param resetIfExists FAILED/ABORTED 时 reset 重跑
+     * @return runId(已有 RUNNING/SUCCESS 时返回 null,表示无需执行)
+     */
+    private Long ensureRun(LocalDate date, boolean resetIfExists) {
+        PipelineRun existing = pipelineMapper.selectRunByDate(date);
+        if (existing != null) {
+            if ("RUNNING".equals(existing.getStatus()) || "SUCCESS".equals(existing.getStatus())) {
+                return null; // 幂等:已在跑或已完成
+            }
+            // FAILED/ABORTED → reset 重跑
+            pipelineMapper.resetStagesToPending(existing.getRunId());
+            pipelineMapper.resetRunToRunning(existing.getRunId());
+            initStages(existing.getRunId());
+            return existing.getRunId();
+        }
+        // 新建 run
+        PipelineRun r = new PipelineRun();
+        r.setRunDate(date);
+        pipelineMapper.insertRunIgnoreConflict(r);
+        Long runId = pipelineMapper.selectRunIdByDate(date);
+        if (runId == null) {
+            return null;
+        }
+        initStages(runId);
+        return runId;
+    }
+
+    /** 预建所有阶段行(幂等)。 */
+    private void initStages(Long runId) {
+        for (PipelineStage stage : ACTIVE_STAGES) {
+            pipelineMapper.insertStageIfNotExists(runId, stage.name(), stage.getSeq());
+        }
+    }
+
     // ---------------- 核心执行 ----------------
 
-    private PipelineRunResult execute(LocalDate date, Long runId, List<PipelineStage> stages) {
+    private PipelineRunResult execute(LocalDate date, Long runId, boolean reset) {
         Map<String, Object> summary = new LinkedHashMap<>();
-        long runStart = System.currentTimeMillis();
-        for (PipelineStage stage : stages) {
+        List<PipelineStageRecord> stageRows = pipelineMapper.selectStages(runId);
+        // stage_name → record
+        Map<String, PipelineStageRecord> rowMap = new LinkedHashMap<>();
+        for (PipelineStageRecord r : stageRows) {
+            rowMap.put(r.getStageName(), r);
+        }
+
+        for (PipelineStage stage : ACTIVE_STAGES) {
+            // 已终态的阶段跳过(DONE/IGNORED/SKIP)
+            PipelineStageRecord row = rowMap.get(stage.name());
+            if (row != null && isTerminal(row.getStatus())) {
+                continue;
+            }
             PipelineStageResult sr = executeStage(date, runId, stage);
             summary.put(stage.name(), sr.toMap());
             if ("FAILED".equals(sr.status) && stage.getPolicy() == FailurePolicy.HALT) {
@@ -123,13 +159,7 @@ public class DailyPipelineOrchestrator {
         PipelineStageResult result = new PipelineStageResult();
         result.stage = stage.name();
         try {
-            // 1. seed
-            PipelineStageRecord entity = new PipelineStageRecord();
-            entity.setRunId(runId);
-            entity.setStageName(stage.name());
-            entity.setSeq(stage.getSeq());
-            pipelineMapper.insertStage(entity);
-
+            // 1. seed(带回上游总数)
             SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
             result.seededCount = seed.inserted();
             result.expectedTotal = seed.expectedTotal();
@@ -138,7 +168,7 @@ public class DailyPipelineOrchestrator {
                     date, stage, seed.inserted(), seed.expectedTotal());
 
             // 2. 等待完成
-            await(date, stage, entity.getStageId());
+            await(date, stage);
 
             // 3. 校验
             ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), seed.taskIds());
@@ -153,21 +183,21 @@ public class DailyPipelineOrchestrator {
             result.dupRows = dupRows(checkResults);
             result.lostRows = lostRows(checkResults);
 
-            // 4. 写阶段结果
-            persistStage(entity.getStageId(), result, System.currentTimeMillis() - t0);
+            // 4. 写阶段结果(按 run_id+stage_name update,不新建行)
+            persistStage(runId, stage.name(), result);
         } catch (Exception e) {
             log.error("[pipeline] date={} stage={} 异常: {}", date, stage, e.getMessage(), e);
             result.status = "FAILED";
             result.errorMsg = e.getMessage();
-            persistStage(null, result, System.currentTimeMillis() - t0);
+            persistStage(runId, stage.name(), result);
         }
         result.durationMs = System.currentTimeMillis() - t0;
         return result;
     }
 
-    private void await(LocalDate date, PipelineStage stage, Long stageId) throws InterruptedException {
-        long deadlineGuard = System.currentTimeMillis() + Duration.ofMinutes(awaitTimeoutMin).toMillis();
-        while (System.currentTimeMillis() < deadlineGuard) {
+    private void await(LocalDate date, PipelineStage stage) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + Duration.ofMinutes(awaitTimeoutMin).toMillis();
+        while (System.currentTimeMillis() < deadline) {
             if (completionDetector.isComplete(date, stage, defaultSource)) {
                 return;
             }
@@ -181,27 +211,28 @@ public class DailyPipelineOrchestrator {
         }
     }
 
-    private void persistStage(Long stageId, PipelineStageResult result, long durationMs) {
+    private void persistStage(Long runId, String stageName, PipelineStageResult result) {
         try {
             PipelineStageRecord e = new PipelineStageRecord();
-            e.setStageId(stageId);
+            e.setRunId(runId);
+            e.setStageName(stageName);
             e.setStatus(result.status);
             e.setSeededCount(result.seededCount);
             e.setExpectedTotal(result.expectedTotal);
             e.setActualTotal(result.actualTotal);
             e.setDupRows(result.dupRows);
             e.setLostRows(result.lostRows);
-            e.setDurationMs(durationMs);
+            e.setDurationMs(result.durationMs);
             e.setCheckResult(toJson(result.checkResults));
             e.setErrorMsg(result.errorMsg);
-            pipelineMapper.updateStage(e);
+            pipelineMapper.updateStageByName(e);
         } catch (Exception ex) {
             log.warn("[pipeline] 写阶段结果失败: {}", ex.getMessage());
         }
     }
 
-    private void finish(Long runId, String status, Map<String, Object> summary) {
-        pipelineMapper.finishRun(runId, status, toJson(Map.of("stages", summary,
+    private void finish(Long runId, String runStatus, Map<String, Object> summary) {
+        pipelineMapper.finishRun(runId, runStatus, toJson(Map.of("stages", summary,
                 "finishedAt", LocalDateTime.now().toString())));
     }
 

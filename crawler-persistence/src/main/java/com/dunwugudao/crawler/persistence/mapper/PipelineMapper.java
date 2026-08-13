@@ -29,28 +29,38 @@ public interface PipelineMapper {
     @Update("UPDATE pipeline_run SET status=#{status}, finished_at=now(), summary=#{summary} WHERE run_id=#{runId}")
     int finishRun(@Param("runId") Long runId, @Param("status") String status, @Param("summary") String summary);
 
+    @Update("UPDATE pipeline_run SET status='RUNNING', summary=NULL, finished_at=NULL WHERE run_id=#{runId}")
+    int resetRunToRunning(@Param("runId") Long runId);
+
     @Update("UPDATE pipeline_run SET status='ABORTED', finished_at=now() WHERE run_date=#{date} AND status='RUNNING'")
     int abortStaleRuns(@Param("date") LocalDate date);
 
     // ---------------- pipeline_stage ----------------
 
-    @Insert("""
-            INSERT INTO pipeline_stage (run_id, stage_name, seq, status, started_at)
-            VALUES (#{s.runId}, #{s.stageName}, #{s.seq}, 'RUNNING', now())
-            """)
-    @SelectKey(statement = "SELECT currval('pipeline_stage_stage_id_seq')",
-            keyProperty = "s.stageId", before = false, resultType = Long.class)
-    int insertStage(@Param("s") PipelineStageRecord s);
+    /** 预建单阶段(PENDING),幂等(已存在则不重复插)。用于 run 初始化。 */
+    @Insert("INSERT INTO pipeline_stage (run_id, stage_name, seq, status) " +
+            "SELECT #{runId}, #{name}, #{seq}, 'PENDING' " +
+            "WHERE NOT EXISTS (SELECT 1 FROM pipeline_stage WHERE run_id=#{runId} AND stage_name=#{name})")
+    int insertStageIfNotExists(@Param("runId") Long runId, @Param("name") String name, @Param("seq") int seq);
 
-    @Update("""
-            UPDATE pipeline_stage
-            SET status=#{s.status}, seeded_count=#{s.seededCount}, expected_total=#{s.expectedTotal},
-                actual_total=#{s.actualTotal}, dup_rows=#{s.dupRows}, lost_rows=#{s.lostRows},
-                duration_ms=#{s.durationMs}, check_result=#{s.checkResult}, error_msg=#{s.errorMsg},
-                finished_at=now()
-            WHERE stage_id=#{s.stageId}
-            """)
-    int updateStage(@Param("s") PipelineStageRecord s);
+    /** 重置某 run 下所有阶段为 PENDING(重跑前)。 */
+    @Update("UPDATE pipeline_stage SET status='PENDING', seeded_count=NULL, expected_total=NULL, " +
+            "actual_total=NULL, dup_rows=NULL, lost_rows=NULL, duration_ms=NULL, " +
+            "check_result=NULL, error_msg=NULL, started_at=NULL, finished_at=NULL " +
+            "WHERE run_id=#{runId}")
+    int resetStagesToPending(@Param("runId") Long runId);
+
+    /** 按 (run_id,stage_name) 更新阶段(执行时写结果,不新建行)。 */
+    @Update("UPDATE pipeline_stage " +
+            "SET status=#{s.status}, seeded_count=#{s.seededCount}, expected_total=#{s.expectedTotal}, " +
+            "actual_total=#{s.actualTotal}, dup_rows=#{s.dupRows}, lost_rows=#{s.lostRows}, " +
+            "duration_ms=#{s.durationMs}, check_result=#{s.checkResult}, error_msg=#{s.errorMsg}, " +
+            "started_at=COALESCE(started_at, now()), finished_at=now() " +
+            "WHERE run_id=#{s.runId} AND stage_name=#{s.stageName}")
+    int updateStageByName(@Param("s") PipelineStageRecord s);
+
+    @Select("SELECT * FROM pipeline_stage WHERE run_id=#{runId} AND stage_name=#{name}")
+    PipelineStageRecord selectStage(@Param("runId") Long runId, @Param("name") String name);
 
     @Select("SELECT * FROM pipeline_stage WHERE run_id=#{runId} ORDER BY seq")
     List<PipelineStageRecord> selectStages(@Param("runId") Long runId);
