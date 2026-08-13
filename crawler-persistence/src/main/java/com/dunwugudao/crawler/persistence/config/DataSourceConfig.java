@@ -132,6 +132,9 @@ public class DataSourceConfig {
     @Bean public MapperFactoryBean<TradeLogMapper> tradeLogMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, TradeLogMapper.class); }
     @Bean public MapperFactoryBean<StockBackfillStatusMapper> stockBackfillStatusMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockBackfillStatusMapper.class); }
 
+    // 日批编排状态(openGauss)
+    @Bean public MapperFactoryBean<PipelineMapper> pipelineMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, PipelineMapper.class); }
+
     // ==================== ClickHouse mapper beans（分析型） ====================
 
     @Bean public MapperFactoryBean<StockDailyMapper> stockDailyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockDailyMapper.class); }

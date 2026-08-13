@@ -48,6 +48,16 @@ public interface CrawlTaskMapper {
             "FROM crawl_task GROUP BY last_node ORDER BY cnt DESC")
     List<Map<String, Object>> countByNode();
 
+    /** 按 unique_key 前缀 + 未终态(PENDING/CLAIMED)统计,用于编排阶段完成探测。 */
+    @Select("SELECT status, count(*) AS cnt FROM crawl_task " +
+            "WHERE unique_key LIKE #{like} AND status IN ('PENDING','RETRY') " +
+            "GROUP BY status")
+    List<Map<String, Object>> countByStatusLike(@Param("like") String like);
+
+    /** 按 unique_key 前缀统计全部状态分布。 */
+    @Select("SELECT status, count(*) AS cnt FROM crawl_task WHERE unique_key LIKE #{like} GROUP BY status")
+    List<Map<String, Object>> countAllLike(@Param("like") String like);
+
     // ---------------------- M3：种子生成（幂等） ----------------------
 
     /**
