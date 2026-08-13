@@ -2,7 +2,9 @@ package com.dunwugudao.crawler.admin.pipeline;
 
 import com.dunwugudao.crawler.persistence.entity.PipelineRun;
 import com.dunwugudao.crawler.persistence.entity.PipelineStageRecord;
+import com.dunwugudao.crawler.persistence.entity.CrawlAlert;
 import com.dunwugudao.crawler.persistence.mapper.PipelineMapper;
+import com.dunwugudao.crawler.persistence.mapper.CrawlAlertMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -46,6 +49,7 @@ public class DailyPipelineOrchestrator {
     );
 
     private final PipelineMapper pipelineMapper;
+    private final CrawlAlertMapper crawlAlertMapper;
     private final StageCompletionDetector completionDetector;
     private final List<PipelineValidator> validators;
     private final StageSeeder stageSeeder;
@@ -60,10 +64,12 @@ public class DailyPipelineOrchestrator {
     private int pollIntervalSec;
 
     public DailyPipelineOrchestrator(PipelineMapper pipelineMapper,
+                                    CrawlAlertMapper crawlAlertMapper,
                                     StageCompletionDetector completionDetector,
                                     List<PipelineValidator> validators,
                                     StageSeeder stageSeeder) {
         this.pipelineMapper = pipelineMapper;
+        this.crawlAlertMapper = crawlAlertMapper;
         this.completionDetector = completionDetector;
         this.validators = validators;
         this.stageSeeder = stageSeeder;
@@ -196,6 +202,11 @@ public class DailyPipelineOrchestrator {
             result.dupRows = dupRows(checkResults);
             result.lostRows = lostRows(checkResults);
 
+            // 校验失败 → 写 crawl_alert(补 trade_date)
+            if (!allPassed) {
+                writeAlert(date, stage, result, checkResults);
+            }
+
             // 4. 写阶段结果(按 run_id+stage_name update,不新建行)
             persistStage(runId, stage.name(), result);
         } catch (Exception e) {
@@ -221,6 +232,35 @@ public class DailyPipelineOrchestrator {
         long pending = completionDetector.pendingCount(date, stage, defaultSource);
         if (pending > 0) {
             throw new RuntimeException("阶段 " + stage + " 等待超时(" + awaitTimeoutMin + "min),仍剩 " + pending + " 未完成");
+        }
+    }
+
+    /** 校验失败时写告警(补 trade_date 等字段)。 */
+    private void writeAlert(LocalDate date, PipelineStage stage, PipelineStageResult result,
+                            List<ValidateResult> checkResults) {
+        try {
+            ValidateResult failed = checkResults.stream().filter(r -> !r.passed()).findFirst().orElse(null);
+            if (failed == null) {
+                return;
+            }
+            int lost = result.lostRows;
+            String severity = lost > 0 ? "ERROR" : "WARN";
+            String message = String.format("[%s] %s", stage.name(), failed.message());
+
+            CrawlAlert alert = new CrawlAlert();
+            alert.setAlertType("VOLUME_DEVIATION");
+            alert.setTaskType(stage.name());
+            alert.setTradeDate(date);
+            alert.setSource(defaultSource);
+            alert.setSeverity(severity);
+            alert.setMessage(message);
+            alert.setValueActual(BigDecimal.valueOf(result.actualTotal));
+            alert.setValueExpected(BigDecimal.valueOf(result.expectedTotal));
+            alert.setResolved(0);
+            crawlAlertMapper.insert(alert);
+            log.warn("[pipeline] 校验失败告警已写入: {} {} 丢失{}行", date, stage.name(), lost);
+        } catch (Exception e) {
+            log.warn("[pipeline] 写告警失败: {}", e.getMessage());
         }
     }
 
