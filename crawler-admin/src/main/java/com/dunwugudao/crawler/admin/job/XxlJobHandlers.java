@@ -1,5 +1,7 @@
 package com.dunwugudao.crawler.admin.job;
 
+import com.dunwugudao.crawler.admin.pipeline.DailyPipelineOrchestrator;
+import com.dunwugudao.crawler.admin.pipeline.PipelineRunResult;
 import com.dunwugudao.crawler.admin.schedule.RetryScanService;
 import com.dunwugudao.crawler.admin.seed.SeedGenerator;
 import com.dunwugudao.crawler.admin.seed.TaskTypeCatalog;
@@ -27,21 +29,23 @@ public class XxlJobHandlers {
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final SeedGenerator seedGenerator;
+    private final DailyPipelineOrchestrator pipelineOrchestrator;
     private final RetryScanService retryScanService;
 
-    public XxlJobHandlers(SeedGenerator seedGenerator, RetryScanService retryScanService) {
+    public XxlJobHandlers(SeedGenerator seedGenerator, DailyPipelineOrchestrator pipelineOrchestrator,
+                          RetryScanService retryScanService) {
         this.seedGenerator = seedGenerator;
+        this.pipelineOrchestrator = pipelineOrchestrator;
         this.retryScanService = retryScanService;
     }
 
-    /** 收盘后每日种子。param: date=2024-01-02&source=1（缺失则 date=今天、source=1）。 */
+    /** 收盘后每日编排(含校验)。param: date=2024-01-02&source=1。 */
     @XxlJob("dailyCloseSeed")
     public void dailyCloseSeed() {
         Map<String, String> p = parse(XxlJobHelper.getJobParam());
         String date = p.getOrDefault("date", LocalDate.now().format(FMT));
-        int source = parseInt(p.get("source"), 1);
-        int n = seedGenerator.dailySeed(date, source);
-        XxlJobHelper.log("dailyCloseSeed date={} source={} inserted={}", date, source, n);
+        PipelineRunResult res = pipelineOrchestrator.run(date);
+        XxlJobHelper.log("dailyCloseSeed date={} status={}", date, res.status());
     }
 
     /** 历史区间回填。param: start=&end=&source=&types=（types 逗号分隔；缺失则全部）。 */
