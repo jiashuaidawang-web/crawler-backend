@@ -48,11 +48,7 @@ public class DailyPipelineOrchestrator {
             PipelineStage.INDEX_DAILY,
             PipelineStage.DRAGON_TIGER,
             PipelineStage.BOARD_BASIC,
-            PipelineStage.STOCK_BY_BOARD
-    );
-
-    /** 周级阶段(仅每周指定日跑,其他日跳过)。 */
-    private static final List<PipelineStage> WEEKLY_STAGES = List.of(
+            PipelineStage.STOCK_BY_BOARD,
             PipelineStage.STOCK_WEEKLY
     );
 
