@@ -5,6 +5,7 @@ import com.dunwugudao.crawler.persistence.entity.PipelineStageRecord;
 import com.dunwugudao.crawler.persistence.entity.CrawlAlert;
 import com.dunwugudao.crawler.persistence.mapper.PipelineMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlAlertMapper;
+import com.dunwugudao.crawler.admin.seed.SeedGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +33,7 @@ public class DailyPipelineOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(DailyPipelineOrchestrator.class);
 
-    /** 活跃阶段(收盘后全量,按依赖排序)。DRAGON_TIGER_DETAIL 依赖串联,暂不纳入。 */
+    /** 活跃阶段(收盘后全量,按依赖排序)。 */
     private static final List<PipelineStage> ACTIVE_STAGES = List.of(
             PipelineStage.STOCK_DAILY,
             PipelineStage.REGION_DAILY,
@@ -48,8 +49,14 @@ public class DailyPipelineOrchestrator {
             PipelineStage.DRAGON_TIGER
     );
 
+    /** 链式阶段:依赖前置阶段落库后,从 CK 表读 ID 再下发。 */
+    private static final List<PipelineStage> CHAIN_STAGES = List.of(
+            PipelineStage.DRAGON_TIGER_DETAIL
+    );
+
     private final PipelineMapper pipelineMapper;
     private final CrawlAlertMapper crawlAlertMapper;
+    private final SeedGenerator seedGenerator;
     private final StageCompletionDetector completionDetector;
     private final List<PipelineValidator> validators;
     private final StageSeeder stageSeeder;
@@ -65,11 +72,13 @@ public class DailyPipelineOrchestrator {
 
     public DailyPipelineOrchestrator(PipelineMapper pipelineMapper,
                                     CrawlAlertMapper crawlAlertMapper,
+                                    SeedGenerator seedGenerator,
                                     StageCompletionDetector completionDetector,
                                     List<PipelineValidator> validators,
                                     StageSeeder stageSeeder) {
         this.pipelineMapper = pipelineMapper;
         this.crawlAlertMapper = crawlAlertMapper;
+        this.seedGenerator = seedGenerator;
         this.completionDetector = completionDetector;
         this.validators = validators;
         this.stageSeeder = stageSeeder;
@@ -169,8 +178,59 @@ public class DailyPipelineOrchestrator {
                 return status(date.toString());
             }
         }
+
+        // 链式阶段(依赖前置阶段落库后,从 CK 表读 ID 再下发)
+        for (PipelineStage stage : CHAIN_STAGES) {
+            PipelineStageRecord row = rowMap.get(stage.name());
+            if (row != null && isTerminal(row.getStatus())) {
+                continue;
+            }
+            PipelineStageResult sr = executeChainStage(date, runId, stage);
+            summary.put(stage.name(), sr.toMap());
+        }
+
         finish(runId, "SUCCESS", summary);
         return status(date.toString());
+    }
+
+    /** 链式阶段:从前置阶段落库结果读 ID 再下发子任务(如龙虎榜明细)。 */
+    private PipelineStageResult executeChainStage(LocalDate date, Long runId, PipelineStage stage) {
+        long t0 = System.currentTimeMillis();
+        PipelineStageResult result = new PipelineStageResult();
+        result.stage = stage.name();
+        try {
+            int inserted = 0;
+            if (stage == PipelineStage.DRAGON_TIGER_DETAIL) {
+                inserted = seedGenerator.chainDragonTigerDetails(date.toString());
+            } else {
+                result.status = "SKIP";
+                result.errorMsg = "未知链式阶段";
+                return result;
+            }
+            result.seededCount = inserted;
+            result.expectedTotal = Math.max(inserted, 0); // 链式阶段无独立上游总数,以实际下发数为期
+            log.info("[pipeline] date={} chain stage={} inserted={}", date, stage, inserted);
+
+            // 等待完成
+            await(date, stage);
+
+            // 校验(dt_detail 无独立上游总数,仅做基础量校验)
+            ValidateContext ctx = ValidateContext.of(0, defaultSource, List.of());
+            List<ValidateResult> checkResults = new ArrayList<>();
+            for (PipelineValidator v : validators) {
+                checkResults.add(v.validate(date, stage, ctx));
+            }
+            result.checkResults = checkResults;
+            result.status = "DONE";
+            persistStage(runId, stage.name(), result);
+        } catch (Exception e) {
+            log.error("[pipeline] date={} chain stage={} 异常: {}", date, stage, e.getMessage(), e);
+            result.status = "FAILED";
+            result.errorMsg = e.getMessage();
+            persistStage(runId, stage.name(), result);
+        }
+        result.durationMs = System.currentTimeMillis() - t0;
+        return result;
     }
 
     private PipelineStageResult executeStage(LocalDate date, Long runId, PipelineStage stage) {
