@@ -6,6 +6,7 @@ import com.dunwugudao.crawler.admin.seed.ConceptSeeder;
 import com.dunwugudao.crawler.admin.seed.FinancialSeeder;
 import com.dunwugudao.crawler.admin.seed.NewsEventSeeder;
 import com.dunwugudao.crawler.admin.seed.SeedGenerator;
+import com.dunwugudao.crawler.admin.seed.TaskTypeCatalog;
 import com.dunwugudao.crawler.admin.seed.TradeCalendarSeeder;
 import com.dunwugudao.crawler.core.model.SourceType;
 import com.dunwugudao.crawler.persistence.entity.CrawlTask;
@@ -49,13 +50,33 @@ public class SeedController {
             return r;
         }
 
+        // MAIN_FUND_FLOW：拆成个股(MAIN_FUND_STOCK)+板块(MAIN_FUND_BOARD)两个任务（worker 只认这两个子类型）
+        if ("MAIN_FUND_FLOW".equals(req.taskType())) {
+            int source = req.source() == null ? 1 : req.source();
+            String date = req.tradeDate() != null ? req.tradeDate() : java.time.LocalDate.now().toString();
+            int stock = seedGenerator.seedMainFundStock(source, date);
+            int board = seedGenerator.seedMainFundBoard(source, date);
+            Map<String, Object> r = new HashMap<>();
+            r.put("taskType", "MAIN_FUND_FLOW");
+            r.put("date", date);
+            r.put("stockInserted", stock);
+            r.put("boardInserted", board);
+            return r;
+        }
+
         // 其他 taskType：直接插入单个 task（幂等）
         CrawlTask task = new CrawlTask();
         task.setTaskType(req.taskType());
         task.setSource(SourceType.fromCode(req.source() == null ? 1 : req.source()));
         task.setUrl(req.url());
         task.setParamsJson(req.paramsJson());
-        task.setUniqueKey(req.uniqueKey());
+        // uniqueKey 未传时自动生成（taskType|source|date），避免违反 not-null 约束
+        String uk = req.uniqueKey();
+        if (uk == null || uk.isBlank()) {
+            String date = req.tradeDate() != null ? req.tradeDate() : java.time.LocalDate.now().toString();
+            uk = TaskTypeCatalog.buildUniqueKey(req.taskType(), req.source() == null ? 1 : req.source(), date);
+        }
+        task.setUniqueKey(uk);
         task.setExpectedCount(req.expectedCount());
         task.setStatus("PENDING");
         task.setPriority(req.priority() == null ? 5 : req.priority());

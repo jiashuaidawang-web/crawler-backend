@@ -50,6 +50,6 @@ CREATE TABLE dragon_tiger (
     update_date             Nullable(DateTime) COMMENT '更新时间'
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(trade_date)
-ORDER BY (ts_code, trade_date)
+ORDER BY (ts_code, trade_date, reason)
 SETTINGS index_granularity = 8192
 COMMENT 'A8 龙虎榜(S3 主力博弈)';

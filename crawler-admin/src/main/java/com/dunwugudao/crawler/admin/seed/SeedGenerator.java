@@ -417,7 +417,8 @@ public class SeedGenerator {
 
     /** 龙虎榜主表（DRAGON_TIGER，市场级，每日一条）—— 经东财 datacenter 新版接口抓取，worker 认领后落 dragon_tiger 表。 */
     public int seedDragonTiger(int source, String date) {
-        CrawlTask task = buildTask("DRAGON_TIGER", source, date, null, 1);
+        // 市场级：产出数量波动大，不做量校验（defaultExpected=null，与 TaskTypeCatalog 一致）
+        CrawlTask task = buildTask("DRAGON_TIGER", source, date, null, null);
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedDragonTiger] date={} source={} inserted={}", date, source, inserted);
         return inserted;
@@ -1095,7 +1096,8 @@ public class SeedGenerator {
         int total = 0;
         for (String code : codes) {
             // 逐券唯一键：DRAGON_TIGER_DETAIL|source|source|code|date
-            batch.add(buildTask("DRAGON_TIGER_DETAIL", 1, date, code, 1,
+            // 明细行数随席位数波动，不做量校验（defaultExpected=null）
+            batch.add(buildTask("DRAGON_TIGER_DETAIL", 1, date, code, null,
                     TaskTypeCatalog.buildParams("DRAGON_TIGER_DETAIL", date, code)));
             if (batch.size() >= BATCH) {
                 total += flush(batch);
@@ -1128,8 +1130,9 @@ public class SeedGenerator {
         int total = 0;
         for (Long tradeId : tradeIds) {
             // DRAGON_TIGER_DETAIL 的 params 带 tradeId（RPT_BILLBOARD_SEAT 按 TRADE_ID 过滤）
+            // 明细行数随席位数波动，不做量校验（defaultExpected=null）
             String params = "{\"tradeId\":" + tradeId + ",\"tradeDate\":\"" + date + "\"}";
-            CrawlTask task = buildTask("DRAGON_TIGER_DETAIL", 1, date, null, 1, params);
+            CrawlTask task = buildTask("DRAGON_TIGER_DETAIL", 1, date, null, null, params);
             task.setUniqueKey("DRAGON_TIGER_DETAIL|1|" + date + "|" + tradeId);
             batch.add(task);
             if (batch.size() >= 100) {

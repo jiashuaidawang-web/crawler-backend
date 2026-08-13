@@ -474,6 +474,10 @@ public class DedupService {
     /**
      * 对同 batch 内按自然键去重（保留最后一条）。
      *
+     * <p>去重键 = keyOf() 算出的自然键字符串，<i>不是</i>整行 Map。
+     * 键列含 null 时用占位符参与去重（与 ClickHouse ORDER BY 视 NULL 为等值一致），
+     * 不丢行——否则 reason 为空的行会被整行丢弃。</p>
+     *
      * @param rows       行数据
      * @param keyColumns 构成自然键的列名
      * @param <T>        Map 行
@@ -481,27 +485,22 @@ public class DedupService {
      */
     public static <T extends Map<String, Object>> List<T> dedupInBatch(List<T> rows, List<String> keyColumns) {
         if (rows == null || rows.size() <= 1) return rows;
-        // 保留最后出现的：倒序遍历，见过键就跳过
-        LinkedHashSet<T> reversed = new LinkedHashSet<>();
-        List<T> copy = new ArrayList<>(rows);
-        for (int i = copy.size() - 1; i >= 0; i--) {
-            T r = copy.get(i);
+        if (keyColumns == null || keyColumns.isEmpty()) return rows;
+        // 保留最后出现的：LinkedHashMap.put 同键覆盖，最终值=末位；遍历顺序=原序。
+        LinkedHashMap<String, T> lastByKey = new LinkedHashMap<>();
+        for (T r : rows) {
             String key = keyOf(r, keyColumns);
-            if (key != null) reversed.add(r); // LinkedHashSet 保留首次（即原序末位）
+            lastByKey.put(key, r);
         }
-        List<T> out = new ArrayList<>(reversed.size());
-        // reversed 现在是「原序末位优先」，再倒回来恢复原序
-        List<T> revList = new ArrayList<>(reversed);
-        Collections.reverse(revList);
-        return revList;
+        return new ArrayList<>(lastByKey.values());
     }
 
     private static String keyOf(Map<String, Object> row, List<String> keyColumns) {
         StringBuilder sb = new StringBuilder();
         for (String k : keyColumns) {
             Object v = row.get(k);
-            if (v == null) return null; // 缺键列 → 不参与去重（留给 writer 跳过）
-            sb.append(k).append('=').append(v).append('|');
+            // null 视为等值参与去重，不丢弃；占位符与真实值不会冲突（键列值不含 "\0"）。
+            sb.append(k).append('=').append(v == null ? "\0" : v).append('|');
         }
         return sb.toString();
     }
