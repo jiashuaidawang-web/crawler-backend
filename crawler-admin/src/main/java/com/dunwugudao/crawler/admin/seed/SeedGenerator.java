@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -206,14 +207,26 @@ public class SeedGenerator {
         return seedClistTypeSingle("REGION_DAILY", source, date, null, 10);
     }
 
+    public SeedResult seedRegionDailyResult(int source, String date) {
+        return seedClistTypeSingleResult("REGION_DAILY", source, date, null, 10);
+    }
+
     /** INDUSTRY_DAILY 单独处理（行业板块日线，board_type=2） */
     public int seedIndustryDaily(int source, String date) {
         return seedClistTypeSingle("INDUSTRY_DAILY", source, date, null, 10);
     }
 
+    public SeedResult seedIndustryDailyResult(int source, String date) {
+        return seedClistTypeSingleResult("INDUSTRY_DAILY", source, date, null, 10);
+    }
+
     /** CONCEPT_DAILY 单独处理（概念板块日线，board_type=3） */
     public int seedConceptDaily(int source, String date) {
         return seedClistTypeSingle("CONCEPT_DAILY", source, date, null, 10);
+    }
+
+    public SeedResult seedConceptDailyResult(int source, String date) {
+        return seedClistTypeSingleResult("CONCEPT_DAILY", source, date, null, 10);
     }
 
     // ========================================================================
@@ -237,9 +250,17 @@ public class SeedGenerator {
         return seedClistTypeSingle("MAIN_FUND_STOCK", source, date, null);
     }
 
+    public SeedResult seedMainFundStockResult(int source, String date) {
+        return seedClistTypeSingleResult("MAIN_FUND_STOCK", source, date, null, 0);
+    }
+
     /** MAIN_FUND_BOARD 单独处理 */
     public int seedMainFundBoard(int source, String date) {
         return seedClistTypeSingle("MAIN_FUND_BOARD", source, date, null);
+    }
+
+    public SeedResult seedMainFundBoardResult(int source, String date) {
+        return seedClistTypeSingleResult("MAIN_FUND_BOARD", source, date, null, 0);
     }
 
     // ========================================================================
@@ -322,9 +343,17 @@ public class SeedGenerator {
         return seedPoolTasksSingle("STRONG_POOL", source, date);
     }
 
+    public SeedResult seedStrongPoolResult(int source, String date) {
+        return seedPoolTasksSingleResult("STRONG_POOL", source, date);
+    }
+
     /** CIXIN_POOL 单独处理 */
     public int seedCixinPool(int source, String date) {
         return seedPoolTasksSingle("CIXIN_POOL", source, date);
+    }
+
+    public SeedResult seedCixinPoolResult(int source, String date) {
+        return seedPoolTasksSingleResult("CIXIN_POOL", source, date);
     }
 
     /** LIMIT_POOL 单独处理(涨停/跌停/炸板) */
@@ -336,6 +365,15 @@ public class SeedGenerator {
         return n;
     }
 
+    /** LIMIT_POOL 池子种子,返回各子类型 SeedResult 列表。 */
+    public List<SeedResult> seedLimitPoolResults(int source, String date) {
+        List<SeedResult> results = new ArrayList<>();
+        for (String limitType : LIMIT_SUBTYPES) {
+            results.add(seedPoolTasksSingleResult(limitType, source, date));
+        }
+        return results;
+    }
+
     /** 北向资金（NORTHBOUND_FLOW）单独处理：每日一条（kamt 实时端点，返回当日北向/沪股通/深股通净买入）。 */
     public int seedNorthbound(int source, String date) {
         CrawlTask task = buildTask("NORTHBOUND_FLOW", source, date, null, 1);
@@ -344,12 +382,53 @@ public class SeedGenerator {
         return inserted;
     }
 
+    /** NORTHBOUND 种子,返回 SeedResult(含 kamt s2n 数组 size)。 */
+    public SeedResult seedNorthboundResult(int source, String date) {
+        int count = fetchNorthboundCount();
+        CrawlTask task = buildTask("NORTHBOUND_FLOW", source, date, null, 1);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedNorthbound] date={} source={} inserted={} count={}", date, source, inserted, count);
+        return new SeedResult(inserted, Math.max(count, 0), List.of(), "NORTHBOUND s2n.size=" + count);
+    }
+
+    /** 探测北向分钟级数(kamt data.s2n 数组 size)。 */
+    public int fetchNorthboundCount() {
+        try {
+            String url = "http://push2.eastmoney.com/api/qt/kamt.rtmin/get"
+                    + "?fields1=f1,f2,f3,f4"
+                    + "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80"
+                    + "&ut=b2884a393a59ad64002292a3e90d46a5";
+            String resp = proxyManager.executeWithRetry(url);
+            if (resp == null) {
+                return -1;
+            }
+            JsonNode root = objectMapper.readTree(resp);
+            JsonNode s2n = root.path("data").path("s2n");
+            int size = s2n.isArray() ? s2n.size() : -1;
+            log.info("[fetchNorthboundCount] s2n.size={}", size);
+            return size;
+        } catch (Exception e) {
+            log.warn("[fetchNorthboundCount] 失败: {}", e.getMessage());
+            return -1;
+        }
+    }
+
     /** 指数日线（INDEX_DAILY）单独处理：市场级单任务（push2 clist fs=b:MK0010, 43 只一次拿完）。 */
     public int seedIndexDaily(int source, String date) {
         CrawlTask task = buildTask("INDEX_DAILY", source, date, null, null);
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedIndexDaily] date={} source={} inserted={}", date, source, inserted);
         return inserted;
+    }
+
+    /** INDEX_DAILY 种子,返回 SeedResult(含 clist total)。 */
+    public SeedResult seedIndexDailyResult(int source, String date) {
+        EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get("INDEX_DAILY");
+        int total = fetchClistTotalByProxy(spec, date);
+        CrawlTask task = buildTask("INDEX_DAILY", source, date, null, null);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedIndexDaily] date={} source={} inserted={} total={}", date, source, inserted, total);
+        return new SeedResult(inserted, Math.max(total, 0), List.of(), "INDEX_DAILY clist total=" + total);
     }
 
     /** 分时分钟线:从配置表取 type='minute' 的启用股票,逐个生成 STOCK_KLINE_MINUTE 任务。 */
@@ -428,11 +507,44 @@ public class SeedGenerator {
 
     /** 龙虎榜主表（DRAGON_TIGER，市场级，每日一条）—— 经东财 datacenter 新版接口抓取，worker 认领后落 dragon_tiger 表。 */
     public int seedDragonTiger(int source, String date) {
-        // 市场级：产出数量波动大，不做量校验（defaultExpected=null，与 TaskTypeCatalog 一致）
         CrawlTask task = buildTask("DRAGON_TIGER", source, date, null, null);
         int inserted = mapper.insertIfAbsent(task);
         log.info("[seedDragonTiger] date={} source={} inserted={}", date, source, inserted);
         return inserted;
+    }
+
+    /** DRAGON_TIGER 种子,返回 SeedResult(含上游 result.count)。 */
+    public SeedResult seedDragonTigerResult(int source, String date) {
+        int count = fetchDragonTigerCount(date);
+        CrawlTask task = buildTask("DRAGON_TIGER", source, date, null, null);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedDragonTiger] date={} source={} inserted={} count={}", date, source, inserted, count);
+        return new SeedResult(inserted, Math.max(count, 0), List.of(), "DRAGON_TIGER result.count=" + count);
+    }
+
+    /** 探测龙虎榜家数(datacenter result.count,pageSize=1 即得真值)。 */
+    public int fetchDragonTigerCount(String date) {
+        try {
+            String dash = date; // date 已是 yyyy-MM-dd
+            String filter = "(TRADE_DATE<='" + dash + "')(TRADE_DATE>='" + dash + "')";
+            String url = "https://datacenter-web.eastmoney.com/api/data/v1/get"
+                    + "?reportName=RPT_DAILYBILLBOARD_DETAILSNEW"
+                    + "&columns=SECURITY_CODE"
+                    + "&sortColumns=SECURITY_CODE,TRADE_DATE&sortTypes=1,-1"
+                    + "&pageSize=1&pageNumber=1&source=WEB&client=WEB"
+                    + "&filter=" + URLEncoder.encode(filter, "UTF-8");
+            String resp = proxyManager.executeWithRetry(url);
+            if (resp == null) {
+                return -1;
+            }
+            JsonNode root = objectMapper.readTree(resp);
+            int count = root.path("result").path("count").asInt(-1);
+            log.info("[fetchDragonTigerCount] date={} count={}", date, count);
+            return count;
+        } catch (Exception e) {
+            log.warn("[fetchDragonTigerCount] date={} 失败: {}", date, e.getMessage());
+            return -1;
+        }
     }
 
     /**
@@ -791,11 +903,16 @@ public class SeedGenerator {
      * @param maxPages  页数上限（0 或负数表示不限）
      */
     private int seedClistTypeSingle(String taskType, int source, String date, Integer boardType, int maxPages) {
+        return seedClistTypeSingleResult(taskType, source, date, boardType, maxPages).inserted();
+    }
+
+    /** clist 类种子,返回 SeedResult(含上游总数 total)。 */
+    private SeedResult seedClistTypeSingleResult(String taskType, int source, String date, Integer boardType, int maxPages) {
         EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
         int total = fetchClistTotalByProxy(spec, date);
         if (total <= 0) {
             log.warn("[seedClistTypeSingle] taskType={} 探测无数据({})，跳过", taskType, total);
-            return 0;
+            return new SeedResult(0, 0, List.of(), "无数据");
         }
         int pageSize = 100;
         int totalPages = (total + pageSize - 1) / pageSize;
@@ -805,14 +922,13 @@ public class SeedGenerator {
         }
         int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
-            // params 格式与 STOCK_DAILY 一致：{"tradeDate":date,"pn":pn}（board_type 由 worker 从 taskType 映射）
             String params = TaskTypeCatalog.buildPageParams(date, pn);
             CrawlTask task = buildTask(taskType, source, date, null, null, params);
             task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn));
             inserted += mapper.insertIfAbsent(task);
         }
         log.info("[seedClistTypeSingle] taskType={} total={} pages={} inserted={}", taskType, total, totalPages, inserted);
-        return inserted;
+        return new SeedResult(inserted, total, List.of(), taskType + " 上游总数=" + total);
     }
 
     /** 兼容旧调用（无 cap）。 */
@@ -822,6 +938,11 @@ public class SeedGenerator {
 
     /** 单个池子任务处理(独立获取IP) */
     private int seedPoolTasksSingle(String limitType, int source, String date) {
+        return seedPoolTasksSingleResult(limitType, source, date).inserted();
+    }
+
+    /** 池子种子,返回 SeedResult(含上游总数 tc)。 */
+    private SeedResult seedPoolTasksSingleResult(String limitType, int source, String date) {
         int tc = fetchPoolTotalByProxy(limitType, date);
         int numTasks;
         if (tc <= 0) {
@@ -839,7 +960,7 @@ public class SeedGenerator {
             inserted += mapper.insertIfAbsent(task);
         }
         log.info("[seedPoolTasksSingle] limitType={} tc={} numTasks={} inserted={}", limitType, tc, numTasks, inserted);
-        return inserted;
+        return new SeedResult(inserted, Math.max(tc, 0), List.of(), limitType + " 上游tc=" + tc);
     }
 
     /** 用ProxyManager获取IP并探测池子total(每个任务类型独立获取IP,带重试) */

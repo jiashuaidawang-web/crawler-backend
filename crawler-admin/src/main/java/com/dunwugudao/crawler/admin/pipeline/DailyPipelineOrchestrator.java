@@ -29,8 +29,21 @@ public class DailyPipelineOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(DailyPipelineOrchestrator.class);
 
-    /** Phase 1 仅 STOCK_DAILY;Phase 2 替换为全部阶段 */
-    private static final List<PipelineStage> ACTIVE_STAGES = List.of(PipelineStage.STOCK_DAILY);
+    /** 活跃阶段(收盘后全量,按依赖排序)。DRAGON_TIGER_DETAIL 依赖串联,暂不纳入。 */
+    private static final List<PipelineStage> ACTIVE_STAGES = List.of(
+            PipelineStage.STOCK_DAILY,
+            PipelineStage.REGION_DAILY,
+            PipelineStage.INDUSTRY_DAILY,
+            PipelineStage.CONCEPT_DAILY,
+            PipelineStage.MAIN_FUND_STOCK,
+            PipelineStage.MAIN_FUND_BOARD,
+            PipelineStage.LIMIT_POOL,
+            PipelineStage.STRONG_POOL,
+            PipelineStage.CIXIN_POOL,
+            PipelineStage.NORTHBOUND,
+            PipelineStage.INDEX_DAILY,
+            PipelineStage.DRAGON_TIGER
+    );
 
     private final PipelineMapper pipelineMapper;
     private final StageCompletionDetector completionDetector;
