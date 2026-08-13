@@ -74,9 +74,6 @@ public class DailyPipelineOrchestrator {
     @Value("${crawler.pipeline.poll-interval-sec:30}")
     private int pollIntervalSec;
 
-    @Value("${crawler.pipeline.weekly-day-of-week:6}")
-    private int weeklyRunDayConfig; // 6=周六,周级阶段(如 stock_weekly)仅此日跑
-
     public DailyPipelineOrchestrator(PipelineMapper pipelineMapper,
                                     CrawlAlertMapper crawlAlertMapper,
                                     SeedGenerator seedGenerator,
@@ -198,29 +195,11 @@ public class DailyPipelineOrchestrator {
             summary.put(stage.name(), sr.toMap());
         }
 
-        // 周级阶段(仅每周指定日跑)
-        if (isWeeklyRunDay(date)) {
-            for (PipelineStage stage : WEEKLY_STAGES) {
-                PipelineStageRecord row = rowMap.get(stage.name());
-                if (row != null && isTerminal(row.getStatus())) {
-                    continue;
-                }
-                PipelineStageResult sr = executeWeeklyStage(date, runId, stage);
-                summary.put(stage.name(), sr.toMap());
-            }
-        }
-
         finish(runId, "SUCCESS", summary);
         return status(date.toString());
     }
 
     /** 判断是否为周跑日(默认周六,可通过 crawler.pipeline.weekly-day-of-week 配置,1=周一~7=周日)。 */
-    private boolean isWeeklyRunDay(LocalDate date) {
-        int configDay = weeklyRunDayConfig;
-        int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Mon, 7=Sun
-        return dayOfWeek == configDay;
-    }
-
     /** 记录当日股票数+板块数到 check_result,供明天 STOCK_BY_BOARD 比较(相同则跳过省 IP)。 */
     private void storeBoardRelCounts(LocalDate date, int source, PipelineStageResult result) {
         try {
@@ -268,46 +247,6 @@ public class DailyPipelineOrchestrator {
             persistStage(runId, stage.name(), result);
         } catch (Exception e) {
             log.error("[pipeline] date={} chain stage={} 异常: {}", date, stage, e.getMessage(), e);
-            result.status = "FAILED";
-            result.errorMsg = e.getMessage();
-            persistStage(runId, stage.name(), result);
-        }
-        result.durationMs = System.currentTimeMillis() - t0;
-        return result;
-    }
-
-    /** 周级阶段:聚合类任务(如 stock_weekly 从日K聚合)。 */
-    private PipelineStageResult executeWeeklyStage(LocalDate date, Long runId, PipelineStage stage) {
-        long t0 = System.currentTimeMillis();
-        PipelineStageResult result = new PipelineStageResult();
-        result.stage = stage.name();
-        try {
-            SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
-            result.seededCount = seed.inserted();
-            result.expectedTotal = seed.expectedTotal();
-            result.taskIds = seed.taskIds();
-            log.info("[pipeline] date={} weekly stage={} result={}", date, stage, seed.message());
-
-            // 周级阶段通常是聚合(无异步 worker),直接完成;若有 task 则等待
-            if (seed.inserted() > 0 && !stage.getTaskTypes().isEmpty()) {
-                await(date, stage);
-            }
-
-            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds());
-            List<ValidateResult> checkResults = new ArrayList<>();
-            for (PipelineValidator v : validators) {
-                checkResults.add(v.validate(date, stage, ctx));
-            }
-            result.checkResults = checkResults;
-            boolean allPassed = checkResults.stream().allMatch(ValidateResult::passed);
-            result.status = allPassed ? "DONE" : "FAILED";
-            result.actualTotal = actualTotal(checkResults);
-            if (!allPassed) {
-                writeAlert(date, stage, result, checkResults);
-            }
-            persistStage(runId, stage.name(), result);
-        } catch (Exception e) {
-            log.error("[pipeline] date={} weekly stage={} 异常: {}", date, stage, e.getMessage(), e);
             result.status = "FAILED";
             result.errorMsg = e.getMessage();
             persistStage(runId, stage.name(), result);
