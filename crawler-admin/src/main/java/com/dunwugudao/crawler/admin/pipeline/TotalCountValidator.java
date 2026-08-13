@@ -44,15 +44,14 @@ public class TotalCountValidator implements PipelineValidator {
         if (expected <= 0) {
             return ValidateResult.ok(name(), "无上游总数,跳过总量校验", 0, 0);
         }
-        String table = tableFor(stage);
-        if (table == null) {
+        TableQuery tq = tableQuery(stage);
+        if (tq == null) {
             return ValidateResult.ok(name(), "阶段 " + stage + " 无对应 CK 表,跳过", expected, 0);
         }
 
-        // actual:CK 去重后行数(FINAL)
-        Long actualObj = chJdbc.queryForObject(
-                "SELECT count() FROM " + table + " FINAL WHERE trade_date = ?", Long.class, date.toString());
-        int actual = actualObj == null ? 0 : actualObj.intValue();
+        // actual:CK 行数(普通 count,按 data_source+特定维度过滤)
+        // 注意:目标表均为 MergeTree(非 ReplacingMergeTree),不支持 FINAL
+        int actual = countActual(tq, date, ctx.source());
 
         if (actual == expected) {
             return ValidateResult.ok(name(), "actual=total=" + actual, expected, actual);
@@ -63,8 +62,8 @@ public class TotalCountValidator implements PipelineValidator {
                     expected, actual, 0, 0, List.of());
         }
 
-        // actual < total:查重复组数判定能否用去重解释
-        int dupGroups = countDupGroups(table, date, stage);
+        // actual < total:查重复组数判定能否用去重解释(按自然键+data_source分组)
+        int dupGroups = countDupGroups(tq, date, ctx.source());
         int diff = expected - actual;
         if (diff <= dupGroups) {
             return ValidateResult.ok(name(),
@@ -79,31 +78,57 @@ public class TotalCountValidator implements PipelineValidator {
                 expected, actual, dupGroups, lost, ctx.taskIds());
     }
 
-    /** 按自然键(实际存在于表的列)统计重复组数。 */
-    private int countDupGroups(String table, LocalDate date, PipelineStage stage) {
+    /** 构建阶段的 CK 查询参数(表名+额外过滤条件)。 */
+    private TableQuery tableQuery(PipelineStage stage) {
+        return switch (stage) {
+            case STOCK_DAILY -> new TableQuery("stock_daily", null, null);
+            case REGION_DAILY -> new TableQuery("board_daily", "board_type = 1", null);
+            case INDUSTRY_DAILY -> new TableQuery("board_daily", "board_type = 2", null);
+            case CONCEPT_DAILY -> new TableQuery("board_daily", "board_type = 3", null);
+            case MAIN_FUND_STOCK -> new TableQuery("main_fund_flow", "obj_type = 'stock'", null);
+            case MAIN_FUND_BOARD -> new TableQuery("main_fund_flow", "obj_type = 'board'", null);
+            case LIMIT_POOL -> new TableQuery("limit_up_pool", null, null);
+            case STRONG_POOL -> new TableQuery("strong_pool", null, null);
+            case CIXIN_POOL -> new TableQuery("cixin_pool", null, null);
+            case NORTHBOUND -> new TableQuery("northbound_flow", null, null);
+            case INDEX_DAILY -> new TableQuery("index_daily", null, null);
+            case DRAGON_TIGER -> new TableQuery("dragon_tiger", null, null);
+            case DRAGON_TIGER_DETAIL -> new TableQuery("dt_detail", null, null);
+        };
+    }
+
+    private int countActual(TableQuery tq, LocalDate date, int source) {
+        String sql = "SELECT count() FROM " + tq.table + " WHERE trade_date = ? AND data_source = ?";
+        if (tq.extraFilter != null && !tq.extraFilter.isEmpty()) {
+            sql += " AND " + tq.extraFilter;
+        }
+        Long v = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
+        return v == null ? 0 : v.intValue();
+    }
+
+    /** 按自然键+data_source 统计重复组数。 */
+    private int countDupGroups(TableQuery tq, LocalDate date, int source) {
         try {
-            DedupService.TableCfg cfg = DedupService.registry().get(table);
+            DedupService.TableCfg cfg = DedupService.registry().get(tq.table);
             if (cfg == null || cfg.getNaturalKey() == null) {
-                log.warn("[TOTAL_COUNT] 表 {} 未注册自然键,无法查重复", table);
                 return 0;
             }
             List<String> cfgCols = Arrays.stream(cfg.getNaturalKey().split(","))
                     .map(String::trim).filter(s -> !s.isEmpty()).toList();
-            List<String> existing = existingColumns(table);
-            // 只保留 cfg 中声明且实际存在的列
+            List<String> existing = existingColumns(tq.table);
             List<String> cols = cfgCols.stream().filter(existing::contains).toList();
             if (cols.isEmpty()) {
-                log.warn("[TOTAL_COUNT] 表 {} 的自然键列均不存在于表中,无法查重复", table);
                 return 0;
             }
             String groupKey = cols.stream().map(c -> "toString(coalesce(" + c + ",''))")
                     .reduce((a, b) -> a + "||'|'||" + b).orElse("1");
             String sql = "SELECT countIf(cnt > 1) AS dup FROM (SELECT " + groupKey +
-                    " AS k, count() AS cnt FROM " + table + " WHERE trade_date = ? GROUP BY k)";
-            Long dup = chJdbc.queryForObject(sql, Long.class, date.toString());
+                    " AS k, count() AS cnt FROM " + tq.table +
+                    " WHERE trade_date = ? AND data_source = ? GROUP BY k)";
+            Long dup = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
             return dup == null ? 0 : dup.intValue();
         } catch (Exception e) {
-            log.warn("[TOTAL_COUNT] 查重复失败 table={}: {}", table, e.getMessage());
+            log.warn("[TOTAL_COUNT] 查重复失败 table={}: {}", tq.table, e.getMessage());
             return 0;
         }
     }
@@ -111,22 +136,9 @@ public class TotalCountValidator implements PipelineValidator {
     private List<String> existingColumns(String table) {
         List<String> cols = new ArrayList<>();
         chJdbc.query("SELECT name FROM system.columns WHERE database = currentDatabase() AND table = ?",
-                (org.springframework.jdbc.core.RowCallbackHandler) rs -> cols.add(rs.getString(1)), table);
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> rs.getString(1), table);
         return cols;
     }
 
-    private String tableFor(PipelineStage stage) {
-        return switch (stage) {
-            case STOCK_DAILY -> "stock_daily";
-            case REGION_DAILY, INDUSTRY_DAILY, CONCEPT_DAILY -> "board_daily";
-            case MAIN_FUND_STOCK, MAIN_FUND_BOARD -> "main_fund_flow";
-            case LIMIT_POOL -> "limit_up_pool";
-            case STRONG_POOL -> "strong_pool";
-            case CIXIN_POOL -> "cixin_pool";
-            case NORTHBOUND -> "northbound_flow";
-            case INDEX_DAILY -> "index_daily";
-            case DRAGON_TIGER -> "dragon_tiger";
-            case DRAGON_TIGER_DETAIL -> "dt_detail";
-        };
-    }
+    private record TableQuery(String table, String extraFilter, String ignored) {}
 }

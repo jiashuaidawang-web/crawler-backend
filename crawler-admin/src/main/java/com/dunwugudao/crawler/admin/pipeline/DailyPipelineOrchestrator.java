@@ -184,7 +184,7 @@ public class DailyPipelineOrchestrator {
             await(date, stage);
 
             // 3. 校验
-            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), seed.taskIds());
+            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds());
             List<ValidateResult> checkResults = new ArrayList<>();
             for (PipelineValidator v : validators) {
                 checkResults.add(v.validate(date, stage, ctx));
