@@ -1,5 +1,7 @@
 package com.dunwugudao.crawler.admin.job;
 
+import com.dunwugudao.crawler.admin.pipeline.DailyPipelineOrchestrator;
+import com.dunwugudao.crawler.admin.pipeline.PipelineRunResult;
 import com.dunwugudao.crawler.admin.schedule.RetryScanService;
 import com.dunwugudao.crawler.admin.seed.SeedGenerator;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -23,10 +25,30 @@ public class JobController {
 
     private final SeedGenerator seedGenerator;
     private final RetryScanService retryScanService;
+    private final DailyPipelineOrchestrator pipelineOrchestrator;
 
-    public JobController(SeedGenerator seedGenerator, RetryScanService retryScanService) {
+    public JobController(SeedGenerator seedGenerator, RetryScanService retryScanService,
+                         DailyPipelineOrchestrator pipelineOrchestrator) {
         this.seedGenerator = seedGenerator;
         this.retryScanService = retryScanService;
+        this.pipelineOrchestrator = pipelineOrchestrator;
+    }
+
+    /**
+     * 跑完整日批编排(与 DailyScheduler 15:30 自动触发走同一条路: pipelineOrchestrator.run)。
+     * <p>含全阶段校验,可手动补跑某天。param: date=yyyy-MM-dd(缺失则今天)。</p>
+     */
+    @PostMapping("/run-pipeline")
+    public Map<String, Object> runPipeline(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        String d = (date == null ? LocalDate.now() : date)
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        PipelineRunResult result = pipelineOrchestrator.run(d);
+        Map<String, Object> r = new HashMap<>();
+        r.put("date", result.date());
+        r.put("status", result.status());
+        r.put("summary", result.summary());
+        return r;
     }
 
     @PostMapping("/daily-seed")

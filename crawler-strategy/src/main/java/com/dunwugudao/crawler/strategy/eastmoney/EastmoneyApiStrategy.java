@@ -208,7 +208,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 return resp;
             } catch (Exception e) {
                 boolean proxyFailure = isProxyFailure(e);
-                if (proxyFailure && used < MAX_PROXY_FETCH_ATTEMPTS_PER_TASK - 1) {
+                if (proxyFailure && used < MAX_PROXY_FETCH_ATTEMPTS_PER_TASK) {
                     // 还有 IP 配额：指数退避 → 标记失效 → 取新 IP → 重试同一请求
                     long backoffMs = proxyBackoffMs(used);
                     log.warn("[fetchWithWorkerProxy] proxy failed, usedIp={}/{}, backoff {}ms, rotate IP, error={}",

@@ -49,8 +49,20 @@ public class WorkerProxyManager {
     /** 失效→提取 串行化，避免多线程重复提取。 */
     private final ReentrantLock fetchLock = new ReentrantLock();
 
-    /** 连续提取失败计数（超过阈值告警，不阻塞）。 */
-    private final AtomicBoolean consecutiveFailures = new AtomicBoolean(false);
+    /** 连续失败计数（达到阈值触发熔断）。 */
+    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
+
+    /** 熔断开始时间（用于自动半开）。 */
+    private long circuitBreakerOpenTime = 0L;
+
+    /** 是否处于熔断状态。 */
+    private boolean circuitBreakerOpen = false;
+
+    /** 全局连续失败熔断阈值。当连续失败达到此值，说明代理池整体被封禁，停止浪费 IP。 */
+    private static final int CIRCUIT_BREAKER_THRESHOLD = 50;
+
+    /** 熔断器自动半开时间（毫秒）— 10 分钟后尝试恢复。 */
+    private static final long CIRCUIT_BREAKER_RESET_MS = 10 * 60 * 1000L;
 
     /** 获取新 IP 的尝试次数（超过 maxProxyFetchAttempts 后停止换新）。 */
     private final AtomicInteger fetchAttemptCount = new AtomicInteger(0);
@@ -76,17 +88,32 @@ public class WorkerProxyManager {
      * @return 代理字符串；暂时无法获取返回旧 IP（可能已坏）
      */
     public String getProxy() {
+        // ---------- 熔断器检查 ----------
+        if (circuitBreakerOpen) {
+            long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
+            if (elapsed < CIRCUIT_BREAKER_RESET_MS) {
+                log.warn("[WorkerProxyManager] 熔断器开启中, 拒绝提取新 IP({}ms/{}ms), 连续失败 {} 次, url 级将快速失败",
+                        elapsed, CIRCUIT_BREAKER_RESET_MS, consecutiveFailures.get());
+                return null;
+            }
+            // 超过重置时间，半开：允许一次尝试
+            log.info("[WorkerProxyManager] 熔断器半开, 尝试恢复提取代理");
+            circuitBreakerOpen = false;
+            consecutiveFailures.set(0);
+        }
+
         // 快速路径：IP 仍有效，直接返回
         if (!invalidated.get()) {
             return currentProxy.get();
         }
 
-        // 超过最大获取次数 → 不再换新 IP，返回旧 IP（让它失败，避免烧代理池）
-        // maxProxyFetchAttempts <= 0 表示无限制（长效自动换 IP 代理不需要手动停）
+        // 超过最大获取次数 → 触发熔断，不再换新 IP（避免无上限烧代理池）
         if (maxProxyFetchAttempts > 0 && fetchAttemptCount.get() >= maxProxyFetchAttempts) {
-            log.warn("[WorkerProxyManager] 已获取 {} 次新 IP，超过上限 {}，停止换新（返回旧 IP 让其失败）",
+            log.warn("[WorkerProxyManager] 已获取 {} 次新 IP，超过上限 {}，触发保护性停止",
                     fetchAttemptCount.get(), maxProxyFetchAttempts);
-            return currentProxy.get();
+            consecutiveFailures.incrementAndGet();
+            checkCircuitBreaker();
+            return null;
         }
 
         // 慢路径：需要提取新 IP（加锁串行化）
@@ -99,13 +126,13 @@ public class WorkerProxyManager {
             String newProxy = proxySupplier.get();
             if (newProxy == null || newProxy.isBlank()) {
                 log.warn("[WorkerProxyManager] proxy supplier returned null");
-                consecutiveFailures.set(true);
+                consecutiveFailures.incrementAndGet();
                 fetchAttemptCount.incrementAndGet();
+                checkCircuitBreaker();
                 return currentProxy.get(); // 返回旧 IP（可能已坏，但比 null 好）
             }
             currentProxy.set(newProxy);
             invalidated.set(false);
-            consecutiveFailures.set(false);
             int attempt = fetchAttemptCount.incrementAndGet();
             log.info("[WorkerProxyManager] new proxy acquired (attempt {}/{}), proxy={}, will be used until failure",
                     attempt, maxProxyFetchAttempts, newProxy);
@@ -122,7 +149,14 @@ public class WorkerProxyManager {
      */
     public void invalidate() {
         invalidated.set(true);
-        log.info("[WorkerProxyManager] proxy marked invalid, will re-fetch on next get");
+        // 熔断器已开启时不再重复计数——熔断器本身就是兜底,任务级应快速失败,
+        // 避免「任务级重试(10次)+ 管理器级熔断(50次)」叠加成几百次浪费。
+        if (!circuitBreakerOpen) {
+            consecutiveFailures.incrementAndGet();
+            checkCircuitBreaker();
+        }
+        log.info("[WorkerProxyManager] proxy marked invalid, will re-fetch on next get(连续失败={}/{})",
+                consecutiveFailures.get(), CIRCUIT_BREAKER_THRESHOLD);
     }
 
     /** 当前是否有可用 IP（供健康检查）。 */
@@ -130,9 +164,11 @@ public class WorkerProxyManager {
         return !invalidated.get() && currentProxy.get() != null;
     }
 
-    /** 是否处于连续失败状态（供告警）。 */
+    /** 是否处于连续失败/熔断状态（供告警）。 */
     public boolean isConsecutiveFailures() {
-        return consecutiveFailures.get() || (maxProxyFetchAttempts > 0 && fetchAttemptCount.get() >= maxProxyFetchAttempts);
+        return circuitBreakerOpen
+                || consecutiveFailures.get() >= CIRCUIT_BREAKER_THRESHOLD
+                || (maxProxyFetchAttempts > 0 && fetchAttemptCount.get() >= maxProxyFetchAttempts);
     }
 
     /** 获取当前代理（不触发提取，供监控用）。 */
@@ -143,6 +179,39 @@ public class WorkerProxyManager {
     /** 获取已尝试次数（供监控用）。 */
     public int getFetchAttemptCount() {
         return fetchAttemptCount.get();
+    }
+
+    // ========================================================================
+    // 熔断器
+    // ========================================================================
+
+    /** 检查是否需要触发熔断。 */
+    private void checkCircuitBreaker() {
+        if (!circuitBreakerOpen && consecutiveFailures.get() >= CIRCUIT_BREAKER_THRESHOLD) {
+            circuitBreakerOpen = true;
+            circuitBreakerOpenTime = System.currentTimeMillis();
+            log.error("[WorkerProxyManager] ⚠️ 熔断器开启! 连续失败 {} 次, {}ms 内不再提取新代理, 请检查代理池是否被封禁",
+                    consecutiveFailures.get(), CIRCUIT_BREAKER_RESET_MS);
+        }
+    }
+
+    /** 查询熔断器当前状态（健康检查/监控用）。 */
+    public String getCircuitBreakerStatus() {
+        if (circuitBreakerOpen) {
+            long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
+            long remaining = Math.max(0, CIRCUIT_BREAKER_RESET_MS - elapsed);
+            return String.format("OPEN(连续失败=%d, 剩余=%ds)", consecutiveFailures.get(), remaining / 1000);
+        }
+        return String.format("CLOSED(连续失败=%d/%d)", consecutiveFailures.get(), CIRCUIT_BREAKER_THRESHOLD);
+    }
+
+    /** 手动重置熔断器（换代理供应商后调用）。 */
+    public void resetCircuitBreaker() {
+        boolean wasOpen = circuitBreakerOpen;
+        circuitBreakerOpen = false;
+        consecutiveFailures.set(0);
+        circuitBreakerOpenTime = 0L;
+        log.info("[WorkerProxyManager] 熔断器手动重置(wasOpen={})", wasOpen);
     }
 
     /** 重置获取次数（新 worker 启动或手动恢复时调用）。 */
