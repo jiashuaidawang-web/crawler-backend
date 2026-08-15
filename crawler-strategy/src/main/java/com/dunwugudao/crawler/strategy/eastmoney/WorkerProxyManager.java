@@ -58,11 +58,20 @@ public class WorkerProxyManager {
     /** 是否处于熔断状态。 */
     private boolean circuitBreakerOpen = false;
 
-    /** 全局连续失败熔断阈值。当连续失败达到此值，说明代理池整体被封禁，停止浪费 IP。 */
-    private static final int CIRCUIT_BREAKER_THRESHOLD = 50;
+    /** 连续失败熔断阈值。当连续失败达到此值，说明代理池整体被封禁，停止浪费 IP。 */
+    private static final int CIRCUIT_BREAKER_THRESHOLD = 6;
 
     /** 熔断器自动半开时间（毫秒）— 10 分钟后尝试恢复。 */
     private static final long CIRCUIT_BREAKER_RESET_MS = 10 * 60 * 1000L;
+
+    /** 永久失效检测:熔断器连续开启达到此次数后永久停止,直到人工手动重置。 */
+    private static final int PERMANENT_TRIP_THRESHOLD = 3;
+
+    /** 熔断器连续开启次数(每次从半开→再次开启计数+1)。 */
+    private int permanentTripCount = 0;
+
+    /** 是否已永久停止(代理池永久失效,需人工在监控页面手动重置)。 */
+    private boolean permanentlyStopped = false;
 
     /** 获取新 IP 的尝试次数（超过 maxProxyFetchAttempts 后停止换新）。 */
     private final AtomicInteger fetchAttemptCount = new AtomicInteger(0);
@@ -88,6 +97,13 @@ public class WorkerProxyManager {
      * @return 代理字符串；暂时无法获取返回旧 IP（可能已坏）
      */
     public String getProxy() {
+        // ---------- 永久停止检查:代理池永久失效,需人工在监控页面手动重置 ----------
+        if (permanentlyStopped) {
+            log.warn("[WorkerProxyManager] 已永久停止(连续熔断 {} 次),拒绝提取新 IP,请在监控页面手动重置熔断器",
+                    permanentTripCount);
+            return null;
+        }
+
         // ---------- 熔断器检查 ----------
         if (circuitBreakerOpen) {
             long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
@@ -190,28 +206,64 @@ public class WorkerProxyManager {
         if (!circuitBreakerOpen && consecutiveFailures.get() >= CIRCUIT_BREAKER_THRESHOLD) {
             circuitBreakerOpen = true;
             circuitBreakerOpenTime = System.currentTimeMillis();
-            log.error("[WorkerProxyManager] ⚠️ 熔断器开启! 连续失败 {} 次, {}ms 内不再提取新代理, 请检查代理池是否被封禁",
-                    consecutiveFailures.get(), CIRCUIT_BREAKER_RESET_MS);
+            // 永久失效检测:每次熔断开启计数+1
+            permanentTripCount++;
+            if (permanentTripCount >= PERMANENT_TRIP_THRESHOLD) {
+                permanentlyStopped = true;
+                log.error("[WorkerProxyManager] ⛔ 代理池永久失效! 连续熔断 {} 次(阈值 {}),永久停止提取新 IP,请在监控页面手动重置熔断器",
+                        permanentTripCount, PERMANENT_TRIP_THRESHOLD);
+            } else {
+                log.error("[WorkerProxyManager] ⚠️ 熔断器开启! 连续失败 {} 次, {}ms 内不再提取新代理(第 {} 次熔断,达 {} 次将永久停止)",
+                        consecutiveFailures.get(), CIRCUIT_BREAKER_RESET_MS, permanentTripCount, PERMANENT_TRIP_THRESHOLD);
+            }
         }
     }
 
     /** 查询熔断器当前状态（健康检查/监控用）。 */
     public String getCircuitBreakerStatus() {
+        if (permanentlyStopped) {
+            return String.format("PERMANENTLY_STOPPED(连续熔断 %d 次,需人工重置)", permanentTripCount);
+        }
         if (circuitBreakerOpen) {
             long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
             long remaining = Math.max(0, CIRCUIT_BREAKER_RESET_MS - elapsed);
-            return String.format("OPEN(连续失败=%d, 剩余=%ds)", consecutiveFailures.get(), remaining / 1000);
+            return String.format("OPEN(连续失败=%d, 剩余=%ds, 累计熔断=%d/%d)", consecutiveFailures.get(),
+                    remaining / 1000, permanentTripCount, PERMANENT_TRIP_THRESHOLD);
         }
-        return String.format("CLOSED(连续失败=%d/%d)", consecutiveFailures.get(), CIRCUIT_BREAKER_THRESHOLD);
+        return String.format("CLOSED(连续失败=%d/%d, 累计熔断=%d/%d)", consecutiveFailures.get(),
+                CIRCUIT_BREAKER_THRESHOLD, permanentTripCount, PERMANENT_TRIP_THRESHOLD);
     }
 
-    /** 手动重置熔断器（换代理供应商后调用）。 */
+    /** 是否处于熔断状态(监控/认领判断用)。 */
+    public boolean isCircuitBreakerOpen() {
+        return circuitBreakerOpen;
+    }
+
+    /** 获取连续失败次数(监控用)。 */
+    public int getConsecutiveFailures() {
+        return consecutiveFailures.get();
+    }
+
+    /** 是否已永久停止(监控页面据此显示告警和重置按钮)。 */
+    public boolean isPermanentlyStopped() {
+        return permanentlyStopped;
+    }
+
+    /** 获取累计熔断次数(监控用)。 */
+    public int getPermanentTripCount() {
+        return permanentTripCount;
+    }
+
+    /** 手动重置熔断器（换代理供应商/修复代理池后在监控页面调用）。 */
     public void resetCircuitBreaker() {
         boolean wasOpen = circuitBreakerOpen;
         circuitBreakerOpen = false;
         consecutiveFailures.set(0);
         circuitBreakerOpenTime = 0L;
-        log.info("[WorkerProxyManager] 熔断器手动重置(wasOpen={})", wasOpen);
+        // 同时重置永久失效计数,允许重新尝试
+        permanentTripCount = 0;
+        permanentlyStopped = false;
+        log.info("[WorkerProxyManager] 熔断器手动重置(wasOpen={}, 永久失效计数已清零)", wasOpen);
     }
 
     /** 重置获取次数（新 worker 启动或手动恢复时调用）。 */

@@ -42,7 +42,7 @@ public class StrategyFactoryConfig {
      */
     @Bean
     public WorkerProxyManager eastmoneyOkHttpProxyManager(QgLongTermConfig qgConfig) {
-        ProxyProvider provider = new QgLongTermProxyProvider(qgConfig.getApiKey(), qgConfig.getPassword());
+        ProxyProvider provider = new QgLongTermProxyProvider(qgConfig.getAuthKey(), qgConfig.getBusinessId(), qgConfig.getPassword());
         return new WorkerProxyManager(provider::acquire, 50);
     }
 
@@ -52,7 +52,7 @@ public class StrategyFactoryConfig {
      */
     @Bean
     public ProxyProvider cloakProxyProvider(QgLongTermConfig qgConfig) {
-        return new QgLongTermProxyProvider(qgConfig.getApiKey(), qgConfig.getPassword());
+        return new QgLongTermProxyProvider(qgConfig.getAuthKey(), qgConfig.getBusinessId(), qgConfig.getPassword());
     }
 
     @Bean

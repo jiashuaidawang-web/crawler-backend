@@ -3,6 +3,7 @@ package com.dunwugudao.crawler.admin.pipeline;
 import com.dunwugudao.crawler.persistence.entity.PipelineRun;
 import com.dunwugudao.crawler.persistence.entity.PipelineStageRecord;
 import com.dunwugudao.crawler.persistence.entity.CrawlAlert;
+import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.PipelineMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlAlertMapper;
 import com.dunwugudao.crawler.admin.seed.SeedGenerator;
@@ -58,10 +59,12 @@ public class DailyPipelineOrchestrator {
     );
 
     private final PipelineMapper pipelineMapper;
+    private final CrawlTaskMapper crawlTaskMapper;
     private final CrawlAlertMapper crawlAlertMapper;
     private final SeedGenerator seedGenerator;
     private final StageCompletionDetector completionDetector;
     private final List<PipelineValidator> validators;
+    private final TotalCountValidator totalCountValidator;
     private final StageSeeder stageSeeder;
     private final org.springframework.jdbc.core.JdbcTemplate chJdbc;
 
@@ -75,17 +78,21 @@ public class DailyPipelineOrchestrator {
     private int pollIntervalSec;
 
     public DailyPipelineOrchestrator(PipelineMapper pipelineMapper,
+                                    CrawlTaskMapper crawlTaskMapper,
                                     CrawlAlertMapper crawlAlertMapper,
                                     SeedGenerator seedGenerator,
                                     StageCompletionDetector completionDetector,
                                     List<PipelineValidator> validators,
+                                    TotalCountValidator totalCountValidator,
                                     StageSeeder stageSeeder,
                                     @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbc) {
         this.pipelineMapper = pipelineMapper;
+        this.crawlTaskMapper = crawlTaskMapper;
         this.crawlAlertMapper = crawlAlertMapper;
         this.seedGenerator = seedGenerator;
         this.completionDetector = completionDetector;
         this.validators = validators;
+        this.totalCountValidator = totalCountValidator;
         this.stageSeeder = stageSeeder;
         this.chJdbc = chJdbc;
     }
@@ -98,6 +105,34 @@ public class DailyPipelineOrchestrator {
             return status(dateStr);
         }
         return execute(date, runId, false);
+    }
+
+    /**
+     * 强制重跑:reset 已有的 SUCCESS/RUNNING run 后重新执行(用于补数据/重跑)。
+     * <p>不走 {@link #ensureRun} 的幂等短路,直接 reset stage + run 状态后调 {@link #execute}。
+     * 同时重置该日期下 DEAD/FAILED 的任务为 PENDING,让 worker 能重新认领(seed 幂等会跳过已存在的任务,
+     * 但这些任务状态已是终态无法被认领,需先重置)。</p>
+     */
+    public PipelineRunResult run(String dateStr, boolean force) {
+        LocalDate date = LocalDate.parse(dateStr);
+        if (force) {
+            // 重置 DEAD/FAILED 任务为 PENDING,使 seed 幂等跳过后的任务仍能被 worker 认领
+            int resetCount = crawlTaskMapper.forceResetDeadTasks(dateStr + "%");
+            if (resetCount > 0) {
+                log.info("[run-pipeline] force=true, reset {} DEAD/FAILED tasks to PENDING for date={}",
+                        resetCount, dateStr);
+            }
+            PipelineRun existing = pipelineMapper.selectRunByDate(date);
+            if (existing != null) {
+                log.info("[run-pipeline] force=true, resetting existing run(status={}) for date={}",
+                        existing.getStatus(), dateStr);
+                pipelineMapper.resetStagesToPending(existing.getRunId());
+                pipelineMapper.resetRunToRunning(existing.getRunId());
+                initStages(existing.getRunId());
+                return execute(date, existing.getRunId(), false);
+            }
+        }
+        return run(dateStr);
     }
 
     /** 断点续跑:从首个非终态阶段继续(不 reset,用于 RUNNING 中断后继续)。 */
@@ -170,18 +205,31 @@ public class DailyPipelineOrchestrator {
             rowMap.put(r.getStageName(), r);
         }
 
+        // 已 HALT 失败的阶段集合(用于阻断其下游依赖,独立阶段不受影响)
+        Set<String> haltFailedStages = new java.util.HashSet<>();
+
         for (PipelineStage stage : ACTIVE_STAGES) {
             // 已终态的阶段跳过(DONE/IGNORED/SKIP)
             PipelineStageRecord row = rowMap.get(stage.name());
             if (row != null && isTerminal(row.getStatus())) {
                 continue;
             }
+            // 依赖的阶段已 HALT 失败 → 跳过本阶段(阻断),但继续执行其他独立阶段
+            if (isBlockedByHalt(stage, haltFailedStages)) {
+                PipelineStageResult skipped = new PipelineStageResult();
+                skipped.stage = stage.name();
+                skipped.status = "HALT_SKIPPED";
+                skipped.errorMsg = "前置阶段 HALT 失败,阻断本阶段";
+                summary.put(stage.name(), skipped.toMap());
+                persistStage(runId, stage.name(), skipped);
+                log.warn("[pipeline] date={} stage={} 因前置 HALT 失败被阻断,跳过", date, stage.name());
+                continue;
+            }
             PipelineStageResult sr = executeStage(date, runId, stage);
             summary.put(stage.name(), sr.toMap());
             if ("FAILED".equals(sr.status) && stage.getPolicy() == FailurePolicy.HALT) {
-                finish(runId, "FAILED", summary);
-                log.error("[pipeline] date={} 阶段 {} 失败且策略 HALT,阻断下游", date, stage);
-                return status(date.toString());
+                haltFailedStages.add(stage.name());
+                log.error("[pipeline] date={} 阶段 {} 失败且策略 HALT,阻断其依赖的下游", date, stage);
             }
         }
 
@@ -191,11 +239,23 @@ public class DailyPipelineOrchestrator {
             if (row != null && isTerminal(row.getStatus())) {
                 continue;
             }
+            if (isBlockedByHalt(stage, haltFailedStages)) {
+                PipelineStageResult skipped = new PipelineStageResult();
+                skipped.stage = stage.name();
+                skipped.status = "HALT_SKIPPED";
+                skipped.errorMsg = "前置阶段 HALT 失败,阻断本阶段";
+                summary.put(stage.name(), skipped.toMap());
+                persistStage(runId, stage.name(), skipped);
+                log.warn("[pipeline] date={} chain stage={} 因前置 HALT 失败被阻断,跳过", date, stage.name());
+                continue;
+            }
             PipelineStageResult sr = executeChainStage(date, runId, stage);
             summary.put(stage.name(), sr.toMap());
         }
 
-        finish(runId, "SUCCESS", summary);
+        // run 终态:有 HALT 失败→FAILED,否则 SUCCESS
+        boolean anyHaltFailed = !haltFailedStages.isEmpty();
+        finish(runId, anyHaltFailed ? "FAILED" : "SUCCESS", summary);
         return status(date.toString());
     }
 
@@ -273,11 +333,16 @@ public class DailyPipelineOrchestrator {
                 storeBoardRelCounts(date, defaultSource, result);
             }
 
+            // 1.5 捕获基线行数(seed 后、爬取前)→validate 时只计本次新增,避免历史数据干扰
+            int baselineRows = totalCountValidator.baselineRows(stage, date, defaultSource);
+            result.baselineRows = baselineRows;
+            log.info("[pipeline] date={} stage={} baselineRows={}", date, stage, baselineRows);
+
             // 2. 等待完成
             await(date, stage);
 
-            // 3. 校验
-            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds());
+            // 3. 校验(传入 baselineRows)
+            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds(), baselineRows);
             List<ValidateResult> checkResults = new ArrayList<>();
             for (PipelineValidator v : validators) {
                 checkResults.add(v.validate(date, stage, ctx));
@@ -391,7 +456,28 @@ public class DailyPipelineOrchestrator {
     }
 
     private boolean isTerminal(String status) {
-        return "DONE".equals(status) || "IGNORED".equals(status) || "SKIP".equals(status);
+        return "DONE".equals(status) || "IGNORED".equals(status) || "SKIP".equals(status)
+                || "HALT_SKIPPED".equals(status);
+    }
+
+    /**
+     * 判断阶段是否被上游 HALT 失败阻断(直接 or 传递依赖)。
+     * <p>遍历 stage 的 dependsOn 链,若任一依赖(或传递依赖)在 haltFailedStages 中则阻断。</p>
+     */
+    private boolean isBlockedByHalt(PipelineStage stage, Set<String> haltFailedStages) {
+        Set<PipelineStage> visited = new java.util.HashSet<>();
+        Deque<PipelineStage> stack = new java.util.ArrayDeque<>(stage.getDependsOn());
+        while (!stack.isEmpty()) {
+            PipelineStage dep = stack.pop();
+            if (!visited.add(dep)) {
+                continue;
+            }
+            if (haltFailedStages.contains(dep.name())) {
+                return true;
+            }
+            stack.addAll(dep.getDependsOn());
+        }
+        return false;
     }
 
     private int actualTotal(List<ValidateResult> rs) { return rs.isEmpty() ? 0 : rs.get(0).actual(); }

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.time.LocalDate;
 
 /**
  * 监控 REST（能力6）。
@@ -35,14 +36,15 @@ public class MonitorController {
     private final ProxyManager proxyManager;
 
     @GetMapping("/stats")
-    public Object stats(@RequestParam(required = false) String groupBy) {
+    public Object stats(@RequestParam(required = false) String groupBy,
+                        @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
         if ("source".equals(groupBy)) {
             return monitorService.statsBySource();
         }
         if ("node".equals(groupBy)) {
             return monitorService.statsByNode();
         }
-        return monitorService.stats();
+        return monitorService.stats(date);
     }
 
     @GetMapping("/alerts")

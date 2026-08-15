@@ -19,6 +19,7 @@ import javax.net.ssl.SSLContext;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
 
 /**
  * 监控聚合（能力6）：状态计数、成功率、按来源/节点分布、告警与节点列表。
@@ -32,8 +33,10 @@ public class MonitorService {
     private final CrawlNodeMapper crawlNodeMapper;
 
     /** 总体统计：各状态计数 + 成功率。 */
-    public Map<String, Object> stats() {
-        List<Map<String, Object>> byStatus = crawlTaskMapper.countByStatus();
+    public Map<String, Object> stats(LocalDate date) {
+        List<Map<String, Object>> byStatus = (date != null)
+                ? crawlTaskMapper.countByStatusDate(date.toString())
+                : crawlTaskMapper.countByStatus();
         long total = 0;
         long success = 0;
         for (Map<String, Object> m : byStatus) {

@@ -42,8 +42,9 @@ logging:
     com.dunwugudao.crawler.strategy.eastmoney: INFO
     com.dunwugudao.crawler.persistence.service.DedupWriter: INFO
 
-# 代理配置(统一用青果短效)
+# 代理配置(统一用青果长效)
 proxy:
   qg:
-    api-key: 8XMUHNWJ
-    password: 8104A84FB0FC
+    auth-key: BDC71CDC
+    business-id: 3j1adb5h
+    password: A705E7CDF5D1

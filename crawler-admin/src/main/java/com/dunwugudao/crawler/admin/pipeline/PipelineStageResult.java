@@ -11,6 +11,7 @@ public class PipelineStageResult {
     public int seededCount;
     public int expectedTotal;
     public int actualTotal;
+    public int baselineRows;        // seed 后爬取前的 CK 行数(validate 时 actual-baseline=本次新增)
     public int dupRows;
     public int lostRows;
     public int boardRelStockCount;   // STOCK_BY_BOARD:今日股票数(供明天比较)

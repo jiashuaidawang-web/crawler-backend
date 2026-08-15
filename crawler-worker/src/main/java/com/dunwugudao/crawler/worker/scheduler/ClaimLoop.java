@@ -13,6 +13,7 @@ import com.dunwugudao.crawler.persistence.entity.CrawlLog;
 import com.dunwugudao.crawler.persistence.mapper.CrawlLogMapper;
 import com.dunwugudao.crawler.persistence.mapper.CrawlTaskMapper;
 import com.dunwugudao.crawler.persistence.mapper.StockBackfillStatusMapper;
+import com.dunwugudao.crawler.strategy.eastmoney.WorkerProxyManager;
 import com.dunwugudao.crawler.persistence.service.ClaimService;
 import com.dunwugudao.crawler.persistence.service.DedupWriter;
 import com.dunwugudao.crawler.persistence.service.VolumeValidator;
@@ -49,6 +50,7 @@ public class ClaimLoop {
     private final CrawlTaskMapper crawlTaskMapper;
     private final StockBackfillStatusMapper backfillStatusMapper;
     private final AntiCrawlConfig antiCrawlConfig;
+    private final WorkerProxyManager workerProxyManager;
 
     @Value("${crawler.node-id:${HOSTNAME:worker-node}}")
     private String nodeId;
@@ -58,6 +60,19 @@ public class ClaimLoop {
 
     @Scheduled(fixedDelayString = "${crawler.claim-fixed-delay-ms:5000}")
     public void run() {
+        // 代理池熔断器开启/永久失效时暂停认领,避免空转耗资源 + 白烧任务级重试
+        if (workerProxyManager != null) {
+            if (workerProxyManager.isPermanentlyStopped()) {
+                LOG.warn("[ClaimLoop] 代理池永久停止(连续熔断 {} 次),暂停认领任务,请在监控页面手动重置熔断器后恢复",
+                        workerProxyManager.getPermanentTripCount());
+                return;
+            }
+            if (workerProxyManager.isCircuitBreakerOpen()) {
+                LOG.warn("[ClaimLoop] 代理池熔断器开启中(连续失败 {} 次),暂停认领任务,等半开恢复",
+                        workerProxyManager.getConsecutiveFailures());
+                return;
+            }
+        }
         List<com.dunwugudao.crawler.persistence.entity.CrawlTask> claimed =
                 claimService.claim(batch, nodeId);
         if (claimed == null || claimed.isEmpty()) {

@@ -36,14 +36,16 @@ public class JobController {
 
     /**
      * 跑完整日批编排(与 DailyScheduler 15:30 自动触发走同一条路: pipelineOrchestrator.run)。
-     * <p>含全阶段校验,可手动补跑某天。param: date=yyyy-MM-dd(缺失则今天)。</p>
+     * <p>含全阶段校验,可手动补跑某天。</p>
+     * <p>参数:date=yyyy-MM-dd(缺失则今天);force=true 强制重跑(即使今天已有 SUCCESS 记录也会 reset 重跑)。</p>
      */
     @PostMapping("/run-pipeline")
     public Map<String, Object> runPipeline(
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(required = false, defaultValue = "false") boolean force) {
         String d = (date == null ? LocalDate.now() : date)
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        PipelineRunResult result = pipelineOrchestrator.run(d);
+        PipelineRunResult result = pipelineOrchestrator.run(d, force);
         Map<String, Object> r = new HashMap<>();
         r.put("date", result.date());
         r.put("status", result.status());

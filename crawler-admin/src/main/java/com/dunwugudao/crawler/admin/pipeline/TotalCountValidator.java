@@ -38,6 +38,18 @@ public class TotalCountValidator implements PipelineValidator {
     @Override
     public String name() { return "TOTAL_COUNT"; }
 
+    /**
+     * 捕获基线行数(seed 后、爬取前调用)。
+     * <p>validate 时用 {@code actual - baseline} 作为本次 run 新增行数,避免历史数据干扰校验。</p>
+     */
+    public int baselineRows(PipelineStage stage, LocalDate date, int source) {
+        TableQuery tq = tableQuery(stage);
+        if (tq == null) {
+            return 0;
+        }
+        return countActual(tq, date, source);
+    }
+
     @Override
     public ValidateResult validate(LocalDate date, PipelineStage stage, ValidateContext ctx) {
         int expected = ctx.expectedTotal();
@@ -49,33 +61,35 @@ public class TotalCountValidator implements PipelineValidator {
             return ValidateResult.ok(name(), "阶段 " + stage + " 无对应 CK 表,跳过", expected, 0);
         }
 
-        // actual:CK 行数(普通 count,按 data_source+特定维度过滤)
-        // 注意:目标表均为 MergeTree(非 ReplacingMergeTree),不支持 FINAL
+        // actual:CK 总行数(含历史);newRows = actual - baseline = 本次 run 新增行数
         int actual = countActual(tq, date, ctx.source());
+        int newRows = actual - ctx.baselineRows();
 
-        if (actual == expected) {
-            return ValidateResult.ok(name(), "actual=total=" + actual, expected, actual);
+        if (newRows == expected) {
+            return ValidateResult.ok(name(), String.format("baseline=%d,actual=%d,new=total=%d",
+                    ctx.baselineRows(), actual, newRows), expected, newRows);
         }
-        if (actual > expected) {
+        if (newRows > expected) {
             return ValidateResult.fail(name(),
-                    String.format("actual(%d) > total(%d),去重后反而更多,异常", actual, expected),
-                    expected, actual, 0, 0, List.of());
+                    String.format("baseline=%d,actual=%d,new(%d) > total(%d),去重后反而更多,异常",
+                            ctx.baselineRows(), actual, newRows, expected),
+                    expected, newRows, 0, 0, List.of());
         }
 
-        // actual < total:查重复组数判定能否用去重解释(按自然键+data_source分组)
+        // newRows < total:查重复组数判定能否用去重解释(按自然键+data_source分组)
         int dupGroups = countDupGroups(tq, date, ctx.source());
-        int diff = expected - actual;
+        int diff = expected - newRows;
         if (diff <= dupGroups) {
             return ValidateResult.ok(name(),
-                    String.format("actual(%d) < total(%d),差值(%d) <= 重复组数(%d),去重解释成功",
-                            actual, expected, diff, dupGroups),
-                    expected, actual);
+                    String.format("baseline=%d,actual=%d,new(%d) < total(%d),差值(%d) <= 重复组数(%d),去重解释成功",
+                            ctx.baselineRows(), actual, newRows, expected, diff, dupGroups),
+                    expected, newRows);
         }
         int lost = diff - dupGroups;
         return ValidateResult.fail(name(),
-                String.format("actual(%d) < total(%d),差值(%d) > 重复组数(%d),真正丢失 %d 行",
-                        actual, expected, diff, dupGroups, lost),
-                expected, actual, dupGroups, lost, ctx.taskIds());
+                String.format("baseline=%d,actual=%d,new(%d) < total(%d),差值(%d) > 重复组数(%d),真正丢失 %d 行",
+                        ctx.baselineRows(), actual, newRows, expected, diff, dupGroups, lost),
+                expected, newRows, dupGroups, lost, ctx.taskIds());
     }
 
     /** 构建阶段的 CK 查询参数(表名+额外过滤条件)。 */
@@ -94,9 +108,9 @@ public class TotalCountValidator implements PipelineValidator {
             case INDEX_DAILY -> new TableQuery("index_daily", null, null);
             case DRAGON_TIGER -> new TableQuery("dragon_tiger", null, null);
             case DRAGON_TIGER_DETAIL -> new TableQuery("dt_detail", null, null);
-            case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null);
-            case BOARD_BASIC -> new TableQuery("board_basic", null, null, false); // 维表无 trade_date
-            case STOCK_WEEKLY -> new TableQuery("stock_weekly", null, null, true);
+            case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null, "effective_date");
+            case BOARD_BASIC -> new TableQuery("board_basic", null, null, null); // 维表无日期列,跳过日期过滤
+            case STOCK_WEEKLY -> new TableQuery("stock_weekly", null, null, "trade_date");
         };
     }
 
@@ -104,9 +118,9 @@ public class TotalCountValidator implements PipelineValidator {
         StringBuilder sql = new StringBuilder("SELECT count() FROM ").append(tq.table);
         List<Object> params = new ArrayList<>();
         boolean hasWhere = false;
-        // board_basic 等维表无 trade_date,仅用 extraFilter
-        if (tq.tradeDateFilter) {
-            sql.append(" WHERE trade_date = ? AND data_source = ?");
+        // 有日期列的表:按日期+data_source 过滤;维表(dateCol=null)不做日期过滤
+        if (tq.dateCol != null && !tq.dateCol.isEmpty()) {
+            sql.append(" WHERE ").append(tq.dateCol).append(" = ? AND data_source = ?");
             params.add(date.toString());
             params.add(source);
             hasWhere = true;
@@ -134,10 +148,16 @@ public class TotalCountValidator implements PipelineValidator {
             }
             String groupKey = cols.stream().map(c -> "toString(coalesce(" + c + ",''))")
                     .reduce((a, b) -> a + "||'|'||" + b).orElse("1");
+            // 有日期列的表才按日期过滤;维表(dateCol=null)全表统计重复
             String sql = "SELECT countIf(cnt > 1) AS dup FROM (SELECT " + groupKey +
-                    " AS k, count() AS cnt FROM " + tq.table +
-                    " WHERE trade_date = ? AND data_source = ? GROUP BY k)";
-            Long dup = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
+                    " AS k, count() AS cnt FROM " + tq.table;
+            if (tq.dateCol != null && !tq.dateCol.isEmpty()) {
+                sql += " WHERE " + tq.dateCol + " = ? AND data_source = ? GROUP BY k)";
+                Long dup = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
+                return dup == null ? 0 : dup.intValue();
+            }
+            sql += " GROUP BY k)";
+            Long dup = chJdbc.queryForObject(sql, Long.class);
             return dup == null ? 0 : dup.intValue();
         } catch (Exception e) {
             log.warn("[TOTAL_COUNT] 查重复失败 table={}: {}", tq.table, e.getMessage());
@@ -152,9 +172,16 @@ public class TotalCountValidator implements PipelineValidator {
         return cols;
     }
 
-    private record TableQuery(String table, String extraFilter, String ignored, boolean tradeDateFilter) {
+    /**
+     * @param table        CK 表名
+     * @param extraFilter  额外 WHERE 条件(如 board_type = 1)
+     * @param ignored      无用,兼容旧签名
+     * @param dateCol      日期列名;为 null 表示该表无日期列(维表),countActual 不做日期过滤
+     *                     大部分表用 "trade_date",stock_board_rel 用 "effective_date"
+     */
+    private record TableQuery(String table, String extraFilter, String ignored, String dateCol) {
         TableQuery(String table, String extraFilter, String ignored) {
-            this(table, extraFilter, ignored, true);
+            this(table, extraFilter, ignored, "trade_date");
         }
     }
 }

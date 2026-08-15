@@ -14,18 +14,18 @@ public enum PipelineStage {
     REGION_DAILY       (2,  FailurePolicy.SKIP,    Set.of(),                List.of("REGION_DAILY")),
     INDUSTRY_DAILY     (3,  FailurePolicy.SKIP,    Set.of(),                List.of("INDUSTRY_DAILY")),
     CONCEPT_DAILY      (4,  FailurePolicy.SKIP,    Set.of(),                List.of("CONCEPT_DAILY")),
-    MAIN_FUND_STOCK    (5,  FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_STOCK")),
-    MAIN_FUND_BOARD    (6,  FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_BOARD")),
-    LIMIT_POOL         (7,  FailurePolicy.SKIP,    Set.of(),                List.of("LIMIT_UP","LIMIT_DOWN","LIMIT_ZHABAN")),
-    STRONG_POOL        (8,  FailurePolicy.SKIP,    Set.of(),                List.of("STRONG_POOL")),
-    CIXIN_POOL         (9,  FailurePolicy.SKIP,    Set.of(),                List.of("CIXIN_POOL")),
-    NORTHBOUND         (10, FailurePolicy.SKIP,    Set.of(),                List.of("NORTHBOUND_FLOW")),
-    INDEX_DAILY        (11, FailurePolicy.SKIP,    Set.of(),                List.of("INDEX_DAILY")),
-    DRAGON_TIGER       (12, FailurePolicy.SKIP,    Set.of(),                List.of("DRAGON_TIGER")),
-    BOARD_BASIC        (13, FailurePolicy.SKIP,    Set.of(),                List.of("REGION_BOARD","INDUSTRY_BOARD","CONCEPT_BOARD")),
-    STOCK_BY_BOARD     (14, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_BY_BOARD")),
-    STOCK_WEEKLY       (15, FailurePolicy.SKIP,    Set.of(),                List.of()),
-    DRAGON_TIGER_DETAIL(16, FailurePolicy.SKIP,    Set.of(DRAGON_TIGER),    List.of("DRAGON_TIGER_DETAIL"));
+    LIMIT_POOL         (5,  FailurePolicy.SKIP,    Set.of(),                List.of("LIMIT_UP","LIMIT_DOWN","LIMIT_ZHABAN")),
+    STRONG_POOL        (6,  FailurePolicy.SKIP,    Set.of(),                List.of("STRONG_POOL")),
+    CIXIN_POOL         (7,  FailurePolicy.SKIP,    Set.of(),                List.of("CIXIN_POOL")),
+    INDEX_DAILY        (8,  FailurePolicy.SKIP,    Set.of(),                List.of("INDEX_DAILY")),
+    DRAGON_TIGER       (9,  FailurePolicy.SKIP,    Set.of(),                List.of("DRAGON_TIGER")),
+    BOARD_BASIC        (10, FailurePolicy.SKIP,    Set.of(),                List.of("REGION_BOARD","INDUSTRY_BOARD","CONCEPT_BOARD")),
+    STOCK_BY_BOARD     (11, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_BY_BOARD")),
+    STOCK_WEEKLY       (12, FailurePolicy.SKIP,    Set.of(),                List.of()),
+    DRAGON_TIGER_DETAIL(13, FailurePolicy.SKIP,    Set.of(DRAGON_TIGER),    List.of("DRAGON_TIGER_DETAIL")),
+    MAIN_FUND_STOCK    (14, FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_STOCK")),
+    MAIN_FUND_BOARD    (15, FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_BOARD")),
+    NORTHBOUND         (16, FailurePolicy.SKIP,    Set.of(),                List.of("NORTHBOUND_FLOW"));
 
     private final int seq;
     private final FailurePolicy policy;

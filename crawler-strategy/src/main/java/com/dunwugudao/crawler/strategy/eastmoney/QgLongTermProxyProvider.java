@@ -26,8 +26,9 @@ public class QgLongTermProxyProvider implements ProxyProvider {
 
     private static final Logger log = LoggerFactory.getLogger(QgLongTermProxyProvider.class);
 
-    private final String apiKey;
-    private final String password;
+    private final String authKey;     // 提取 API 的 key(URL 的 key 参数)
+    private final String businessId;  // 业务标识(隧道代理用户名)
+    private final String password;    // 隧道代理密码(AuthPwd)
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -36,22 +37,24 @@ public class QgLongTermProxyProvider implements ProxyProvider {
             .build();
 
     /**
-     * @param apiKey   提取 API 的 key（也是隧道代理用户名）
-     * @param password 隧道代理密码（AuthPwd）
+     * @param authKey    提取 API 的 key(URL 的 key 参数)
+     * @param businessId 业务标识(隧道代理用户名)
+     * @param password   隧道代理密码(AuthPwd)
      */
-    public QgLongTermProxyProvider(String apiKey, String password) {
-        this.apiKey = apiKey;
+    public QgLongTermProxyProvider(String authKey, String businessId, String password) {
+        this.authKey = authKey;
+        this.businessId = businessId;
         this.password = password;
     }
 
     private String apiUrl() {
         // distinct=true: 每次返回不同 IP(避免复用死代理)
-        return "https://share.proxy.qg.net/get?key=" + apiKey
+        return "https://share.proxy.qg.net/get?key=" + authKey
                 + "&num=1&area=&isp=0&format=json&distinct=true";
     }
 
     /**
-     * 从青果长效 IP 提取 1 个代理，返回 {@code http://key:pass@ip:port}。
+     * 从青果长效 IP 提取 1 个代理,返回 {@code http://businessId:pass@ip:port}。
      *
      * @return 代理字符串；提取失败返回 null
      */
@@ -88,8 +91,8 @@ public class QgLongTermProxyProvider implements ProxyProvider {
                 log.warn("[QgLongTerm] unexpected server: {}", server);
                 return null;
             }
-            // "ip:port" → "http://key:pass@ip:port"
-            String proxy = "http://" + apiKey + ":" + password + "@" + server;
+            // "ip:port" → "http://businessId:pass@ip:port"
+            String proxy = "http://" + businessId + ":" + password + "@" + server;
             log.info("[QgLongTerm] acquired {}", proxy);
             return proxy;
         } catch (IOException e) {

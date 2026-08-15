@@ -41,6 +41,11 @@ public interface CrawlTaskMapper {
     @Select("SELECT status, count(*) AS cnt FROM crawl_task GROUP BY status ORDER BY status")
     List<Map<String, Object>> countByStatus();
 
+    /** 按日期统计各状态任务数(日期编码在 unique_key 末尾,格式 taskType|source|date[*pn])。 */
+    @Select("SELECT status, count(*) AS cnt FROM crawl_task " +
+            "WHERE unique_key LIKE ('%' || #{date}) GROUP BY status ORDER BY status")
+    List<Map<String, Object>> countByStatusDate(@Param("date") String date);
+
     @Select("SELECT source, count(*) AS cnt FROM crawl_task GROUP BY source ORDER BY source")
     List<Map<String, Object>> countBySource();
 
@@ -109,4 +114,19 @@ public interface CrawlTaskMapper {
             WHERE status='RETRY' AND retry_count >= max_retry
             """)
     int promoteExhausted();
+
+    // ---------------------- 编排器 force 重跑 ----------------------
+    /**
+     * 强制重跑:把某日期下 DEAD/FAILED 的任务重置为 PENDING,让 worker 重新认领。
+     * <p>seed 幂等会跳过已存在的任务,但这些任务状态已是终态无法被认领,需先重置。</p>
+     *
+     * @return 重置的任务数
+     */
+    @Update("""
+            UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
+              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              error_msg='force reset by pipeline re-run', updated_at=now()
+            WHERE unique_key LIKE #{like} AND status IN ('DEAD','FAILED')
+            """)
+    int forceResetDeadTasks(@Param("like") String like);
 }
