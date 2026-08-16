@@ -67,3 +67,7 @@ xxl:
       port: 9999
       logpath: ./logs/xxl-job
       logretentiondays: 30
+
+crawler:
+  proxy:
+    agent: qingguo

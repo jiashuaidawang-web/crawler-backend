@@ -24,6 +24,8 @@ crawler:
   ip: 127.0.0.1
   batch: 10
   claim-fixed-delay-ms: 5000
+  proxy:
+    agent: qingguo
 
 anti-crawl:
   rate-limit-per-sec: 5.0

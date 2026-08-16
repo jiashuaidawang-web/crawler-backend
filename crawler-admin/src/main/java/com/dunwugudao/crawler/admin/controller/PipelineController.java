@@ -73,4 +73,35 @@ public class PipelineController {
     public java.util.Map<String, Object> ipStatsAvg(@RequestParam(defaultValue = "7") int days) {
         return ipConsumptionService.avgDailyIps(days);
     }
+
+    /** 按业务统计某日 IP 消耗。 */
+    @GetMapping("/ip-stats/by-stage")
+    public java.util.Map<String, Object> ipStatsByStage(@RequestParam String date) {
+        return ipConsumptionService.statsByStage(java.time.LocalDate.parse(date));
+    }
+
+    /** 测试：手动插入一条 IP 消耗记录（验证 SQL）。 */
+    @PostMapping("/ip-stats/test")
+    public String ipStatsTest() {
+        ipConsumptionService.log("ADMIN", "TEST_STAGE", "TEST_TASK", null, "1.2.3.4:8080", "SUCCESS", 1024, 100L, null, java.time.LocalDate.now());
+        return "logged";
+    }
+
+    /** 测试：查询所有 IP 消耗记录。 */
+    @GetMapping("/ip-stats/all")
+    public java.util.Map<String, Object> ipStatsAll() {
+        return ipConsumptionService.statsByStage(java.time.LocalDate.now());
+    }
+
+    /** 按 consumer_type（ADMIN/WORKER）统计某日 IP 消耗。 */
+    @GetMapping("/ip-stats/by-consumer")
+    public java.util.Map<String, Object> ipStatsByConsumer(@RequestParam String date) {
+        return ipConsumptionService.statsByConsumerType(java.time.LocalDate.parse(date));
+    }
+
+    /** 按代理商统计某日 IP 消耗。 */
+    @GetMapping("/ip-stats/by-agent")
+    public java.util.Map<String, Object> ipStatsByAgent(@RequestParam String date) {
+        return ipConsumptionService.statsByAgent(java.time.LocalDate.parse(date));
+    }
 }

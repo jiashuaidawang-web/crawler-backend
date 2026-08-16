@@ -160,14 +160,14 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         return buildResult(allRows, resp, url);
     }
 
-    /** 北向资金（kamt 实时端点，纯 JSON 非 JSONP，无需 cleanJsonp）。 */
+    /** 北向资金（kamt.rtmin 实时端点，分钟级数据，纯 JSON 非 JSONP）。 */
     private CrawlResult fetchKamt(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
         rateLimiter.acquire();
         String url = spec.buildUrl(params, 0);
         String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
-        // kamt 返回纯 JSON（非 JSONP），直接解析
+        // kamt.rtmin 返回纯 JSON（非 JSONP），直接解析
         JsonNode root = readTree(resp);
-        List<Map<String, Object>> allRows = EastmoneyParsers.parseNorthbound(root, spec, params);
+        List<Map<String, Object>> allRows = EastmoneyParsers.parseNorthboundRtmin(root, spec, params);
         return buildResult(allRows, resp, url);
     }
 

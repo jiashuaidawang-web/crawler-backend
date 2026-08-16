@@ -532,6 +532,7 @@ public class SeedGenerator {
     /** 探测北向分钟级数(kamt data.s2n 数组 size)。 */
     public int fetchNorthboundCount() {
         try {
+            proxyManager.setCurrentContext("NORTHBOUND", "NORTHBOUND", null);
             String url = "http://push2.eastmoney.com/api/qt/kamt.rtmin/get"
                     + "?fields1=f1,f2,f3,f4"
                     + "&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80"
@@ -663,6 +664,7 @@ public class SeedGenerator {
     /** 探测龙虎榜家数(datacenter result.count,pageSize=1 即得真值)。 */
     public int fetchDragonTigerCount(String date) {
         try {
+            proxyManager.setCurrentContext("DRAGON_TIGER", "DRAGON_TIGER", LocalDate.parse(date));
             String dash = date; // date 已是 yyyy-MM-dd
             String filter = "(TRADE_DATE<='" + dash + "')(TRADE_DATE>='" + dash + "')";
             String url = "https://datacenter-web.eastmoney.com/api/data/v1/get"
@@ -1194,6 +1196,7 @@ public class SeedGenerator {
     private int fetchClistTotalByProxy(EastmoneyEndpoints.EndpointSpec spec, String date) {
         String url = buildClistTotalUrl(spec, date);
         try {
+            proxyManager.setCurrentContext(spec.getTaskType(), spec.getTaskType(), LocalDate.parse(date));
             String resp = proxyManager.executeWithRetry(url);
             if (resp == null) {
                 return -1;
@@ -1310,6 +1313,7 @@ public class SeedGenerator {
             EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
             String url = spec.buildUrl(probeParams, 0);
             // 池子响应用 data.tc（非 data.total），故用 POOL_VALIDATOR 识别"502 但数据有效"
+            proxyManager.setCurrentContext(limitType, taskType, LocalDate.parse(date));
             String resp = proxyManager.executeWithRetry(url, ProxyManager.POOL_VALIDATOR);
             if (resp == null) {
                 return -1;

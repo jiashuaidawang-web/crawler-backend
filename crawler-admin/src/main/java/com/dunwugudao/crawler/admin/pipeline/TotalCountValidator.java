@@ -61,6 +61,32 @@ public class TotalCountValidator implements PipelineValidator {
             return ValidateResult.ok(name(), "阶段 " + stage + " 无对应 CK 表,跳过", expected, 0);
         }
 
+        // 指数日线：东财 total 不准确（返回 179 但实际只有 43），改为检查 CK 行数 >= 40
+        if (stage == PipelineStage.INDEX_DAILY) {
+            int actual = countActual(tq, date, ctx.source());
+            if (actual >= 40) {
+                return ValidateResult.ok(name(),
+                        String.format("指数日线 actual(%d) >= 40,数据量满足要求", actual),
+                        actual, actual);
+            }
+            return ValidateResult.fail(name(),
+                    String.format("指数日线 actual(%d) < 40,数据量不足", actual),
+                    40, actual, 0, 40 - actual, List.of());
+        }
+
+        // 北向资金：分钟级数据，检查 CK 行数 >= 300（约 6.5 小时 * 60 分钟）
+        if (stage == PipelineStage.NORTHBOUND) {
+            int actual = countActual(tq, date, ctx.source());
+            if (actual >= 300) {
+                return ValidateResult.ok(name(),
+                        String.format("北向资金 actual(%d) >= 300,数据量满足要求", actual),
+                        actual, actual);
+            }
+            return ValidateResult.fail(name(),
+                    String.format("北向资金 actual(%d) < 300,数据量不足", actual),
+                    300, actual, 0, 300 - actual, List.of());
+        }
+
         // actual:实时查 CK 当前总行数(不是本次 run 新增)
         int actual = countActual(tq, date, ctx.source());
 

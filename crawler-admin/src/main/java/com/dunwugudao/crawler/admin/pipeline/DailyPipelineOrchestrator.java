@@ -44,6 +44,8 @@ public class DailyPipelineOrchestrator {
             PipelineStage.MAIN_FUND_STOCK,
             PipelineStage.MAIN_FUND_BOARD,
             PipelineStage.LIMIT_UP,
+            PipelineStage.LIMIT_DOWN,
+            PipelineStage.LIMIT_ZHABAN,
             PipelineStage.STRONG_POOL,
             PipelineStage.CIXIN_POOL,
             PipelineStage.NORTHBOUND,

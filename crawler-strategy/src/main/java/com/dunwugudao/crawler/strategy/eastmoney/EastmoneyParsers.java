@@ -447,6 +447,68 @@ public final class EastmoneyParsers {
         return rows;
     }
 
+    /**
+     * 北向资金分钟级解析器（kamt.rtmin 端点）。
+     * <p>响应结构：{@code data.{s2n,n2s}} 为逗号分隔的分钟级数据数组。</p>
+     * <p>每行格式：{@code "HH:mm,净流入,买入额,卖出额,累计净流入,状态"}（单位：万元）</p>
+     */
+    public static List<Map<String, Object>> parseNorthboundRtmin(JsonNode root, EastmoneyEndpoints.EndpointSpec spec,
+                                                                  Map<String, Object> params) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        JsonNode data = root.path("data");
+        if (data.isMissingNode() || data.isNull()) {
+            return rows;
+        }
+        String tradeDate = String.valueOf(params.getOrDefault("tradeDate", ""));
+        // s2n: 南向（沪深→港）
+        JsonNode s2n = data.path("s2n");
+        if (s2n.isArray()) {
+            for (JsonNode node : s2n) {
+                String[] parts = node.asText().split(",");
+                if (parts.length >= 6) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("trade_date", tradeDate);
+                    row.put("direction", "s2n");
+                    row.put("time_point", parts[0].trim());
+                    row.put("net_inflow", parseDouble(parts[1]));
+                    row.put("buy_amount", parseDouble(parts[2]));
+                    row.put("sell_amount", parseDouble(parts[3]));
+                    row.put("cumulative_net_inflow", parseDouble(parts[4]));
+                    row.put("status_flag", parseDouble(parts[5]));
+                    rows.add(row);
+                }
+            }
+        }
+        // n2s: 北向（港→沪深）
+        JsonNode n2s = data.path("n2s");
+        if (n2s.isArray()) {
+            for (JsonNode node : n2s) {
+                String[] parts = node.asText().split(",");
+                if (parts.length >= 6) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("trade_date", tradeDate);
+                    row.put("direction", "n2s");
+                    row.put("time_point", parts[0].trim());
+                    row.put("net_inflow", parseDouble(parts[1]));
+                    row.put("buy_amount", parseDouble(parts[2]));
+                    row.put("sell_amount", parseDouble(parts[3]));
+                    row.put("cumulative_net_inflow", parseDouble(parts[4]));
+                    row.put("status_flag", parseDouble(parts[5]));
+                    rows.add(row);
+                }
+            }
+        }
+        return rows;
+    }
+
+    private static Double parseDouble(String s) {
+        try {
+            return Double.parseDouble(s.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // ----------------------------------------------------------------------
     // 工具
     // ----------------------------------------------------------------------

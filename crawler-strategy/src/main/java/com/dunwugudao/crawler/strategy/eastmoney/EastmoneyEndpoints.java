@@ -188,13 +188,13 @@ public final class EastmoneyEndpoints {
                     }
                 }
                 case KAMT: {
-                    // 北向资金 kamt 端点：纯 JSON（非 JSONP），无需 cb / _ 时间戳
-                    String fields1 = "f1,f2,f3,f4";
-                    String fields2 = "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80";
-                    return baseUrl
-                            + "?fields1=" + fields1
-                            + "&fields2=" + fields2
-                            + "&ut=b2884a393a59ad64002292a3e90d46a5";
+                    // 北向资金 kamt.rtmin 端点：分钟级数据（s2n 南向、n2s 北向），纯 JSON（非 JSONP）
+                    String d = (String) params.getOrDefault("tradeDate", "");
+                    return "http://push2.eastmoney.com/api/qt/kamt.rtmin/get"
+                            + "?fields1=f1,f2,f3,f4"
+                            + "&fields2=f51,f52,f53,f54,f55,f56"
+                            + "&ut=b2884a393a59ad64002292a3e90d46a5"
+                            + "&date=" + d;
                 }
                 default:
                     throw new UnsupportedOperationException("buildUrl unsupported parserType for " + taskType);

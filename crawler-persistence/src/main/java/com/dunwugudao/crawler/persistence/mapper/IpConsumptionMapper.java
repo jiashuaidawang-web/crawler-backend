@@ -1,6 +1,7 @@
 package com.dunwugudao.crawler.persistence.mapper;
 
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import java.time.LocalDate;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /** IP 消耗统计 Mapper。 */
+@Mapper
 public interface IpConsumptionMapper {
 
     @Insert("""

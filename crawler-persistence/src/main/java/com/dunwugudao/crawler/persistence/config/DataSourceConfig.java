@@ -134,6 +134,7 @@ public class DataSourceConfig {
 
     // 日批编排状态(openGauss)
     @Bean public MapperFactoryBean<PipelineMapper> pipelineMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, PipelineMapper.class); }
+    @Bean public MapperFactoryBean<IpConsumptionMapper> ipConsumptionMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, IpConsumptionMapper.class); }
 
     // ==================== ClickHouse mapper beans（分析型） ====================
 

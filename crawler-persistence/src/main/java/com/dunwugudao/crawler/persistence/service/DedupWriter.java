@@ -99,6 +99,7 @@ public class DedupWriter {
     private final NorthboundFlowMapper northboundFlowMapper;
     private final NewsEventMapper newsEventMapper;
     private final TradeCalendarMapper tradeCalendarMapper;
+    private final org.springframework.jdbc.core.JdbcTemplate chJdbc;
 
     public DedupWriter(LimitUpPoolMapper limitUpPoolMapper,
                        LimitDownPoolMapper limitDownPoolMapper,
@@ -120,7 +121,8 @@ public class DedupWriter {
                        FinancialMapper financialMapper,
                        NorthboundFlowMapper northboundFlowMapper,
                        NewsEventMapper newsEventMapper,
-                       TradeCalendarMapper tradeCalendarMapper
+                       TradeCalendarMapper tradeCalendarMapper,
+                       @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbc
     ) {
         this.limitUpPoolMapper = limitUpPoolMapper;
         this.limitDownPoolMapper = limitDownPoolMapper;
@@ -143,6 +145,7 @@ public class DedupWriter {
         this.northboundFlowMapper = northboundFlowMapper;
         this.newsEventMapper = newsEventMapper;
         this.tradeCalendarMapper = tradeCalendarMapper;
+        this.chJdbc = chJdbc;
     }
 
 //    @Transactional(rollbackFor = Exception.class)
@@ -388,15 +391,17 @@ public class DedupWriter {
 
     // 5 个池子独立 writer（插在这里，路由调用）
     public void writeLimitUpPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("limit_up_pool", tradeDate, source);
         LocalDate today = LocalDate.now();
         LocalDateTime now = DateTimeUtil.nowSeconds();
         List<LimitUpPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) continue;
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || td == null) continue;
             LimitUpPool e = new LimitUpPool();
-            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            setPoolBaseFields(e, r, td, tsCode, source, srcDetail, today, now);
             e.setFund(bigDec(r.get("fund")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
@@ -405,15 +410,17 @@ public class DedupWriter {
     }
 
     public void writeLimitDownPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("limit_down_pool", tradeDate, source);
         LocalDate today = LocalDate.now();
         LocalDateTime now = DateTimeUtil.nowSeconds();
         List<LimitDownPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) continue;
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || td == null) continue;
             LimitDownPool e = new LimitDownPool();
-            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            setPoolBaseFields(e, r, td, tsCode, source, srcDetail, today, now);
             e.setPe(bigDec(r.get("pe"))); e.setFba(bigDec(r.get("fba")));
             e.setDays(intVal(r.get("days"))); e.setOc(intVal(r.get("oc")));
             batch.add(e);
@@ -422,55 +429,75 @@ public class DedupWriter {
     }
 
     public void writeZhabanPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("zhaban_pool", tradeDate, source);
         LocalDate today = LocalDate.now();
         LocalDateTime now = DateTimeUtil.nowSeconds();
         List<ZhabanPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) continue;
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || td == null) continue;
             ZhabanPool e = new ZhabanPool();
-            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
-            e.setZtp(bigDec(r.get("ztp"))); e.setZf(bigDec(r.get("zf"))); e.setZs(bigDec(r.get("zs")));
-            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            setPoolBaseFields(e, r, td, tsCode, source, srcDetail, today, now);
             batch.add(e);
         }
         insertInChunks(zhabanPoolMapper::batchInsert, batch, "zhaban_pool", source);
     }
 
     public void writeStrongPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("strong_pool", tradeDate, source);
         LocalDate today = LocalDate.now();
         LocalDateTime now = DateTimeUtil.nowSeconds();
         List<StrongPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) continue;
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || td == null) continue;
             StrongPool e = new StrongPool();
-            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
-            e.setZtp(bigDec(r.get("ztp"))); e.setZs(bigDec(r.get("zs"))); e.setNh(intVal(r.get("nh"))); e.setLb(bigDec(r.get("lb")));
-            e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
+            setPoolBaseFields(e, r, td, tsCode, source, srcDetail, today, now);
+            e.setZtp(bigDec(r.get("ztp"))); e.setZs(bigDec(r.get("zs"))); e.setNh(intVal(r.get("nh")));
+            e.setLb(bigDec(r.get("lb")));
             batch.add(e);
         }
         insertInChunks(strongPoolMapper::batchInsert, batch, "strong_pool", source);
     }
 
     public void writeCixinPool(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("cixin_pool", tradeDate, source);
         LocalDate today = LocalDate.now();
         LocalDateTime now = DateTimeUtil.nowSeconds();
         List<CixinPool> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
             String tsCode = str(r.get("ts_code"));
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tsCode == null || tradeDate == null) continue;
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (tsCode == null || td == null) continue;
             CixinPool e = new CixinPool();
-            setPoolBaseFields(e, r, tradeDate, tsCode, source, srcDetail, today, now);
+            setPoolBaseFields(e, r, td, tsCode, source, srcDetail, today, now);
             e.setZtp(bigDec(r.get("ztp"))); e.setOds(intVal(r.get("ods"))); e.setOd(str(r.get("od"))); e.setIpod(str(r.get("ipod")));
             e.setO(intVal(r.get("o"))); e.setNh(intVal(r.get("nh")));
             e.setZttjCt(intVal(r.get("zttj_ct"))); e.setZttjDays(intVal(r.get("zttj_days")));
             batch.add(e);
         }
         insertInChunks(cixinPoolMapper::batchInsert, batch, "cixin_pool", source);
+    }
+
+    /** 提取 rows 中第一条的 trade_date（用于删除旧数据）。 */
+    private LocalDate extractTradeDate(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) return null;
+        return toLocalDate(rows.get(0).get("trade_date"));
+    }
+
+    /** 写入前删除该日期+数据源的旧数据，避免累积。 */
+    private void deleteOldPoolData(String table, LocalDate tradeDate, SourceType source) {
+        try {
+            String sql = "ALTER TABLE " + table + " DELETE WHERE trade_date = ? AND data_source = ?";
+            chJdbc.update(sql, tradeDate.toString(), source.getCode());
+        } catch (Exception e) {
+            log.warn("[DedupWriter] 删除旧数据失败 table={} date={}: {}", table, tradeDate, e.getMessage());
+        }
     }
 
     /** 设置 5 个池子实体的公共字段。 */
@@ -711,26 +738,32 @@ public class DedupWriter {
         insertInChunks(financialMapper::batchInsert, batch, "financial", source);
     }
 
-    /** 写入北向资金（northbound_flow）。 */
+    /** 写入北向/南向资金分钟级数据（northbound_flow）。 */
     public void writeNorthboundFlow(List<Map<String, Object>> rows, SourceType source, String srcDetail) {
+        LocalDate tradeDate = extractTradeDate(rows);
+        if (tradeDate != null) deleteOldPoolData("northbound_flow", tradeDate, source);
         LocalDateTime now = DateTimeUtil.nowSeconds();
         LocalDate today = LocalDate.now();
         List<NorthboundFlow> batch = new ArrayList<>(rows.size());
         for (Map<String, Object> r : rows) {
-            LocalDate tradeDate = toLocalDate(r.get("trade_date"));
-            if (tradeDate == null) {
+            LocalDate td = toLocalDate(r.get("trade_date"));
+            if (td == null) {
                 log.warn("skip northbound_flow row missing trade_date: {}", r);
                 continue;
             }
             NorthboundFlow e = new NorthboundFlow();
-            e.setTradeDate(tradeDate);
-            e.setHkHoldNet(bigDec(r.get("hk_hold_net")));
-            e.setShNet(bigDec(r.get("sh_net")));
-            e.setSzNet(bigDec(r.get("sz_net")));
+            e.setTradeDate(td);
             e.setDataSource(source.getCode());
+            e.setDirection(str(r.get("direction")));
+            e.setTimePoint(str(r.get("time_point")));
+            e.setNetInflow(bigDec(r.get("net_inflow")));
+            e.setBuyAmount(bigDec(r.get("buy_amount")));
+            e.setSellAmount(bigDec(r.get("sell_amount")));
+            e.setCumulativeNetInflow(bigDec(r.get("cumulative_net_inflow")));
+            e.setStatusFlag(bigDec(r.get("status_flag")));
             e.setSrcDetail(srcDetail);
             e.setCreateDate(today);
-            e.setUpdateDate(now);
+            e.setUpdateDate(now != null ? now : LocalDateTime.now());
             batch.add(e);
         }
         insertInChunks(northboundFlowMapper::batchInsert, batch, "northbound_flow", source);
