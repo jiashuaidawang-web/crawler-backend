@@ -124,9 +124,11 @@ public final class EastmoneyEndpoints {
                     // 完整 push2 模板(用户实测 2026-08-04)：域名/协议/参数一个不少,避免被识别为爬虫
                     long ts = generateTs();
                     String cb = generateCb();
+                    // 支持自定义 pz(默认 100),用于全量拉取板块列表
+                    int pz = parseInt(params.getOrDefault("pz", 100), 100);
                     return "http://83.push2.eastmoney.com/api/qt/clist/get"
                             + "?cb=" + cb
-                            + "&pn=" + pn + "&pz=100&po=1&np=1"
+                            + "&pn=" + pn + "&pz=" + pz + "&po=1&np=1"
                             + "&ut=bd1d9ddb04089700cf9c27f6f7426281"
                             + "&fltt=2&invt=2"
                             + "&fid=f3"

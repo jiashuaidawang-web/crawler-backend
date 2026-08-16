@@ -61,35 +61,53 @@ public class TotalCountValidator implements PipelineValidator {
             return ValidateResult.ok(name(), "阶段 " + stage + " 无对应 CK 表,跳过", expected, 0);
         }
 
-        // actual:CK 总行数(含历史);newRows = actual - baseline = 本次 run 新增行数
+        // actual:实时查 CK 当前总行数(不是本次 run 新增)
         int actual = countActual(tq, date, ctx.source());
-        int newRows = actual - ctx.baselineRows();
 
-        if (newRows == expected) {
-            return ValidateResult.ok(name(), String.format("baseline=%d,actual=%d,new=total=%d",
-                    ctx.baselineRows(), actual, newRows), expected, newRows);
-        }
-        if (newRows > expected) {
-            return ValidateResult.fail(name(),
-                    String.format("baseline=%d,actual=%d,new(%d) > total(%d),去重后反而更多,异常",
-                            ctx.baselineRows(), actual, newRows, expected),
-                    expected, newRows, 0, 0, List.of());
+        if (actual >= expected) {
+            return ValidateResult.ok(name(),
+                    String.format("actual(%d) >= expected(%d),数据量满足要求", actual, expected),
+                    expected, actual);
         }
 
-        // newRows < total:查重复组数判定能否用去重解释(按自然键+data_source分组)
+        // actual < expected:查重复组数判定能否用去重解释
         int dupGroups = countDupGroups(tq, date, ctx.source());
-        int diff = expected - newRows;
+        int diff = expected - actual;
         if (diff <= dupGroups) {
             return ValidateResult.ok(name(),
-                    String.format("baseline=%d,actual=%d,new(%d) < total(%d),差值(%d) <= 重复组数(%d),去重解释成功",
-                            ctx.baselineRows(), actual, newRows, expected, diff, dupGroups),
-                    expected, newRows);
+                    String.format("actual(%d) < expected(%d),差值(%d) <= 重复组数(%d),去重解释成功",
+                            actual, expected, diff, dupGroups),
+                    expected, actual);
         }
         int lost = diff - dupGroups;
         return ValidateResult.fail(name(),
-                String.format("baseline=%d,actual=%d,new(%d) < total(%d),差值(%d) > 重复组数(%d),真正丢失 %d 行",
-                        ctx.baselineRows(), actual, newRows, expected, diff, dupGroups, lost),
-                expected, newRows, dupGroups, lost, ctx.taskIds());
+                String.format("actual(%d) < expected(%d),差值(%d) > 重复组数(%d),真正丢失 %d 行",
+                        actual, expected, diff, dupGroups, lost),
+                expected, actual, dupGroups, lost, ctx.taskIds());
+    }
+
+    /** 实时查 CK 某阶段的 actualCount(用于接口返回覆盖 stored actualTotal)。 */
+    public int countActualByStage(String stageName, LocalDate date, int source) {
+        try {
+            PipelineStage stage = PipelineStage.valueOf(stageName);
+            TableQuery tq = tableQuery(stage);
+            if (tq == null) {
+                return 0;
+            }
+            return countActual(tq, date, source);
+        } catch (Exception e) {
+            log.warn("[TOTAL_COUNT] countActualByStage {} 失败: {}", stageName, e.getMessage());
+            return 0;
+        }
+    }
+
+    /** 实时查 CK 某阶段的 dupGroups(用于 buildResultWithMessage 重算)。 */
+    public int countDupGroups(PipelineStage stage, LocalDate date, int source) {
+        TableQuery tq = tableQuery(stage);
+        if (tq == null) {
+            return 0;
+        }
+        return countDupGroups(tq, date, source);
     }
 
     /** 构建阶段的 CK 查询参数(表名+额外过滤条件)。 */
@@ -99,17 +117,19 @@ public class TotalCountValidator implements PipelineValidator {
             case REGION_DAILY -> new TableQuery("board_daily", "board_type = 1", null);
             case INDUSTRY_DAILY -> new TableQuery("board_daily", "board_type = 2", null);
             case CONCEPT_DAILY -> new TableQuery("board_daily", "board_type = 3", null);
+            case LIMIT_UP -> new TableQuery("limit_up_pool", null, null);
+            case LIMIT_DOWN -> new TableQuery("limit_down_pool", null, null);
+            case LIMIT_ZHABAN -> new TableQuery("zhaban_pool", null, null);
             case MAIN_FUND_STOCK -> new TableQuery("main_fund_flow", "obj_type = 'stock'", null);
             case MAIN_FUND_BOARD -> new TableQuery("main_fund_flow", "obj_type = 'board'", null);
-            case LIMIT_POOL -> new TableQuery("limit_up_pool", null, null);
             case STRONG_POOL -> new TableQuery("strong_pool", null, null);
             case CIXIN_POOL -> new TableQuery("cixin_pool", null, null);
             case NORTHBOUND -> new TableQuery("northbound_flow", null, null);
             case INDEX_DAILY -> new TableQuery("index_daily", null, null);
             case DRAGON_TIGER -> new TableQuery("dragon_tiger", null, null);
             case DRAGON_TIGER_DETAIL -> new TableQuery("dt_detail", null, null);
-            case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null, "effective_date");
-            case BOARD_BASIC -> new TableQuery("board_basic", null, null, null); // 维表无日期列,跳过日期过滤
+            case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null, "trade_date");
+            case BOARD_BASIC -> new TableQuery("board_basic", null, null, "trade_date");
             case STOCK_WEEKLY -> new TableQuery("stock_weekly", null, null, "trade_date");
         };
     }

@@ -1,5 +1,6 @@
 package com.dunwugudao.crawler.admin.seed;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.dunwugudao.crawler.admin.pipeline.SeedResult;
 import com.dunwugudao.crawler.admin.service.BoardBasicService;
 import com.dunwugudao.crawler.core.model.SourceType;
@@ -30,8 +31,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -125,7 +128,15 @@ public class SeedGenerator {
         this.stockDailyNowStockSize = Integer.parseInt(env.getProperty("stock-daily.now-stock-size", "5545"));
     }
 
-    /**
+    /** BOARD_BASIC 最近一次运行发现的新板块(供 STOCK_BY_BOARD 使用)。 */
+    private final List<String> newBoardCodesFromLastRun = new ArrayList<>();
+
+    /** 获取 BOARD_BASIC 最近一次运行发现的新板块。 */
+    public List<String> getNewBoardCodesFromLastRun() {
+        return newBoardCodesFromLastRun;
+    }
+
+
     /** 单个交易日的市场级 + 逐券种子（dailyCloseSeed 用）。 */
     public int dailySeed(String date, int source) {
         // board_basic 改为 board_daily 同步的副作用维护，不再单独 maintain（见 BoardBasicSyncService）
@@ -268,7 +279,6 @@ public class SeedGenerator {
 
     // ========================================================================
     // 板块基础维表（board_basic）—— 独立抓取，不依赖 board_daily 副作用
-    // 模式与 STOCK_DAILY 一致：探测 total → 按页拆分（cap 10 页）→ params={tradeDate,pn}
     // ========================================================================
 
     /** REGION_BOARD 单独处理（地域板块基础维表，board_type=1） */
@@ -287,33 +297,141 @@ public class SeedGenerator {
     }
 
     /**
-     * 板块基础维表通用 seed：与 STOCK_DAILY 同模式。
-     * <p>探测 total → ceil(total/100) → cap 10 页 → params={tradeDate,pn}。
-     * params 不带 boardType（board_type 由 worker 按 taskType 映射）。</p>
+     * 板块基础维表通用 seed：智能验证,只在市场板块数变化时才抓取。
+     * <p>逻辑:<br>
+     * 1. 查东财市场当前总数(1 IP) vs 昨天库中板块数(SQL)<br>
+     * 2. 一样 → 跳过(0 IP);不一样 → 继续<br>
+     * 3. 拉东财全量板块集合(1 IP) vs 库中集合(SQL) → 内存差集 = 新增板块<br>
+     * 4. 只发新增板块的任务(通常 0-5 个)</p>
      */
     private int seedBoardBasic(String taskType, int source, String date) {
         EastmoneyEndpoints.EndpointSpec spec = EastmoneyEndpoints.get(taskType);
-        int total = fetchClistTotalByProxy(spec, date);
-        if (total <= 0) {
-            log.warn("[seedBoardBasic] taskType={} 探测无数据({})，跳过", taskType, total);
+
+        // Step 1: 查东财市场当前总数(1 IP)
+        int marketTotal = fetchClistTotalByProxy(spec, date);
+        if (marketTotal <= 0) {
+            log.warn("[seedBoardBasic] taskType={} 市场探测无数据({})，跳过", taskType, marketTotal);
             return 0;
         }
-        int pageSize = 100;
-        int totalPages = (total + pageSize - 1) / pageSize;
-        int maxPages = 10;                                  // 板块基础 cap 10 页
-        if (totalPages > maxPages) {
-            log.info("[seedBoardBasic] taskType={} total={} pages={} → cap {}", taskType, total, totalPages, maxPages);
-            totalPages = maxPages;
+
+        // Step 2: 查昨天库中板块数(0 IP,纯 SQL)
+        int yesterdayDbCount = countBoardBasicByType(taskType, source, date);
+
+        // Step 3: 比较,一样则跳过
+        if (marketTotal == yesterdayDbCount) {
+            log.info("[seedBoardBasic] taskType={} 市场总数({})与库中昨日({})一致,无需更新,跳过", taskType, marketTotal, yesterdayDbCount);
+            return 0;
         }
+
+        log.info("[seedBoardBasic] taskType={} 市场总数({})与库中昨日({})不一致,需要更新", taskType, marketTotal, yesterdayDbCount);
+
+        // Step 4: 拉东财全量板块代码(1 IP)
+        Set<String> marketCodes = fetchAllBoardCodes(spec, date);
+        if (marketCodes.isEmpty()) {
+            log.warn("[seedBoardBasic] taskType={} 拉全量板块为空,跳过", taskType);
+            return 0;
+        }
+
+        // Step 5: 查库中已有板块集合(0 IP,纯 SQL)
+        Set<String> dbCodes = selectBoardCodesByType(taskType, source);
+
+        // Step 6: 内存差集 = 新增板块
+        Set<String> newCodes = new HashSet<>(marketCodes);
+        newCodes.removeAll(dbCodes);
+        // 记录新板块,供 STOCK_BY_BOARD 使用
+        if (!newCodes.isEmpty()) {
+            newBoardCodesFromLastRun.addAll(newCodes);
+        }
+
+        log.info("[seedBoardBasic] taskType={} 市场{}个,库中{}个,新增{}个", taskType, marketCodes.size(), dbCodes.size(), newCodes.size());
+
+        if (newCodes.isEmpty()) {
+            return 0;
+        }
+
+        // Step 7: 只发新增板块的任务
         int inserted = 0;
-        for (int pn = 1; pn <= totalPages; pn++) {
-            String params = TaskTypeCatalog.buildPageParams(date, pn);   // {"tradeDate":date,"pn":pn}
-            CrawlTask task = buildTask(taskType, source, date, null, null, params);
-            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn));
-            inserted += mapper.insertIfAbsent(task);
+        int pageSize = 100;
+        int maxPages = 10;
+        for (String boardCode : newCodes) {
+            int totalPages = (marketTotal + pageSize - 1) / pageSize;
+            if (totalPages > maxPages) {
+                totalPages = maxPages;
+            }
+            for (int pn = 1; pn <= totalPages; pn++) {
+                String params = TaskTypeCatalog.buildPageParams(date, pn);
+                CrawlTask task = buildTask(taskType, source, date, null, null, params);
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, pn) + "|" + boardCode);
+                inserted += mapper.insertIfAbsent(task);
+            }
         }
-        log.info("[seedBoardBasic] taskType={} total={} pages={} inserted={}", taskType, total, totalPages, inserted);
+
+        log.info("[seedBoardBasic] taskType={} 新增{}个板块,下发{}个任务", taskType, newCodes.size(), inserted);
         return inserted;
+    }
+
+    /**
+     * 查某类板块在库中 trade_date=昨天的数量(用于比较)。
+     */
+    private int countBoardBasicByType(String taskType, int source, String date) {
+        int boardType = mapTaskTypeToBoardType(taskType);
+        // 用库里最新的 trade_date(不一定是昨天,可能是上周五等)
+        String latestDate = boardBasicMapper.selectLatestTradeDate(boardType, source);
+        if (latestDate == null) {
+            return 0;
+        }
+        return boardBasicMapper.countByBoardTypeAndTradeDate(boardType, source, latestDate);
+    }
+
+    /**
+     * 查某类板块在库中所有 board_code 集合(用于差集比较)。
+     */
+    private Set<String> selectBoardCodesByType(String taskType, int source) {
+        int boardType = mapTaskTypeToBoardType(taskType);
+        return new HashSet<>(boardBasicMapper.selectBoardCodesByType(boardType, source));
+    }
+
+    /**
+     * 将 taskType 映射到 board_type: REGION_BOARD→1, INDUSTRY_BOARD→2, CONCEPT_BOARD→3。
+     */
+    private int mapTaskTypeToBoardType(String taskType) {
+        return switch (taskType) {
+            case "REGION_BOARD" -> 1;
+            case "INDUSTRY_BOARD" -> 2;
+            case "CONCEPT_BOARD" -> 3;
+            default -> throw new IllegalArgumentException("未知板块类型: " + taskType);
+        };
+    }
+
+    /**
+     * 拉取东财某类板块的全量 board_code 集合(1 次请求,大 pageSize)。
+     */
+    private Set<String> fetchAllBoardCodes(EastmoneyEndpoints.EndpointSpec spec, String date) {
+        Set<String> codes = new HashSet<>();
+        // 用大 pageSize 一次拿全量(避免分页)
+        Map<String, Object> params = new HashMap<>();
+        params.put("tradeDate", date);
+        params.put("pz", 1000);
+        String url = spec.buildUrl(params, 1);  // pn=1
+        try {
+            String proxy = proxyManager.acquireProxy();
+            String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            resp = cleanJsonp(resp);  // 处理 JSONP 包裹(jQuery123(...))
+            JsonNode root = objectMapper.readTree(resp);
+            JsonNode diff = root.path("data").path("diff");
+            if (diff.isArray()) {
+                for (JsonNode node : diff) {
+                    String code = node.path("f12").asText();
+                    if (code != null && !code.isBlank()) {
+                        codes.add(code);
+                    }
+                }
+            }
+            log.info("[fetchAllBoardCodes] url={}, got {} codes", url, codes.size());
+        } catch (Exception e) {
+            log.warn("[fetchAllBoardCodes] 拉全量板块失败: {}", e.getMessage());
+        }
+        return codes;
     }
 
     /**
@@ -645,6 +763,12 @@ public class SeedGenerator {
                 deduped.add(b);
             }
         }
+        // 高频探测告警:全量探测消耗 IP 多,提醒检查是否有优化空间
+        if (deduped.size() > 50) {
+            log.warn("[seedByBoard] 将全量探测 {} 个板块,预计消耗 {} IP(每个板块 1 次探测),建议检查是否有优化空间",
+                    deduped.size(), deduped.size());
+        }
+
         int total = 0;
         for (BoardBasic b : deduped) {
             // 先请求一次（pz=1）拿 total，计算页数
@@ -678,17 +802,155 @@ public class SeedGenerator {
      */
     public SeedResult seedByBoardResult(int source, String date,
                                         int todayStockCount, int todayBoardCount,
-                                        int yesterdayStockCount, int yesterdayBoardCount) {
+                                        int yesterdayStockCount, int yesterdayBoardCount,
+                                        List<String> newBoardCodes,
+                                        List<String> newStockCodes) {
+        // 股票数+板块数都没变 → 跳过(0 IP)
         if (yesterdayStockCount > 0 && yesterdayBoardCount > 0
                 && todayStockCount == yesterdayStockCount
                 && todayBoardCount == yesterdayBoardCount) {
             return SeedResult.empty(String.format(
                     "股票数(%d)和板块数(%d)与昨日相同,跳过省 IP", todayStockCount, todayBoardCount));
         }
-        int inserted = seedByBoard(source, date);
+        int inserted = 0;
+        // 板块变了:只处理新增的板块
+        if (newBoardCodes != null && !newBoardCodes.isEmpty()) {
+            inserted += seedByBoardForNewBoards(source, date, newBoardCodes);
+        }
+        // 股票变了:查新增股票所属板块,只发这些关联任务
+        if (newStockCodes != null && !newStockCodes.isEmpty()) {
+            inserted += seedByBoardForNewStocks(source, date, newStockCodes);
+        }
+        // 有昨日数据但无增量信息 → 说明数据没变但计数不同(可能CK重复行等),全量但打警告
+        if ((newBoardCodes == null || newBoardCodes.isEmpty())
+                && (newStockCodes == null || newStockCodes.isEmpty())) {
+            if (yesterdayStockCount > 0 || yesterdayBoardCount > 0) {
+                log.warn("[seedByBoardResult] 今日(stock={},board={})与昨日(stock={},board={})不一致,但无增量信息,全量探测",
+                        todayStockCount, todayBoardCount, yesterdayStockCount, yesterdayBoardCount);
+            }
+            inserted = seedByBoard(source, date);
+        }
         return new SeedResult(inserted, 0, List.of(),
                 String.format("STOCK_BOARD_REL 下发 %d 个任务", inserted));
     }
+
+    /**
+     * 对新增的股票,查其所属板块,只发这些关联任务(省 IP)。
+     * <p>1 只新股票 = 1 次 datacenter API = 拿到全量板块。</p>
+     */
+    private int seedByBoardForNewStocks(int source, String date, List<String> newStockCodes) {
+        int total = 0;
+        for (String secCode : newStockCodes) {
+            // 调 datacenter API 拿该股票所属的所有板块(1 IP)
+            List<StockBoardInfo> boards = fetchBoardsByStock(secCode, date);
+            if (boards.isEmpty()) {
+                continue;
+            }
+            // 对每个关联的板块,按页拆任务
+            for (StockBoardInfo board : boards) {
+                int totalPages = 10;  // 默认 10 页
+                for (int pn = 1; pn <= totalPages; pn++) {
+                    String params = TaskTypeCatalog.buildParams(
+                            "STOCK_BY_BOARD", date, null, null,
+                            board.boardCode(), board.boardName(), board.boardType());
+                    String paramsWithPn = appendPnToParams(params, pn);
+                    CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+                    task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn)
+                            + "|" + board.boardCode() + "|" + secCode);
+                    total += mapper.insertIfAbsent(task);
+                }
+            }
+        }
+        log.info("[seedByBoardForNewStocks] date={} newStocks={} inserted={}", date, newStockCodes.size(), total);
+        return total;
+    }
+
+    /**
+     * 只对新增的板块下发 STOCK_BY_BOARD 任务(省 IP)。
+     * <p>常规变更只有 1-2 个新板块,只需 1-2 次探测,不是全量 ~1031 次。</p>
+     */
+    private int seedByBoardForNewBoards(int source, String date, List<String> newBoardCodes) {
+        int total = 0;
+        for (String boardCode : newBoardCodes) {
+            // 查该板块信息(boardType/boardName)
+            BoardBasic boardInfo = boardBasicMapper.selectOneByBoardCode(boardCode);
+            // 探测该板块的股票总数(1 IP per new board)
+            int totalCount = fetchBoardStockTotal(boardCode, date);
+            int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
+            for (int pn = 1; pn <= totalPages; pn++) {
+                String params = TaskTypeCatalog.buildParams(
+                        "STOCK_BY_BOARD", date, null, null,
+                        boardCode, boardInfo != null ? boardInfo.getBoardName() : null,
+                        boardInfo != null ? boardInfo.getBoardType() : null);
+                String paramsWithPn = appendPnToParams(params, pn);
+                CrawlTask task = buildTask("STOCK_BY_BOARD", source, date, null, null, paramsWithPn);
+                task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + boardCode);
+                total += mapper.insertIfAbsent(task);
+            }
+        }
+        log.info("[seedByBoardForNewBoards] date={} newBoards={} inserted={}", date, newBoardCodes.size(), total);
+        return total;
+    }
+
+    /** 单只股票所属的板块信息。 */
+    public record StockBoardInfo(String boardCode, String boardName, int boardType) {}
+
+    /**
+     * 通过东财 datacenter API 查询某只股票所属的所有板块。
+     * <p>接口: http://datacenter.eastmoney.com/securities/api/data/get?type=RPT_F10_CORETHEME_BOARDTYPE<br>
+     * 返回: NEW_BOARD_CODE=板块代码, BOARD_NAME=板块名称, BOARD_TYPE=板块类型(行业→2, 板块→1, 空→3)</p>
+     *
+     * @param secCode 股票代码(带市场后缀, 如 "600519.SH")
+     * @param date    交易日
+     * @return 该股票所属的所有板块列表; 失败返回空列表
+     */
+    public List<StockBoardInfo> fetchBoardsByStock(String secCode, String date) {
+        List<StockBoardInfo> boards = new ArrayList<>();
+        try {
+            // 拼接 filter: (SECUCODE="600519.SH")
+            String filter = "(SECUCODE=\"" + secCode + "\")";
+            String encodedFilter = URLEncoder.encode(filter, StandardCharsets.UTF_8);
+
+            String url = "http://datacenter.eastmoney.com/securities/api/data/get"
+                    + "?type=RPT_F10_CORETHEME_BOARDTYPE"
+                    + "&sty=ALL"
+                    + "&filter=" + encodedFilter
+                    + "&p=1&ps=&sr=1&st=BOARD_RANK"
+                    + "&source=HSF10&client=PC"
+                    + "&v=0";
+
+            String proxy = proxyManager.acquireProxy();
+            String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            resp = cleanJsonp(resp);  // 处理 JSONP 包裹(jQuery123(...))
+            JsonNode root = objectMapper.readTree(resp);
+            JsonNode dataArray = root.path("data");
+            if (dataArray.isArray()) {
+                for (JsonNode node : dataArray) {
+                    String boardCode = node.path("NEW_BOARD_CODE").asText();
+                    String boardName = node.path("BOARD_NAME").asText();
+                    String boardTypeStr = node.path("BOARD_TYPE").asText();
+                    if (boardCode == null || boardCode.isBlank()) {
+                        continue;
+                    }
+                    // BOARD_TYPE: 行业→2, 板块(地域)→1, 空(概念)→3
+                    int boardType;
+                    if (boardTypeStr == null || boardTypeStr.isBlank()) {
+                        boardType = 3;  // 概念
+                    } else if (boardTypeStr.contains("行业")) {
+                        boardType = 2;
+                    } else {
+                        boardType = 1;  // 地域/板块
+                    }
+                    boards.add(new StockBoardInfo(boardCode, boardName, boardType));
+                }
+            }
+            log.info("[fetchBoardsByStock] secCode={}, got {} boards", secCode, boards.size());
+        } catch (Exception e) {
+            log.warn("[fetchBoardsByStock] secCode={} 查询失败: {}", secCode, e.getMessage());
+        }
+        return boards;
+    }
+
 
     /**
      * 只跑单个板块的 STOCK_BY_BOARD（端到端测试用）。
@@ -775,6 +1037,7 @@ public class SeedGenerator {
         try {
             String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            resp = cleanJsonp(resp);  // 处理 JSONP 包裹(jQuery123(...))
             String cleaned = cleanJsonp(resp);
             JsonNode root = objectMapper.readTree(cleaned);
             int total = root.path("data").path("total").asInt(0);
@@ -804,6 +1067,7 @@ public class SeedGenerator {
             String url = spec.buildUrl(probeParams, 0);
             String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            resp = cleanJsonp(resp);  // 处理 JSONP 包裹(jQuery123(...))
             String cleaned = cleanJsonp(resp);
             JsonNode root = objectMapper.readTree(cleaned);
             int tc = root.path("data").path("tc").asInt(-1);
@@ -884,6 +1148,7 @@ public class SeedGenerator {
         try {
             String proxy = proxyManager.acquireProxy();
             String resp = eastmoneyClient.get(url, randomUa(), proxy);
+            resp = cleanJsonp(resp);  // 处理 JSONP 包裹(jQuery123(...))
             String cleaned = cleanJsonp(resp);
             JsonNode root = objectMapper.readTree(cleaned);
             int total = root.path("data").path("total").asInt(-1);
@@ -1010,7 +1275,7 @@ public class SeedGenerator {
     }
 
     /** 池子种子,返回 SeedResult(含上游总数 tc)。 */
-    private SeedResult seedPoolTasksSingleResult(String limitType, int source, String date) {
+    public SeedResult seedPoolTasksSingleResult(String limitType, int source, String date) {
         int tc = fetchPoolTotalByProxy(limitType, date);
         int numTasks;
         if (tc <= 0) {

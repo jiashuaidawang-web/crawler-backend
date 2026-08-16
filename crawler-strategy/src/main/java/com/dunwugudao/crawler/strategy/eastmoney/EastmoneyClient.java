@@ -48,7 +48,7 @@ public class EastmoneyClient {
      */
     public String get(String url, String ua, String proxy) {
         OkHttpClient client = proxy != null && !proxy.isBlank()
-                ? proxyClientCache.computeIfAbsent(proxy, EastmoneyClient::buildProxyClient)
+                ? proxyClientCache.computeIfAbsent(proxy, this::buildProxyClient)
                 : BASE_CLIENT;
 
         Request request = new Request.Builder()
@@ -86,7 +86,7 @@ public class EastmoneyClient {
      *   - "http://user:pass@ip:port"
      *   - "socks5://user:pass@ip:port"
      */
-    private static OkHttpClient buildProxyClient(String proxyStr) {
+    private OkHttpClient buildProxyClient(String proxyStr) {
         // 解析协议
         String scheme = "http";
         String rest = proxyStr;

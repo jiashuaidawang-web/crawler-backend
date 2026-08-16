@@ -129,4 +129,33 @@ public interface CrawlTaskMapper {
             WHERE unique_key LIKE #{like} AND status IN ('DEAD','FAILED')
             """)
     int forceResetDeadTasks(@Param("like") String like);
+
+    /**
+     * 重置某日期前缀下指定状态的任务为 PENDING(用于手动重试失败阶段)。
+     *
+     * @param like      unique_key LIKE 前缀(如 "LIMIT_UP|1|2026-08-14%")
+     * @param statuses  要重置的状态列表
+     * @return 重置的任务数
+     */
+    @Update("""
+            <script>
+            UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
+              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              error_msg='manual retry by user', updated_at=now()
+            WHERE unique_key LIKE #{like}
+              AND status IN
+              <foreach collection='statuses' item='s' open='(' separator=',' close=')'>
+                #{s}
+              </foreach>
+            </script>
+            """)
+    int resetTasksByStatus(@Param("like") String like, @Param("statuses") List<String> statuses);
+
+    /** 统计某日期前缀下各状态任务数(用于展示失败任务分布) */
+    @Select("""
+            SELECT status, count(*) AS cnt FROM crawl_task
+            WHERE unique_key LIKE #{like}
+            GROUP BY status
+            """)
+    List<java.util.Map<String, Object>> countByStatusForLike(@Param("like") String like);
 }

@@ -2,17 +2,23 @@ package com.dunwugudao.crawler.admin.controller;
 
 import com.dunwugudao.crawler.admin.pipeline.DailyPipelineOrchestrator;
 import com.dunwugudao.crawler.admin.pipeline.PipelineRunResult;
+import com.dunwugudao.crawler.persistence.entity.PipelineRun;
+import com.dunwugudao.crawler.persistence.entity.PipelineStageRecord;
+import com.dunwugudao.crawler.persistence.service.IpConsumptionService;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
-/** 日批编排 REST(一键跑批 / 断点续跑 / 查状态)。 */
+/** 日批编排 REST(一键跑批 / 断点续跑 / 查状态 / 历史 run / 重试失败阶段)。 */
 @RestController
 @RequestMapping("/api/job/pipeline")
 public class PipelineController {
 
     private final DailyPipelineOrchestrator orchestrator;
+    private final IpConsumptionService ipConsumptionService;
 
-    public PipelineController(DailyPipelineOrchestrator orchestrator) {
+    public PipelineController(DailyPipelineOrchestrator orchestrator, IpConsumptionService ipConsumptionService) {
         this.orchestrator = orchestrator;
+        this.ipConsumptionService = ipConsumptionService;
     }
 
     /** 幂等跑批:跑完全日批。date 缺省=今天。 */
@@ -29,10 +35,42 @@ public class PipelineController {
         return orchestrator.resume(d);
     }
 
-    /** 查某日跑批状态。 */
+    /** 查某日最新跑批状态。 */
     @GetMapping("/status")
     public PipelineRunResult status(@RequestParam(required = false) String date) {
         String d = (date == null || date.isBlank()) ? java.time.LocalDate.now().toString() : date;
         return orchestrator.status(d);
+    }
+
+    /** 查某日某次 run 详情(用于历史 run)。date 仅用于返回展示,实际按 runId 查。 */
+    @GetMapping("/status/{runId}")
+    public PipelineRunResult statusByRunId(@PathVariable Long runId, @RequestParam(required = false) String date) {
+        String d = (date == null || date.isBlank()) ? java.time.LocalDate.now().toString() : date;
+        return orchestrator.statusByRunId(d, runId);
+    }
+
+    /** 列出某日所有 run(历史跑批,最新在前)。 */
+    @GetMapping("/runs")
+    public List<PipelineRun> runs(@RequestParam(required = false) String date) {
+        String d = (date == null || date.isBlank()) ? java.time.LocalDate.now().toString() : date;
+        return orchestrator.history(d);
+    }
+
+    /** 手动重试某次跑批中失败的阶段。返回该阶段重试后的最新状态(含 userMessage)。 */
+    @PostMapping("/retry-stage")
+    public PipelineStageRecord retryStage(@RequestParam String date, @RequestParam String stage) {
+        return orchestrator.retryStage(date, stage);
+    }
+
+    /** 诊断失败阶段:判断是 seed 不完整 / task 失败 / 引擎去重。 */
+    @GetMapping("/diagnose-stage")
+    public java.util.Map<String, Object> diagnoseStage(@RequestParam String date, @RequestParam String stage) {
+        return orchestrator.diagnoseStage(date, stage);
+    }
+
+    /** 近 N 天平均 IP 消耗（采购预测）。 */
+    @GetMapping("/ip-stats/avg")
+    public java.util.Map<String, Object> ipStatsAvg(@RequestParam(defaultValue = "7") int days) {
+        return ipConsumptionService.avgDailyIps(days);
     }
 }

@@ -31,12 +31,6 @@ public class WorkerProxyManager {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerProxyManager.class);
 
-    /** 默认单 worker 最大代理获取次数（超过后停止换新 IP，避免烧完代理池）。 */
-    private static final int DEFAULT_MAX_PROXY_FETCH_ATTEMPTS = 3;
-
-    /** 当前 worker 最大代理获取次数（<=0 表示无限制，用于长效自动换 IP 代理）。 */
-    private final int maxProxyFetchAttempts;
-
     /** 当前 IP（所有线程共享）。 */
     private final AtomicReference<String> currentProxy = new AtomicReference<>();
 
@@ -59,7 +53,7 @@ public class WorkerProxyManager {
     private boolean circuitBreakerOpen = false;
 
     /** 连续失败熔断阈值。当连续失败达到此值，说明代理池整体被封禁，停止浪费 IP。 */
-    private static final int CIRCUIT_BREAKER_THRESHOLD = 6;
+    private static final int CIRCUIT_BREAKER_THRESHOLD = 20;
 
     /** 熔断器自动半开时间（毫秒）— 10 分钟后尝试恢复。 */
     private static final long CIRCUIT_BREAKER_RESET_MS = 10 * 60 * 1000L;
@@ -73,28 +67,16 @@ public class WorkerProxyManager {
     /** 是否已永久停止(代理池永久失效,需人工在监控页面手动重置)。 */
     private boolean permanentlyStopped = false;
 
-    /** 获取新 IP 的尝试次数（超过 maxProxyFetchAttempts 后停止换新）。 */
-    private final AtomicInteger fetchAttemptCount = new AtomicInteger(0);
-
     public WorkerProxyManager(Supplier<String> proxySupplier) {
-        this(proxySupplier, DEFAULT_MAX_PROXY_FETCH_ATTEMPTS);
-    }
-
-    /**
-     * @param proxySupplier        代理提供者
-     * @param maxProxyFetchAttempts 最大获取次数（<=0 表示无限制，适合长效自动换 IP 的代理）
-     */
-    public WorkerProxyManager(Supplier<String> proxySupplier, int maxProxyFetchAttempts) {
         this.proxySupplier = proxySupplier;
-        this.maxProxyFetchAttempts = maxProxyFetchAttempts;
     }
 
     /**
      * 获取当前可用代理。首次调用或 IP 已失效时自动提取新 IP。
      * 线程安全：并发调用只会触发一次实际提取。
-     * <p>超过 {@link #maxProxyFetchAttempts} 次获取后，不再换新 IP，返回旧 IP 让其失败。</p>
+     * <p>熔断器开启时返回 null,任务应快速失败。</p>
      *
-     * @return 代理字符串；暂时无法获取返回旧 IP（可能已坏）
+     * @return 代理字符串；熔断/无可用 IP 时返回 null
      */
     public String getProxy() {
         // ---------- 永久停止检查:代理池永久失效,需人工在监控页面手动重置 ----------
@@ -123,15 +105,6 @@ public class WorkerProxyManager {
             return currentProxy.get();
         }
 
-        // 超过最大获取次数 → 触发熔断，不再换新 IP（避免无上限烧代理池）
-        if (maxProxyFetchAttempts > 0 && fetchAttemptCount.get() >= maxProxyFetchAttempts) {
-            log.warn("[WorkerProxyManager] 已获取 {} 次新 IP，超过上限 {}，触发保护性停止",
-                    fetchAttemptCount.get(), maxProxyFetchAttempts);
-            consecutiveFailures.incrementAndGet();
-            checkCircuitBreaker();
-            return null;
-        }
-
         // 慢路径：需要提取新 IP（加锁串行化）
         fetchLock.lock();
         try {
@@ -143,15 +116,13 @@ public class WorkerProxyManager {
             if (newProxy == null || newProxy.isBlank()) {
                 log.warn("[WorkerProxyManager] proxy supplier returned null");
                 consecutiveFailures.incrementAndGet();
-                fetchAttemptCount.incrementAndGet();
                 checkCircuitBreaker();
                 return currentProxy.get(); // 返回旧 IP（可能已坏，但比 null 好）
             }
             currentProxy.set(newProxy);
             invalidated.set(false);
-            int attempt = fetchAttemptCount.incrementAndGet();
-            log.info("[WorkerProxyManager] new proxy acquired (attempt {}/{}), proxy={}, will be used until failure",
-                    attempt, maxProxyFetchAttempts, newProxy);
+            log.info("[WorkerProxyManager] new proxy acquired, proxy={}, will be used until failure",
+                    newProxy);
             return newProxy;
         } finally {
             fetchLock.unlock();
@@ -175,6 +146,14 @@ public class WorkerProxyManager {
                 consecutiveFailures.get(), CIRCUIT_BREAKER_THRESHOLD);
     }
 
+    /**
+     * 请求成功时调用,重置连续失败计数(说明代理池恢复可用)。
+     * <p>在 EastmoneyApiStrategy 每次成功拿到响应后调用。</p>
+     */
+    public void onSuccess() {
+        consecutiveFailures.set(0);
+    }
+
     /** 当前是否有可用 IP（供健康检查）。 */
     public boolean hasProxy() {
         return !invalidated.get() && currentProxy.get() != null;
@@ -182,19 +161,7 @@ public class WorkerProxyManager {
 
     /** 是否处于连续失败/熔断状态（供告警）。 */
     public boolean isConsecutiveFailures() {
-        return circuitBreakerOpen
-                || consecutiveFailures.get() >= CIRCUIT_BREAKER_THRESHOLD
-                || (maxProxyFetchAttempts > 0 && fetchAttemptCount.get() >= maxProxyFetchAttempts);
-    }
-
-    /** 获取当前代理（不触发提取，供监控用）。 */
-    public String getCurrentProxy() {
-        return currentProxy.get();
-    }
-
-    /** 获取已尝试次数（供监控用）。 */
-    public int getFetchAttemptCount() {
-        return fetchAttemptCount.get();
+        return circuitBreakerOpen || consecutiveFailures.get() >= CIRCUIT_BREAKER_THRESHOLD;
     }
 
     // ========================================================================
@@ -234,16 +201,6 @@ public class WorkerProxyManager {
                 CIRCUIT_BREAKER_THRESHOLD, permanentTripCount, PERMANENT_TRIP_THRESHOLD);
     }
 
-    /** 是否处于熔断状态(监控/认领判断用)。 */
-    public boolean isCircuitBreakerOpen() {
-        return circuitBreakerOpen;
-    }
-
-    /** 获取连续失败次数(监控用)。 */
-    public int getConsecutiveFailures() {
-        return consecutiveFailures.get();
-    }
-
     /** 是否已永久停止(监控页面据此显示告警和重置按钮)。 */
     public boolean isPermanentlyStopped() {
         return permanentlyStopped;
@@ -264,11 +221,5 @@ public class WorkerProxyManager {
         permanentTripCount = 0;
         permanentlyStopped = false;
         log.info("[WorkerProxyManager] 熔断器手动重置(wasOpen={}, 永久失效计数已清零)", wasOpen);
-    }
-
-    /** 重置获取次数（新 worker 启动或手动恢复时调用）。 */
-    public void resetFetchAttemptCount() {
-        fetchAttemptCount.set(0);
-        log.info("[WorkerProxyManager] fetch attempt count reset to 0");
     }
 }

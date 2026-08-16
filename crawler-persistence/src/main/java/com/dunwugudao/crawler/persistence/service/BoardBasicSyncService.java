@@ -54,6 +54,7 @@ public class BoardBasicSyncService {
         e.setBoardType(boardType);
         e.setStatus(1);
         e.setDataSource(dataSource);
+        e.setTradeDate(LocalDate.now());  // 新增:记录哪天入库的
         e.setCreateDate(LocalDate.now());
         // 以下三列在原始 MySQL 中均为 nullable（迁 CK 后 String/DateTime 默认非空），东财来源天然没有这些值：
         // - code：同花顺板块指数代码（东财只有 BK 号）→ 空字符串

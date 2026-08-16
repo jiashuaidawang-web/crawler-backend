@@ -2,9 +2,11 @@ package com.dunwugudao.crawler.admin.seed;
 
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
+import com.dunwugudao.crawler.persistence.service.IpConsumptionService;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.function.Predicate;
 
 /**
@@ -54,14 +56,31 @@ public class ProxyManager {
     /** 熔断器自动半开时间（毫秒）— 30 分钟后尝试恢复 */
     private static final long CIRCUIT_BREAKER_RESET_MS = 30 * 60 * 1000L;
 
+    /** 每阶段 IP 告警阈值:超过此次数打 WARN */
+    private static final int IP_WARNING_THRESHOLD = 50;
+
     /** 连续失败计数（达到阈值触发熔断） */
     private int consecutiveFailures = 0;
+
+    /** 当前阶段 IP 消耗计数(上层每阶段开始时 reset) */
+    private int stageIpCount = 0;
 
     /** 熔断开始时间（用于自动半开） */
     private long circuitBreakerOpenTime = 0L;
 
     /** 是否处于熔断状态 */
     private boolean circuitBreakerOpen = false;
+
+    /** 当前请求上下文(IP 埋点用),由调用方在请求前设置。 */
+    private String currentStage = "UNKNOWN";
+    private String currentTaskType = "UNKNOWN";
+    private LocalDate currentTradeDate = LocalDate.now();
+
+    public void setCurrentContext(String stage, String taskType, LocalDate tradeDate) {
+        this.currentStage = stage != null ? stage : "UNKNOWN";
+        this.currentTaskType = taskType != null ? taskType : "UNKNOWN";
+        this.currentTradeDate = tradeDate != null ? tradeDate : LocalDate.now();
+    }
 
     /** clist 类接口响应验证：rc=0 且含 total 字段 */
     public static final Predicate<String> CLIST_VALIDATOR =
@@ -73,13 +92,15 @@ public class ProxyManager {
 
     /** 代理提供者(青果) */
     private final ProxyProvider proxyProvider;
+    private final IpConsumptionService ipConsumptionService;
 
     /** 东已验证的 HTTP 客户端(代理认证已兼容) */
     private final EastmoneyClient eastmoneyClient = new EastmoneyClient();
 
     /** 由 SeedStrategyBeans 注入(从配置读取 trade_no/sign/city)。 */
-    public ProxyManager(ProxyProvider proxyProvider) {
+    public ProxyManager(ProxyProvider proxyProvider, IpConsumptionService ipConsumptionService) {
         this.proxyProvider = proxyProvider;
+        this.ipConsumptionService = ipConsumptionService;
         log.info("[ProxyManager] 初始化完成(proxyProvider={}, maxRetries={}, client=EastmoneyClient)",
                 proxyProvider.getClass().getSimpleName(), MAX_RETRIES);
     }
@@ -151,6 +172,8 @@ public class ProxyManager {
                             attempt, MAX_RETRIES, latency, extractProxyHost(proxyStr));
                     consecutiveFailures++;
                     checkCircuitBreaker();
+                    ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
+                            extractProxyHost(proxyStr), "EMPTY", 0, (long)latency, "empty response", currentTradeDate);
                     continue;
                 }
 
@@ -173,6 +196,9 @@ public class ProxyManager {
                 log.info("[ProxyManager] attempt={}/{}, 请求成功! latency={}ms, respLen={}, proxy={}",
                         attempt, MAX_RETRIES, latency, resp.length(), extractProxyHost(proxyStr));
                 consecutiveFailures = 0;
+                // IP 消耗埋点（admin 端探测）
+                ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
+                        extractProxyHost(proxyStr), "SUCCESS", resp.length(), (long)latency, null, currentTradeDate);
                 return resp;
 
             } catch (Exception e) {
@@ -182,6 +208,9 @@ public class ProxyManager {
                         attempt, MAX_RETRIES, latency, e.getMessage());
                 consecutiveFailures++;
                 checkCircuitBreaker();
+                // IP 消耗埋点（失败）
+                ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
+                        extractProxyHost(proxyStr), "FAILED", 0, (long)latency, e.getMessage(), currentTradeDate);
             }
         }
 
@@ -220,13 +249,29 @@ public class ProxyManager {
             if (proxy == null) {
                 log.warn("[acquireProxy] provider 返回 null");
             } else {
-                log.info("[acquireProxy] 获取代理成功: {}", extractProxyHost(proxy));
+                stageIpCount++;
+                // 超过阈值打 WARN,提醒正在大量烧 IP
+                if (stageIpCount == IP_WARNING_THRESHOLD) {
+                    log.warn("[ProxyManager] 本阶段已消耗 {} 个 IP,超过告警阈值 {},请检查是否有优化空间",
+                            stageIpCount, IP_WARNING_THRESHOLD);
+                }
+                log.info("[acquireProxy] 获取代理成功: {}(本阶段第 {} IP)", extractProxyHost(proxy), stageIpCount);
             }
             return proxy;
         } catch (Exception e) {
             log.error("[acquireProxy] provider 异常: {}", e.getMessage(), e);
             return null;
         }
+    }
+
+    /** 获取当前阶段 IP 消耗数(供统计用)。 */
+    public int getStageIpCount() {
+        return stageIpCount;
+    }
+
+    /** 重置当前阶段 IP 消耗计数(每阶段开始时调用)。 */
+    public void resetStageIpCount() {
+        stageIpCount = 0;
     }
 
     // ========================================================================

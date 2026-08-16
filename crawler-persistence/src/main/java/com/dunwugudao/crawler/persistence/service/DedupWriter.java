@@ -228,6 +228,7 @@ public class DedupWriter {
             entity.setIsMidarm(intVal(r.get("is_midarm")));
             entity.setWeight(bigDec(r.get("weight")));
             entity.setEffectiveDate(today);
+            entity.setTradeDate(today);
             entity.setDataSource(source.getCode());
             entity.setSrcDetail(srcDetail);
             entity.setCreateDate(today);

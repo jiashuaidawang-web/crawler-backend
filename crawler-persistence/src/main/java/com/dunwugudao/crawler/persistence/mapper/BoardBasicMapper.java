@@ -45,7 +45,26 @@ public interface BoardBasicMapper {
     BoardBasic selectOneByBoardCode(@Param("boardCode") String boardCode);
 
     @Insert("INSERT INTO board_basic " +
-            "(board_type, code, board_code, board_name, features, status, data_source, create_date, update_date) " +
-            "VALUES (#{boardType}, #{code}, #{boardCode}, #{boardName}, #{features}, #{status}, #{dataSource}, #{createDate}, #{updateDate})")
+            "(board_type, code, board_code, board_name, features, status, data_source, trade_date, create_date, update_date) " +
+            "VALUES (#{boardType}, #{code}, #{boardCode}, #{boardName}, #{features}, #{status}, #{dataSource}, #{tradeDate}, #{createDate}, #{updateDate})")
     int insert(BoardBasic row);
+
+    /** 按 board_type + trade_date 统计板块数(用于智能验证:比较昨天库中数 vs 市场总数)。 */
+    @Select("SELECT count(DISTINCT board_code) FROM board_basic " +
+            "WHERE board_type = #{boardType} AND data_source = #{dataSource} AND trade_date = #{tradeDate}")
+    Integer countByBoardTypeAndTradeDate(@Param("boardType") int boardType,
+                                         @Param("dataSource") int dataSource,
+                                         @Param("tradeDate") String tradeDate);
+
+    /** 按 board_type 查所有 board_code 集合(用于差集比较)。 */
+    @Select("SELECT DISTINCT board_code FROM board_basic " +
+            "WHERE board_type = #{boardType} AND data_source = #{dataSource}")
+    List<String> selectBoardCodesByType(@Param("boardType") int boardType,
+                                        @Param("dataSource") int dataSource);
+
+    /** 查某类板块最新的 trade_date(用于智能验证对比,不局限于昨天)。 */
+    @Select("SELECT MAX(trade_date) FROM board_basic " +
+            "WHERE board_type = #{boardType} AND data_source = #{dataSource}")
+    String selectLatestTradeDate(@Param("boardType") int boardType,
+                                 @Param("dataSource") int dataSource);
 }

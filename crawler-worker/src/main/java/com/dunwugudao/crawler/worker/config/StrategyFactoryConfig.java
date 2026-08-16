@@ -36,14 +36,13 @@ public class StrategyFactoryConfig {
     /**
      * Worker 级 IP 管理器 —— OkHttp 路径。
      * <p>切到青果长效 IP,与 admin 统一。</p>
-     * <p>maxProxyFetchAttempts 取有限值(50),与任务级 MAX_PROXY_FETCH_ATTEMPTS_PER_TASK=10 配合：
-     * 单个 worker 最多换 50 个 IP,覆盖多个任务共享;超限后熔断器(CIRCUIT_BREAKER_THRESHOLD=50)兜底,
-     * 避免代理池整体失效时无限烧 IP(曾因此一次浪费 ~5000 IP 且零数据入库)。</p>
+     * <p>熔断器阈值 CIRCUIT_BREAKER_THRESHOLD=20(连续失败 20 次开启),
+     * 永久停止阈值 PERMANENT_TRIP_THRESHOLD=3(连续熔断 3 次永久停)。</p>
      */
     @Bean
     public WorkerProxyManager eastmoneyOkHttpProxyManager(QgLongTermConfig qgConfig) {
         ProxyProvider provider = new QgLongTermProxyProvider(qgConfig.getAuthKey(), qgConfig.getBusinessId(), qgConfig.getPassword());
-        return new WorkerProxyManager(provider::acquire, 50);
+        return new WorkerProxyManager(provider::acquire);
     }
 
     /**

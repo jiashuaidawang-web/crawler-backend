@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS board_basic (
   features     VARCHAR(340),                  -- 备用字段
   status       SMALLINT DEFAULT 1,             -- 1=正常 0=删除
   data_source  SMALLINT NOT NULL DEFAULT 0,   -- 0=东财 1=同花顺
+  trade_date   DATE NOT NULL,                 -- 新增日期(哪天入库的)
   create_date  DATE NOT NULL DEFAULT CURRENT_DATE,
   update_date  TIMESTAMP
 );

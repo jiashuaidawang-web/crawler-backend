@@ -510,6 +510,7 @@ CREATE TABLE IF NOT EXISTS stock_board_rel (
     weight                  Nullable(Decimal64(4)),
     effective_date          Nullable(Date),
     data_source             UInt8 NOT NULL DEFAULT 0,
+    trade_date              Nullable(Date),
     src_detail              Nullable(String),
     create_date             Nullable(Date),
     update_date             Nullable(DateTime),

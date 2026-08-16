@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * 日批编排器:顺序执行各阶段(seed → 等待完成 → 校验 → 失败策略)。
@@ -42,7 +43,7 @@ public class DailyPipelineOrchestrator {
             PipelineStage.CONCEPT_DAILY,
             PipelineStage.MAIN_FUND_STOCK,
             PipelineStage.MAIN_FUND_BOARD,
-            PipelineStage.LIMIT_POOL,
+            PipelineStage.LIMIT_UP,
             PipelineStage.STRONG_POOL,
             PipelineStage.CIXIN_POOL,
             PipelineStage.NORTHBOUND,
@@ -67,6 +68,7 @@ public class DailyPipelineOrchestrator {
     private final TotalCountValidator totalCountValidator;
     private final StageSeeder stageSeeder;
     private final org.springframework.jdbc.core.JdbcTemplate chJdbc;
+    private final org.springframework.jdbc.core.JdbcTemplate pgJdbc;  // openGauss(操作型库)
 
     @Value("${crawler.pipeline.source:1}")
     private int defaultSource;
@@ -77,6 +79,10 @@ public class DailyPipelineOrchestrator {
     @Value("${crawler.pipeline.poll-interval-sec:30}")
     private int pollIntervalSec;
 
+    /** 测试阶段开启:实时查 CK 覆盖 actualTotal,确保数据准确(上线后可关闭走存储值)。 */
+    @Value("${crawler.pipeline.realtime-count:true}")
+    private boolean realtimeCount;
+
     public DailyPipelineOrchestrator(PipelineMapper pipelineMapper,
                                     CrawlTaskMapper crawlTaskMapper,
                                     CrawlAlertMapper crawlAlertMapper,
@@ -85,7 +91,8 @@ public class DailyPipelineOrchestrator {
                                     List<PipelineValidator> validators,
                                     TotalCountValidator totalCountValidator,
                                     StageSeeder stageSeeder,
-                                    @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbc) {
+                                    @org.springframework.beans.factory.annotation.Qualifier("chJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate chJdbc,
+                                    @org.springframework.beans.factory.annotation.Qualifier("pgJdbcTemplate") org.springframework.jdbc.core.JdbcTemplate pgJdbc) {
         this.pipelineMapper = pipelineMapper;
         this.crawlTaskMapper = crawlTaskMapper;
         this.crawlAlertMapper = crawlAlertMapper;
@@ -95,6 +102,7 @@ public class DailyPipelineOrchestrator {
         this.totalCountValidator = totalCountValidator;
         this.stageSeeder = stageSeeder;
         this.chJdbc = chJdbc;
+        this.pgJdbc = pgJdbc;
     }
 
     /** 幂等入口:跑全日批。FAILED 会 reset 重跑,SUCCESS/RUNNING 直接返回。 */
@@ -151,8 +159,142 @@ public class DailyPipelineOrchestrator {
         if (run == null) {
             return new PipelineRunResult(dateStr, "NONE", List.of(), "尚未发起跑批");
         }
+        return buildResultWithMessage(dateStr, run);
+    }
+
+    /** 查指定 runId 的详情(用于历史 run)。 */
+    public PipelineRunResult statusByRunId(String dateStr, Long runId) {
+        PipelineRun run = pipelineMapper.selectRunById(runId);
+        if (run == null) {
+            return new PipelineRunResult(dateStr, "NONE", List.of(), "该跑批不存在");
+        }
+        return buildResultWithMessage(dateStr, run);
+    }
+
+    /** 列出某日所有 run(历史)。 */
+    public List<PipelineRun> history(String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        return pipelineMapper.selectRunsByDate(date);
+    }
+
+    /** 组装结果 + 运行时生成「人话摘要」+ 可选实时 CK 重算校验结果。 */
+    private PipelineRunResult buildResultWithMessage(String dateStr, PipelineRun run) {
+        LocalDate date = LocalDate.parse(dateStr);
         List<PipelineStageRecord> stages = pipelineMapper.selectStages(run.getRunId());
+        for (PipelineStageRecord s : stages) {
+            // 中文名
+            try {
+                s.setDisplayName(PipelineStage.valueOf(s.getStageName()).getDisplayName());
+            } catch (IllegalArgumentException e) {
+                s.setDisplayName(s.getStageName());
+            }
+            // 测试阶段:实时查 CK 重算 actualTotal/lostRows/dupRows/status
+            if (realtimeCount) {
+                recomputeStageValidation(s, date);
+            }
+            s.setUserMessage(summarize(s));
+        }
         return new PipelineRunResult(dateStr, run.getStatus(), stages, run.getSummary());
+    }
+
+    /** 实时查 CK 重算阶段的校验结果(actualTotal/lostRows/dupRows/status)。 */
+    private void recomputeStageValidation(PipelineStageRecord s, LocalDate date) {
+        PipelineStage stage;
+        try {
+            stage = PipelineStage.valueOf(s.getStageName());
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        int expected = s.getExpectedTotal() == null ? 0 : s.getExpectedTotal();
+        if (expected <= 0) {
+            return;  // 无上游总数,跳过
+        }
+        // 实时查 CK
+        int actual = totalCountValidator.countActualByStage(s.getStageName(), date, defaultSource);
+        s.setActualTotal(actual);
+        if (actual >= expected) {
+            // PASS
+            s.setStatus("DONE");
+            s.setLostRows(0);
+            s.setDupRows(0);
+        } else {
+            // actual < expected:查 dupGroups 判定
+            int dupGroups = totalCountValidator.countDupGroups(stage, date, defaultSource);
+            s.setDupRows(dupGroups);
+            int diff = expected - actual;
+            if (diff <= dupGroups) {
+                s.setStatus("DONE");
+                s.setLostRows(0);
+            } else {
+                s.setStatus("FAILED");
+                s.setLostRows(diff - dupGroups);
+            }
+        }
+    }
+
+    // ---------------- 人话摘要 ----------------
+
+    /**
+     * 给单个阶段生成「人话摘要」+ 操作建议。
+     * 规则按优先级:空跑跳过 → 失败(有丢失/无丢失) → 成功(有重复/无重复) → 兜底。
+     */
+    String summarize(PipelineStageRecord s) {
+        String status = s.getStatus();
+        int seeded = s.getSeededCount() == null ? 0 : s.getSeededCount();
+        int expected = s.getExpectedTotal() == null ? 0 : s.getExpectedTotal();
+        int actual = s.getActualTotal() == null ? 0 : s.getActualTotal();
+        int lost = s.getLostRows() == null ? 0 : s.getLostRows();
+        int dup = s.getDupRows() == null ? 0 : s.getDupRows();
+
+        // 空跑:没下任务 且 没有实际数据
+        if (seeded == 0 && actual == 0 && !"RUNNING".equals(status)) {
+            return "未下发任务,未产生数据。如需数据请「一键跑批」。";
+        }
+        // 有数据但没下任务 → 历史数据(非本次 run 产出)
+        if (seeded == 0 && actual > 0 && !"RUNNING".equals(status)) {
+            if ("DONE".equals(status)) {
+                return String.format("有历史数据 %d 行(非本次 run 产出),数据量正常。", actual);
+            }
+            return String.format("有历史数据 %d 行(非本次 run 产出),期望 %d 行,丢失 %d 行。", actual, expected, lost);
+        }
+        // 失败
+        if ("FAILED".equals(status)) {
+            if (lost > 0) {
+                return String.format("校验失败:期望 %d 行,实际写入 %d 行,丢失 %d 行。建议「断点续跑」补数据。", expected, actual, lost);
+            }
+            if (actual > expected && expected > 0) {
+                return String.format("校验失败:实际 %d 行超过期望 %d 行,可能存在重复口径。建议确认上游数据源口径。", actual, expected);
+            }
+            return "校验失败。建议「断点续跑」或查看校验明细。";
+        }
+        // 成功
+        if ("DONE".equals(status) || "SUCCESS".equals(status)) {
+            if (actual > 0 && expected > 0) {
+                int diff = actual - expected;
+                if (Math.abs(diff) <= Math.max(1, expected / 20)) {  // 偏差 ≤5% 视为正常
+                    return String.format("完成。期望 %d 行,实际 %d 行,偏差在正常范围。", expected, actual);
+                }
+                if (diff < 0) {
+                    return String.format("完成。期望 %d 行,实际 %d 行(少 %d 行,可被重复组解释)。", expected, actual, -diff);
+                }
+                return String.format("完成。期望 %d 行,实际 %d 行(多 %d 行),请确认口径。", expected, actual, diff);
+            }
+            if (dup > 0) {
+                return String.format("完成。写入 %d 行,存在 %d 组重复。", actual, dup);
+            }
+            return String.format("完成。写入 %d 行。", actual);
+        }
+        // 运行中 / 等待中 / 跳过
+        if ("RUNNING".equals(status)) {
+            return "正在执行中...";
+        }
+        if ("PENDING".equals(status)) {
+            return "等待上游阶段完成后执行。";
+        }
+        if ("SKIP".equals(status) || "IGNORED".equals(status)) {
+            return "已跳过。";
+        }
+        return "";
     }
 
     // ---------------- run 初始化 ----------------
@@ -164,22 +306,27 @@ public class DailyPipelineOrchestrator {
      * @return runId(已有 RUNNING/SUCCESS 时返回 null,表示无需执行)
      */
     private Long ensureRun(LocalDate date, boolean resetIfExists) {
-        PipelineRun existing = pipelineMapper.selectRunByDate(date);
-        if (existing != null) {
-            if ("RUNNING".equals(existing.getStatus()) || "SUCCESS".equals(existing.getStatus())) {
+        PipelineRun latest = pipelineMapper.selectRunByDate(date);
+        if (latest != null) {
+            if ("RUNNING".equals(latest.getStatus()) || "SUCCESS".equals(latest.getStatus())) {
                 return null; // 幂等:已在跑或已完成
             }
-            // FAILED/ABORTED → reset 重跑
-            pipelineMapper.resetStagesToPending(existing.getRunId());
-            pipelineMapper.resetRunToRunning(existing.getRunId());
-            initStages(existing.getRunId());
-            return existing.getRunId();
+            // FAILED/ABORTED → 新建一条 run(保留历史,不覆盖旧 run)
+            PipelineRun r = new PipelineRun();
+            r.setRunDate(date);
+            pipelineMapper.insertRun(r);
+            Long runId = r.getRunId();
+            if (runId == null) {
+                return null;
+            }
+            initStages(runId);
+            return runId;
         }
-        // 新建 run
+        // 该日期首次跑:新建 run
         PipelineRun r = new PipelineRun();
         r.setRunDate(date);
-        pipelineMapper.insertRunIgnoreConflict(r);
-        Long runId = pipelineMapper.selectRunIdByDate(date);
+        pipelineMapper.insertRun(r);
+        Long runId = r.getRunId();
         if (runId == null) {
             return null;
         }
@@ -333,16 +480,11 @@ public class DailyPipelineOrchestrator {
                 storeBoardRelCounts(date, defaultSource, result);
             }
 
-            // 1.5 捕获基线行数(seed 后、爬取前)→validate 时只计本次新增,避免历史数据干扰
-            int baselineRows = totalCountValidator.baselineRows(stage, date, defaultSource);
-            result.baselineRows = baselineRows;
-            log.info("[pipeline] date={} stage={} baselineRows={}", date, stage, baselineRows);
-
             // 2. 等待完成
             await(date, stage);
 
-            // 3. 校验(传入 baselineRows)
-            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds(), baselineRows);
+            // 3. 校验(实时查 CK,对比 expected)
+            ValidateContext ctx = ValidateContext.of(seed.expectedTotal(), defaultSource, seed.taskIds());
             List<ValidateResult> checkResults = new ArrayList<>();
             for (PipelineValidator v : validators) {
                 checkResults.add(v.validate(date, stage, ctx));
@@ -369,6 +511,193 @@ public class DailyPipelineOrchestrator {
         }
         result.durationMs = System.currentTimeMillis() - t0;
         return result;
+    }
+
+    // ---------------- 阶段诊断 ----------------
+
+    /**
+     * 诊断失败阶段:判断是"admin 未完整下发"、"task 执行失败"还是"引擎去重/口径差异"。
+     *
+     * <p>逻辑:今天 task 数 >= 历史平均 × 0.8 视为下发完整,否则为 seed 失败。</p>
+     */
+    public java.util.Map<String, Object> diagnoseStage(String dateStr, String stageName) {
+        LocalDate date = LocalDate.parse(dateStr);
+        PipelineStage stage = Stream.of(PipelineStage.values())
+                .filter(s -> s.name().equals(stageName))
+                .findFirst().orElse(null);
+        if (stage == null) {
+            throw new IllegalArgumentException("未知阶段: " + stageName);
+        }
+
+        java.util.Map<String, Object> diag = new java.util.LinkedHashMap<>();
+        diag.put("stage", stageName);
+        diag.put("date", dateStr);
+
+        // 1. 今天该阶段的 task 数(从 pipeline_stage.seeded_count)
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        int todaySeeded = 0;
+        if (run != null) {
+            PipelineStageRecord rec = pipelineMapper.selectStage(run.getRunId(), stageName);
+            todaySeeded = rec != null && rec.getSeededCount() != null ? rec.getSeededCount() : 0;
+        }
+        diag.put("todaySeeded", todaySeeded);
+
+        // 2. 历史平均 seeded_count(近 30 天)
+        java.util.Map<String, Object> avgResult = pipelineMapper.selectAvgSeeded(stageName, date.minusDays(30));
+        int avgSeeded = 0;
+        int sampleCount = 0;
+        if (avgResult != null) {
+            avgSeeded = avgResult.get("avg_seeded") != null ? ((Number) avgResult.get("avg_seeded")).intValue() : 0;
+            sampleCount = avgResult.get("sampleCount") != null ? ((Number) avgResult.get("sampleCount")).intValue() : 0;
+        }
+        diag.put("historyAvgSeeded", avgSeeded);
+        diag.put("historySampleCount", sampleCount);
+
+        // 3. 判断 admin 是否下发完整(今天的 >= 历史平均 × 0.8,或无历史时 > 0 即可)
+        boolean seedComplete;
+        if (sampleCount == 0) {
+            seedComplete = todaySeeded > 0;  // 无历史:只要有 task 就算完整
+        } else {
+            double threshold = Math.max(1, avgSeeded * 0.8);
+            seedComplete = todaySeeded >= threshold;
+        }
+        diag.put("seedComplete", seedComplete);
+
+        // 4. 如果有 task,查失败 task 数
+        int failedTasks = 0;
+        int deadTasks = 0;
+        int successTasks = 0;
+        if (todaySeeded > 0 && run != null) {
+            String like = "%|" + dateStr;
+            List<java.util.Map<String, Object>> statusList = crawlTaskMapper.countByStatusForLike(like);
+            for (java.util.Map<String, Object> row : statusList) {
+                String st = (String) row.get("status");
+                int cnt = ((Number) row.get("cnt")).intValue();
+                if ("FAILED".equals(st)) failedTasks = cnt;
+                else if ("DEAD".equals(st)) deadTasks = cnt;
+                else if ("SUCCESS".equals(st)) successTasks = cnt;
+            }
+        }
+        diag.put("failedTasks", failedTasks);
+        diag.put("deadTasks", deadTasks);
+        diag.put("successTasks", successTasks);
+
+        // 5. 诊断结论
+        String reason;
+        String action;
+        if (!seedComplete) {
+            reason = "SEED_INCOMPLETE";
+            action = "admin 未完整下发任务,请检查 seed 逻辑或手动补发";
+        } else if (failedTasks > 0 || deadTasks > 0) {
+            reason = "TASK_FAILED";
+            action = String.format("存在失败 task(FAILED=%d, DEAD=%d),可重试", failedTasks, deadTasks);
+        } else {
+            reason = "ENGINE_DEDUP";
+            action = "task 全部成功,行数差异疑似引擎去重或口径差异,需人工确认";
+        }
+        diag.put("reason", reason);
+        diag.put("action", action);
+
+        return diag;
+    }
+
+    // ---------------- 手动重试失败阶段 ----------------
+
+    /**
+     * 手动重试某次跑批中失败的阶段:重置该日期下 DEAD/FAILED 任务为 PENDING → 等完成 → 重新校验。
+     *
+     * @return 该阶段重试后的结果(含 userMessage)
+     */
+    public PipelineStageRecord retryStage(String dateStr, String stageName) {
+        LocalDate date = LocalDate.parse(dateStr);
+        PipelineStage stage = Stream.of(PipelineStage.values())
+                .filter(s -> s.name().equals(stageName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("未知阶段: " + stageName));
+
+        // 1. 找该日期最新 run
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        if (run == null) {
+            throw new IllegalStateException("该日期无跑批记录: " + dateStr);
+        }
+
+        // 2. 重置该日期下 DEAD/FAILED 任务为 PENDING
+        String like = "%|" + dateStr;  // 匹配所有以 |date 结尾的 unique_key
+        int reset = crawlTaskMapper.forceResetDeadTasks(like);
+        log.info("[pipeline] retryStage date={} stage={} 重置 {} 个 DEAD/FAILED 任务", dateStr, stageName, reset);
+
+        // 3. 重置该阶段行为 RUNNING(清空旧结果)
+        pgJdbc.update(
+                "UPDATE pipeline_stage SET status='RUNNING', seeded_count=NULL, expected_total=NULL, " +
+                "actual_total=NULL, dup_rows=NULL, lost_rows=NULL, duration_ms=NULL, " +
+                "check_result=NULL, error_msg=NULL, started_at=now(), finished_at=NULL " +
+                "WHERE run_id=? AND stage_name=?",
+                run.getRunId(), stageName);
+
+        // 4. 等待完成 + 重新校验(复用 executeStage 的核心逻辑)
+        PipelineStageResult result = new PipelineStageResult();
+        result.stage = stageName;
+        long t0 = System.currentTimeMillis();
+        try {
+            // 4.1 取当前该阶段的 expectedTotal(从 stage 记录或重新探测)
+            PipelineStageRecord rec = pipelineMapper.selectStage(run.getRunId(), stageName);
+            int expectedTotal = rec != null && rec.getExpectedTotal() != null ? rec.getExpectedTotal() : 0;
+
+            // 4.2 等待完成
+            await(date, stage);
+
+            // 4.3 校验
+            int baselineRows = totalCountValidator.baselineRows(stage, date, defaultSource);
+            ValidateContext ctx = ValidateContext.of(expectedTotal, defaultSource, List.of(), baselineRows);
+            List<ValidateResult> checkResults = new ArrayList<>();
+            for (PipelineValidator v : validators) {
+                checkResults.add(v.validate(date, stage, ctx));
+            }
+            result.checkResults = checkResults;
+            boolean allPassed = checkResults.stream().allMatch(ValidateResult::passed);
+            result.status = allPassed ? "DONE" : "FAILED";
+            result.expectedTotal = expectedTotal;
+            result.actualTotal = actualTotal(checkResults);
+            result.dupRows = dupRows(checkResults);
+            result.lostRows = lostRows(checkResults);
+
+            if (!allPassed) {
+                writeAlert(date, stage, result, checkResults);
+            }
+            persistStage(run.getRunId(), stageName, result);
+        } catch (Exception e) {
+            log.error("[pipeline] retryStage date={} stage={} 异常: {}", dateStr, stageName, e.getMessage(), e);
+            result.status = "FAILED";
+            result.errorMsg = e.getMessage();
+            persistStage(run.getRunId(), stageName, result);
+        }
+        result.durationMs = System.currentTimeMillis() - t0;
+
+        // 5. 返回更新后的 stage 记录(带 userMessage)
+        PipelineStageRecord updated = pipelineMapper.selectStage(run.getRunId(), stageName);
+        if (updated != null) {
+            updated.setUserMessage(summarize(updated));
+        }
+        return updated;
+    }
+
+    /** 手动确认某失败阶段通过(引擎去重/口径差异时人工确认)。 */
+    public PipelineStageRecord confirmStage(String dateStr, String stageName) {
+        LocalDate date = LocalDate.parse(dateStr);
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        if (run == null) {
+            throw new IllegalStateException("该日期无跑批记录: " + dateStr);
+        }
+        pgJdbc.update(
+                "UPDATE pipeline_stage SET status='DONE', finished_at=now(), " +
+                "error_msg='manual confirm: engine dedup or caliber diff' " +
+                "WHERE run_id=? AND stage_name=?",
+                run.getRunId(), stageName);
+        PipelineStageRecord updated = pipelineMapper.selectStage(run.getRunId(), stageName);
+        if (updated != null) {
+            updated.setUserMessage("已手动确认通过(引擎去重/口径差异)");
+        }
+        return updated;
     }
 
     private void await(LocalDate date, PipelineStage stage) throws InterruptedException {

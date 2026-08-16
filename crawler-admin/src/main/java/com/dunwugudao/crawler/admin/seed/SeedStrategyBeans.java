@@ -3,6 +3,7 @@ package com.dunwugudao.crawler.admin.seed;
 import com.dunwugudao.crawler.strategy.eastmoney.EastmoneyClient;
 import com.dunwugudao.crawler.strategy.eastmoney.ProxyProvider;
 import com.dunwugudao.crawler.strategy.eastmoney.QgLongTermProxyProvider;
+import com.dunwugudao.crawler.persistence.service.IpConsumptionService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,7 +22,7 @@ public class SeedStrategyBeans {
     }
 
     @Bean
-    public ProxyManager proxyManager(ProxyProvider qgProxyProvider) {
-        return new ProxyManager(qgProxyProvider);
+    public ProxyManager proxyManager(ProxyProvider qgProxyProvider, IpConsumptionService ipConsumptionService) {
+        return new ProxyManager(qgProxyProvider, ipConsumptionService);
     }
 }

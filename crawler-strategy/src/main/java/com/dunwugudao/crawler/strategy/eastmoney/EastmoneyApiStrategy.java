@@ -201,8 +201,16 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         while (true) {
             int used = proxyFetchCount.get(); // 本任务已尝试过的 IP 个数
             String proxy = workerProxyManager.getProxy();
+
+            // 熔断器开启/永久停止—→ getProxy() 返回 null,直接快速失败,不空转
+            if (proxy == null) {
+                throw new RuntimeException("No proxy available (circuit breaker open or pool exhausted), abort task");
+            }
+
             try {
                 String resp = client.get(url, ua, proxy);
+                // 成功:重置连续失败计数(说明代理池恢复可用)
+                workerProxyManager.onSuccess();
                 log.info("[fetchWithWorkerProxy] success, proxy={}, usedIp={}/{}, url={}",
                         proxy, used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, url);
                 return resp;

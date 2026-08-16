@@ -21,6 +21,7 @@ public class StockBoardRel {
     private java.math.BigDecimal weight;
     private LocalDate effectiveDate; // 关系建立日期（now()）
     private Integer dataSource;      // 0=东财 1=同花顺
+    private LocalDate tradeDate;     // 新增:哪天入库的
     private String srcDetail;
     private LocalDate createDate;
     private LocalDateTime updateDate;

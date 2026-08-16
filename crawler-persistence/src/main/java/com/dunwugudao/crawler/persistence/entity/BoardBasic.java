@@ -17,6 +17,7 @@ public class BoardBasic {
     private String features;         // 备用字段
     private Integer status;          // 1=正常 0=删除
     private Integer dataSource;      // data_source: 0=东财 1=同花顺
+    private LocalDate tradeDate;     // 新增日期(哪天入库的)
     private LocalDate createDate;
     private LocalDateTime updateDate;
 }

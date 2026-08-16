@@ -20,11 +20,26 @@ public interface PipelineMapper {
             "WHERE NOT EXISTS (SELECT 1 FROM pipeline_run WHERE run_date = #{r.runDate})")
     int insertRunIgnoreConflict(@Param("r") PipelineRun r);
 
+    /** 始终新建一条 run 并返回 runId(支持同日多次跑批)。 */
+    @Insert("INSERT INTO pipeline_run (run_date, status, started_at) VALUES (#{r.runDate}, 'RUNNING', now())")
+    @SelectKey(statement = "SELECT currval('pipeline_run_run_id_seq')",
+               keyProperty = "runId", before = false, resultType = Long.class)
+    int insertRun(@Param("r") PipelineRun r);
+
     @Select("SELECT run_id FROM pipeline_run WHERE run_date = #{date} ORDER BY run_id DESC LIMIT 1")
     Long selectRunIdByDate(@Param("date") LocalDate date);
 
-    @Select("SELECT * FROM pipeline_run WHERE run_date = #{date}")
+    /** 列出某日所有 run(倒序:最新在前)。用于历史跑批列表。 */
+    @Select("SELECT * FROM pipeline_run WHERE run_date = #{date} ORDER BY run_id DESC")
+    List<PipelineRun> selectRunsByDate(@Param("date") LocalDate date);
+
+    /** 查询某日最新一条 run。 */
+    @Select("SELECT * FROM pipeline_run WHERE run_date = #{date} ORDER BY run_id DESC LIMIT 1")
     PipelineRun selectRunByDate(@Param("date") LocalDate date);
+
+    /** 查询单 run(含 stages)。 */
+    @Select("SELECT * FROM pipeline_run WHERE run_id = #{runId}")
+    PipelineRun selectRunById(@Param("runId") Long runId);
 
     @Update("UPDATE pipeline_run SET status=#{status}, finished_at=now(), summary=#{summary} WHERE run_id=#{runId}")
     int finishRun(@Param("runId") Long runId, @Param("status") String status, @Param("summary") String summary);
@@ -34,6 +49,17 @@ public interface PipelineMapper {
 
     @Update("UPDATE pipeline_run SET status='ABORTED', finished_at=now() WHERE run_date=#{date} AND status='RUNNING'")
     int abortStaleRuns(@Param("date") LocalDate date);
+
+    /** 查某阶段历史平均 seeded_count(近 N 天,用于判断今天是否下发完整)。 */
+    @Select("""
+            SELECT CAST(AVG(seeded_count) AS INT) AS avg_seeded, COUNT(*) AS sample_count
+            FROM pipeline_stage ps JOIN pipeline_run pr ON ps.run_id = pr.run_id
+            WHERE ps.stage_name = #{stageName}
+              AND ps.status IN ('DONE','FAILED')
+              AND ps.seeded_count > 0
+              AND pr.run_date >= #{since}
+            """)
+    java.util.Map<String, Object> selectAvgSeeded(@Param("stageName") String stageName, @Param("since") LocalDate since);
 
     // ---------------- pipeline_stage ----------------
 
