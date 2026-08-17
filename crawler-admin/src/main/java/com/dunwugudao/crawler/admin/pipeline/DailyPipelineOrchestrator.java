@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -105,6 +106,20 @@ public class DailyPipelineOrchestrator {
         this.stageSeeder = stageSeeder;
         this.chJdbc = chJdbc;
         this.pgJdbc = pgJdbc;
+    }
+
+    /** 启动时清理进程上次遗留的 RUNNING(已中断,不可能还在跑),统一标 ABORTED 打破卡死。
+     *  DB 瞬时不可达时只告警,不阻断启动(避免一次抖动导致 admin 起不来)。 */
+    @PostConstruct
+    public void abortStaleRunsOnStartup() {
+        try {
+            int n = pipelineMapper.abortAllStaleRuns();
+            if (n > 0) {
+                log.warn("[pipeline] 启动清理:已将 {} 条陈旧 RUNNING run 标为 ABORTED", n);
+            }
+        } catch (Exception e) {
+            log.warn("[pipeline] 启动清理陈旧 run 失败(下次重跑会复用/重置): {}", e.getMessage());
+        }
     }
 
     /** 幂等入口:跑全日批。FAILED 会 reset 重跑,SUCCESS/RUNNING 直接返回。 */
@@ -304,7 +319,13 @@ public class DailyPipelineOrchestrator {
     /**
      * 确保某日有 RUNNING 的 run(并预建 stage 行)。
      *
-     * @param resetIfExists FAILED/ABORTED 时 reset 重跑
+     * <p>幂等策略(受 uq_pipeline_run_date 唯一约束,每天只容一条 run):</p>
+     * <ul>
+     *   <li>无 run → 新建(用 insertRunIgnoreConflict 防并发冲突)</li>
+     *   <li>RUNNING/SUCCESS → 返回 null(已在跑或已完成,无需执行)</li>
+     *   <li>FAILED/ABORTED → 原地 reset 重跑(不能新建,会违反唯一约束)</li>
+     * </ul>
+     *
      * @return runId(已有 RUNNING/SUCCESS 时返回 null,表示无需执行)
      */
     private Long ensureRun(LocalDate date, boolean resetIfExists) {
@@ -313,27 +334,26 @@ public class DailyPipelineOrchestrator {
             if ("RUNNING".equals(latest.getStatus()) || "SUCCESS".equals(latest.getStatus())) {
                 return null; // 幂等:已在跑或已完成
             }
-            // FAILED/ABORTED → 新建一条 run(保留历史,不覆盖旧 run)
-            PipelineRun r = new PipelineRun();
-            r.setRunDate(date);
-            pipelineMapper.insertRun(r);
-            Long runId = r.getRunId();
-            if (runId == null) {
-                return null;
+            // FAILED/ABORTED → 原地 reset 重跑。表有 uq_pipeline_run_date,每天只能一条 run,
+            // 不能 insert 新行(会 DuplicateKeyException),只能在原 run 上重置。
+            if (resetIfExists) {
+                pipelineMapper.resetStagesToPending(latest.getRunId());
+                pipelineMapper.resetRunToRunning(latest.getRunId());
             }
-            initStages(runId);
-            return runId;
+            initStages(latest.getRunId());
+            return latest.getRunId();
         }
-        // 该日期首次跑:新建 run
+        // 该日期首次跑:新建 run(ignore-conflict 防并发插入冲突)
         PipelineRun r = new PipelineRun();
         r.setRunDate(date);
-        pipelineMapper.insertRun(r);
-        Long runId = r.getRunId();
-        if (runId == null) {
+        pipelineMapper.insertRunIgnoreConflict(r);
+        // insert 可能因并发被忽略,统一按日期重新查出 runId
+        PipelineRun created = pipelineMapper.selectRunByDate(date);
+        if (created == null) {
             return null;
         }
-        initStages(runId);
-        return runId;
+        initStages(created.getRunId());
+        return created.getRunId();
     }
 
     /** 预建所有阶段行(幂等)。 */
@@ -348,6 +368,13 @@ public class DailyPipelineOrchestrator {
     private PipelineRunResult execute(LocalDate date, Long runId, boolean reset) {
         Map<String, Object> summary = new LinkedHashMap<>();
         List<PipelineStageRecord> stageRows = pipelineMapper.selectStages(runId);
+        // 兜底:run 存在但 stage 行缺失(上次 initStages 失败/进程中断),补建后重读,
+        // 避免整轮 execute 白跑且 persistStage UPDATE 0 行。
+        if (stageRows.isEmpty()) {
+            log.warn("[pipeline] date={} runId={} 无 stage 行,兜底补建", date, runId);
+            initStages(runId);
+            stageRows = pipelineMapper.selectStages(runId);
+        }
         // stage_name → record
         Map<String, PipelineStageRecord> rowMap = new LinkedHashMap<>();
         for (PipelineStageRecord r : stageRows) {

@@ -47,6 +47,10 @@ public interface PipelineMapper {
     @Update("UPDATE pipeline_run SET status='RUNNING', summary=NULL, finished_at=NULL WHERE run_id=#{runId}")
     int resetRunToRunning(@Param("runId") Long runId);
 
+    /** 启动时清理:进程重启后所有 RUNNING 都是陈旧的,统一标 ABORTED,打破卡死。 */
+    @Update("UPDATE pipeline_run SET status='ABORTED', finished_at=now() WHERE status='RUNNING'")
+    int abortAllStaleRuns();
+
     @Update("UPDATE pipeline_run SET status='ABORTED', finished_at=now() WHERE run_date=#{date} AND status='RUNNING'")
     int abortStaleRuns(@Param("date") LocalDate date);
 
