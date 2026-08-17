@@ -3,15 +3,19 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.dunwugudao.crawler.persistence.mapper.NorthboundFlowMapper">
 
-    <!-- ClickHouse MergeTree 批量追加（对齐 DDL：补 trade_date 主键、source→data_source、补 src_detail） -->
+    <!-- 北向/南向资金分钟级数据（kamt.rtmin），对齐 NorthboundFlow 实体：direction/time_point/net_inflow 等 -->
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO northbound_flow
         (
         trade_date,
-        hk_hold_net,
-        sh_net,
-        sz_net,
         data_source,
+        direction,
+        time_point,
+        net_inflow,
+        buy_amount,
+        sell_amount,
+        cumulative_net_inflow,
+        status_flag,
         src_detail,
         create_date,
         update_date
@@ -20,10 +24,14 @@
         <foreach collection="list" item="r" separator=",">
             (
              #{r.tradeDate},
-             #{r.hkHoldNet},
-             #{r.shNet},
-             #{r.szNet},
              #{r.dataSource},
+             #{r.direction},
+             #{r.timePoint},
+             #{r.netInflow},
+             #{r.buyAmount},
+             #{r.sellAmount},
+             #{r.cumulativeNetInflow},
+             #{r.statusFlag},
              #{r.srcDetail},
              #{r.createDate},
              #{r.updateDate}

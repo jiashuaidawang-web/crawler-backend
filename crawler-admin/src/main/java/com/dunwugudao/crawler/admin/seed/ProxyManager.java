@@ -65,6 +65,9 @@ public class ProxyManager {
     /** 当前阶段 IP 消耗计数(上层每阶段开始时 reset) */
     private int stageIpCount = 0;
 
+    /** 缓存的代理:复用直到失效再换。失败时置 null,下次 acquire 重新提取。 */
+    private String cachedProxy = null;
+
     /** 熔断开始时间（用于自动半开） */
     private long circuitBreakerOpenTime = 0L;
 
@@ -174,6 +177,7 @@ public class ProxyManager {
                     checkCircuitBreaker();
                     ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
                             extractProxyHost(proxyStr), "EMPTY", 0, (long)latency, "empty response", currentTradeDate);
+                    cachedProxy = null;  // 失效缓存,下次换新代理
                     continue;
                 }
 
@@ -184,6 +188,7 @@ public class ProxyManager {
                             attempt, MAX_RETRIES, latency, resp.substring(0, Math.min(200, resp.length())));
                     consecutiveFailures++;
                     checkCircuitBreaker();
+                    cachedProxy = null;  // 失效缓存,下次换新代理
                     continue;
                 }
 
@@ -211,6 +216,7 @@ public class ProxyManager {
                 // IP 消耗埋点（失败）
                 ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
                         extractProxyHost(proxyStr), "FAILED", 0, (long)latency, e.getMessage(), currentTradeDate);
+                cachedProxy = null;  // 失效缓存,下次换新代理
             }
         }
 
@@ -243,12 +249,18 @@ public class ProxyManager {
      * @return 代理字符串(形如 {@code "http://user:pass@ip:port"});失败返回 null
      */
     public String acquireProxy() {
+        // 复用缓存代理(直到失效再换),避免每个请求都烧一个新 IP
+        if (cachedProxy != null) {
+            log.debug("[acquireProxy] 复用缓存代理: {}", extractProxyHost(cachedProxy));
+            return cachedProxy;
+        }
         log.debug("[acquireProxy] 开始从青果获取代理");
         try {
             String proxy = proxyProvider.acquire();
             if (proxy == null) {
                 log.warn("[acquireProxy] provider 返回 null");
             } else {
+                cachedProxy = proxy;  // 缓存,后续请求复用
                 stageIpCount++;
                 // 超过阈值打 WARN,提醒正在大量烧 IP
                 if (stageIpCount == IP_WARNING_THRESHOLD) {
@@ -259,7 +271,7 @@ public class ProxyManager {
             }
             return proxy;
         } catch (Exception e) {
-            log.error("[acquireProxy] provider 异常: {}", e.getMessage(), e);
+            log.error("[ProxyManager] provider 异常: {}", e.getMessage(), e);
             return null;
         }
     }
@@ -272,6 +284,7 @@ public class ProxyManager {
     /** 重置当前阶段 IP 消耗计数(每阶段开始时调用)。 */
     public void resetStageIpCount() {
         stageIpCount = 0;
+        cachedProxy = null;  // 新阶段清缓存,重新提取代理
     }
 
     // ========================================================================

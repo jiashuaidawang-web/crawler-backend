@@ -2,11 +2,14 @@ package com.dunwugudao.crawler.admin.controller;
 
 import com.dunwugudao.crawler.admin.pipeline.DailyPipelineOrchestrator;
 import com.dunwugudao.crawler.admin.pipeline.PipelineRunResult;
+import com.dunwugudao.crawler.admin.pipeline.SeedResult;
 import com.dunwugudao.crawler.persistence.entity.PipelineRun;
 import com.dunwugudao.crawler.persistence.entity.PipelineStageRecord;
 import com.dunwugudao.crawler.persistence.service.IpConsumptionService;
 import org.springframework.web.bind.annotation.*;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** 日批编排 REST(一键跑批 / 断点续跑 / 查状态 / 历史 run / 重试失败阶段)。 */
 @RestController
@@ -60,6 +63,31 @@ public class PipelineController {
     @PostMapping("/retry-stage")
     public PipelineStageRecord retryStage(@RequestParam String date, @RequestParam String stage) {
         return orchestrator.retryStage(date, stage);
+    }
+
+    /** 万能修复:自动诊断+自动修复某阶段,目标是数据对得上。返回修复动作和说明。 */
+    @PostMapping("/fix-stage")
+    public Map<String, Object> fixStage(@RequestParam String date, @RequestParam String stage) {
+        return orchestrator.fixStage(date, stage);
+    }
+
+    /** 确认某阶段通过(误报/口径差异时手动确认)。 */
+    @PostMapping("/confirm-stage")
+    public PipelineStageRecord confirmStage(@RequestParam String date, @RequestParam String stage) {
+        return orchestrator.confirmStage(date, stage);
+    }
+
+    /** 重新下发某阶段的种子任务(幂等)。 */
+    @PostMapping("/reseed-stage")
+    public Map<String, Object> reseedStage(@RequestParam String date, @RequestParam String stage) {
+        SeedResult result = orchestrator.reseedStage(date, stage);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("stage", stage);
+        r.put("date", date);
+        r.put("inserted", result.inserted());
+        r.put("expectedTotal", result.expectedTotal());
+        r.put("message", result.message());
+        return r;
     }
 
     /** 诊断失败阶段:判断是 seed 不完整 / task 失败 / 引擎去重。 */

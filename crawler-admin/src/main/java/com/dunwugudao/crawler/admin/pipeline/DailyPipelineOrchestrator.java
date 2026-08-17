@@ -729,6 +729,139 @@ public class DailyPipelineOrchestrator {
         return updated;
     }
 
+    // ---------------- 单阶段修复(万能按钮) ----------------
+
+    /** 重新下发某阶段的种子任务(幂等:insertIfAbsent 跳过已存在的任务)。 */
+    public SeedResult reseedStage(String dateStr, String stageName) {
+        PipelineStage stage = resolveStage(stageName);
+        SeedResult result = stageSeeder.seed(stage, LocalDate.parse(dateStr), defaultSource);
+        // 更新阶段记录的 seeded_count / expected_total
+        PipelineRun run = pipelineMapper.selectRunByDate(LocalDate.parse(dateStr));
+        if (run != null) {
+            pgJdbc.update("UPDATE pipeline_stage SET seeded_count=?, expected_total=? WHERE run_id=? AND stage_name=?",
+                    result.inserted(), result.expectedTotal(), run.getRunId(), stageName);
+        }
+        log.info("[fixStage] reseed date={} stage={} inserted={} expectedTotal={}",
+                dateStr, stageName, result.inserted(), result.expectedTotal());
+        return result;
+    }
+
+    /**
+     * 万能修复:自动诊断阶段失败原因并尝试修复,目标是"数据对得上"。
+     *
+     * <p>诊断→修复逻辑(按优先级):</p>
+     * <ol>
+     *   <li>无任务(seed=0 或任务数=0) → 重新 seed</li>
+     *   <li>存在 FAILED/DEAD 任务 → 重置为 PENDING(让 worker 重新消费)</li>
+     *   <li>存在卡住的 CLAIMED 任务(>2min) → 回收为 PENDING</li>
+     *   <li>所有任务 SUCCESS 但 actual&lt;expected → 尝试 reseed 补数据;仍不足则自动确认(误报)</li>
+     *   <li>actual&gt;=expected 但阶段未标记 DONE → 确认通过</li>
+     * </ol>
+     *
+     * @return 修复结果 Map,含 action / message / tasks 等
+     */
+    public Map<String, Object> fixStage(String dateStr, String stageName) {
+        PipelineStage stage = resolveStage(stageName);
+        LocalDate date = LocalDate.parse(dateStr);
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("stage", stageName);
+        r.put("date", dateStr);
+
+        // 1. 统计该阶段任务状态
+        List<String> taskTypes = stage.getTaskTypes();
+        List<Map<String, Object>> statusRows = taskTypes.isEmpty() ? List.of()
+                : crawlTaskMapper.countByTaskTypesAndDate(taskTypes, dateStr);
+        Map<String, Integer> byStatus = new HashMap<>();
+        int totalTasks = 0;
+        for (Map<String, Object> row : statusRows) {
+            String st = (String) row.get("status");
+            int cnt = ((Number) row.get("cnt")).intValue();
+            byStatus.put(st, cnt);
+            totalTasks += cnt;
+        }
+        int pending = byStatus.getOrDefault("PENDING", 0) + byStatus.getOrDefault("RETRY", 0);
+        int claimed = byStatus.getOrDefault("CLAIMED", 0);
+        int success = byStatus.getOrDefault("SUCCESS", 0);
+        int failed = byStatus.getOrDefault("FAILED", 0) + byStatus.getOrDefault("DEAD", 0);
+        r.put("tasksTotal", totalTasks);
+        r.put("tasksByStatus", byStatus);
+
+        // 2. 读阶段记录
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        PipelineStageRecord rec = run != null ? pipelineMapper.selectStage(run.getRunId(), stageName) : null;
+        int expected = rec != null && rec.getExpectedTotal() != null ? rec.getExpectedTotal() : 0;
+        int actual = rec != null && rec.getActualTotal() != null ? rec.getActualTotal() : 0;
+
+        // 3. 诊断 + 修复
+        String action;
+        String message;
+
+        if (totalTasks == 0) {
+            // 从未下发 → reseed
+            SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
+            updateStageSeedInfo(run, stageName, seed);
+            action = "RESEED";
+            message = String.format("未检测到任务,已重新下发(%d 个新任务,期望 %d 行)", seed.inserted(), seed.expectedTotal());
+        } else if (failed > 0) {
+            // 有失败任务 → 重置为 PENDING
+            int reset = crawlTaskMapper.resetTasksByTaskTypesAndDate(taskTypes, dateStr, List.of("FAILED", "DEAD"));
+            markStageRunning(run, stageName);
+            action = "RESET_FAILED";
+            message = String.format("存在 %d 个失败任务,已重置为 PENDING 等待 worker 重新消费", reset);
+        } else if (claimed > 0) {
+            // CLAIMED 卡住 → 回收(>2min 的僵尸)
+            int reclaimed = crawlTaskMapper.reclaimZombies(2);
+            action = "RECLAIM_CLAIMED";
+            message = String.format("存在 %d 个卡住的 CLAIMED 任务,已回收 %d 个为 PENDING", claimed, reclaimed);
+        } else if (pending > 0) {
+            // 有待消费任务 → worker 工作中,等待
+            action = "WAITING";
+            message = String.format("还有 %d 个任务待 worker 消费,请稍后再试", pending);
+        } else if (actual < expected) {
+            // 全 SUCCESS 但仍不够 → 尝试 reseed 看能否补更多;否则确认(误报)
+            SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
+            if (seed.inserted() > 0) {
+                updateStageSeedInfo(run, stageName, seed);
+                action = "RESEED_SUPPLEMENT";
+                message = String.format("任务已全部执行,数据仍不足(实/期=%d/%d),已补发 %d 个新任务", actual, expected, seed.inserted());
+            } else {
+                // 无法补发 → 自动确认(误报)
+                confirmStage(dateStr, stageName);
+                action = "AUTO_CONFIRM";
+                message = String.format("任务已全部执行,数据差异(实/期=%d/%d)疑似 tc 虚高误报,已自动确认通过", actual, expected);
+            }
+        } else {
+            // actual >= expected 但未标 DONE → 确认
+            confirmStage(dateStr, stageName);
+            action = "CONFIRM";
+            message = String.format("数据已满足(实/期=%d/%d),已确认通过", actual, expected);
+        }
+
+        r.put("action", action);
+        r.put("message", message);
+        log.info("[fixStage] date={} stage={} action={} message={}", dateStr, stageName, action, message);
+        return r;
+    }
+
+    private PipelineStage resolveStage(String stageName) {
+        return Stream.of(PipelineStage.values())
+                .filter(s -> s.name().equals(stageName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("未知阶段: " + stageName));
+    }
+
+    private void updateStageSeedInfo(PipelineRun run, String stageName, SeedResult seed) {
+        if (run == null) return;
+        pgJdbc.update("UPDATE pipeline_stage SET seeded_count=?, expected_total=? WHERE run_id=? AND stage_name=?",
+                seed.inserted(), seed.expectedTotal(), run.getRunId(), stageName);
+    }
+
+    private void markStageRunning(PipelineRun run, String stageName) {
+        if (run == null) return;
+        pgJdbc.update("UPDATE pipeline_stage SET status='RUNNING', error_msg=NULL WHERE run_id=? AND stage_name=?",
+                run.getRunId(), stageName);
+    }
+
     private void await(LocalDate date, PipelineStage stage) throws InterruptedException {
         long deadline = System.currentTimeMillis() + Duration.ofMinutes(awaitTimeoutMin).toMillis();
         while (System.currentTimeMillis() < deadline) {

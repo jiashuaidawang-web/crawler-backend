@@ -21,7 +21,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAll(Exception e) {
-        log.error("[未捕获异常] {}", e.getMessage(), e);
+        // 注意:只记消息,不传异常对象。当前环境 logback 的 throwable-proxy 路径有
+        // NoClassDefFoundError(ThrowableProxy),传 e 会导致日志框架自身崩、响应写不出去。
+        log.error("[未捕获异常] {}: {}", e.getClass().getSimpleName(), e.getMessage());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("status", 500);
         body.put("error", "Internal Server Error");

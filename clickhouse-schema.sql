@@ -520,18 +520,22 @@ PARTITION BY toYYYYMM(effective_date)
 ORDER BY (board_code, ts_code, board_type, data_source)
 SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
--- 15. 北向资金
+-- 15. 北向/南向资金分钟级数据（kamt.rtmin 端点）
 CREATE TABLE IF NOT EXISTS northbound_flow (
     trade_date              Date NOT NULL,
-    hk_hold_net             Nullable(Decimal64(2)),
-    sh_net                  Nullable(Decimal64(2)),
-    sz_net                  Nullable(Decimal64(2)),
-    data_source             UInt8 NOT NULL DEFAULT 0,
+    data_source             UInt8 NOT NULL DEFAULT 1,
+    direction               Nullable(String),            -- 's2n'(南向) 或 'n2s'(北向)
+    time_point              Nullable(String),            -- 时间点（如 9:30）
+    net_inflow              Nullable(Decimal64(2)),      -- 净流入（万元）
+    buy_amount              Nullable(Decimal64(2)),      -- 买入额（万元）
+    sell_amount             Nullable(Decimal64(2)),      -- 卖出额（万元）
+    cumulative_net_inflow   Nullable(Decimal64(2)),      -- 累计净流入（万元）
+    status_flag             Nullable(Decimal64(2)),      -- 状态标记
     src_detail              Nullable(String),
     create_date             Nullable(Date),
     update_date             Nullable(DateTime)
 ) ENGINE = MergeTree()
-ORDER BY trade_date
+ORDER BY (trade_date, direction, time_point)
 SETTINGS index_granularity = 8192;
 
 -- ========== 四、辅助表 ==========

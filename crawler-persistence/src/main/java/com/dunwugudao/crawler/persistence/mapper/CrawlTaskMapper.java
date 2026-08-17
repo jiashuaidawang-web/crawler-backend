@@ -63,6 +63,21 @@ public interface CrawlTaskMapper {
     @Select("SELECT status, count(*) AS cnt FROM crawl_task WHERE unique_key LIKE #{like} GROUP BY status")
     List<Map<String, Object>> countAllLike(@Param("like") String like);
 
+    /** 按阶段(task_types)统计某日各状态任务数,用于 fixStage 诊断。 */
+    @Select("""
+            <script>
+            SELECT status, count(*) AS cnt FROM crawl_task
+            WHERE unique_key LIKE CONCAT('%', #{date}, '%')
+            AND task_type IN
+            <foreach collection="taskTypes" item="t" open="(" separator="," close=")">
+              #{t}
+            </foreach>
+            GROUP BY status ORDER BY status
+            </script>
+            """)
+    List<Map<String, Object>> countByTaskTypesAndDate(@Param("taskTypes") List<String> taskTypes,
+                                                       @Param("date") String date);
+
     // ---------------------- M3：种子生成（幂等） ----------------------
 
     /**
@@ -150,6 +165,27 @@ public interface CrawlTaskMapper {
             </script>
             """)
     int resetTasksByStatus(@Param("like") String like, @Param("statuses") List<String> statuses);
+
+    /** 重置某阶段(task_types)下指定状态的任务为 PENDING(用于 fixStage 自动修复)。 */
+    @Update("""
+            <script>
+            UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
+              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              error_msg='auto reset by fixStage', updated_at=now()
+            WHERE unique_key LIKE CONCAT('%', #{date}, '%')
+              AND task_type IN
+              <foreach collection='taskTypes' item='t' open='(' separator=',' close=')'>
+                #{t}
+              </foreach>
+              AND status IN
+              <foreach collection='statuses' item='s' open='(' separator=',' close=')'>
+                #{s}
+              </foreach>
+            </script>
+            """)
+    int resetTasksByTaskTypesAndDate(@Param("taskTypes") List<String> taskTypes,
+                                      @Param("date") String date,
+                                      @Param("statuses") List<String> statuses);
 
     /** 统计某日期前缀下各状态任务数(用于展示失败任务分布) */
     @Select("""
