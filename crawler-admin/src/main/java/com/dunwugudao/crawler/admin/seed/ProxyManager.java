@@ -59,6 +59,9 @@ public class ProxyManager {
     /** 每阶段 IP 告警阈值:超过此次数打 WARN */
     private static final int IP_WARNING_THRESHOLD = 50;
 
+    /** 单 IP 连续失败熔断阈值。当前代理连续失败达到此值，标记失效强制换新(避免一个坏 IP 卡死,如 Connection reset)。 */
+    private static final int PER_IP_FAIL_THRESHOLD = 5;
+
     /** 连续失败计数（达到阈值触发熔断） */
     private int consecutiveFailures = 0;
 
@@ -67,6 +70,12 @@ public class ProxyManager {
 
     /** 缓存的代理:复用直到失效再换。失败时置 null,下次 acquire 重新提取。 */
     private String cachedProxy = null;
+
+    /** 当前缓存代理的 identity(用于 per-IP 失败计数) */
+    private String currentProxyId = null;
+
+    /** 当前代理的连续失败次数(同一 IP 连续失败达到 PER_IP_FAIL_THRESHOLD 即失效换新) */
+    private int currentProxyFails = 0;
 
     /** 熔断开始时间（用于自动半开） */
     private long circuitBreakerOpenTime = 0L;
@@ -175,9 +184,9 @@ public class ProxyManager {
                             attempt, MAX_RETRIES, latency, extractProxyHost(proxyStr));
                     consecutiveFailures++;
                     checkCircuitBreaker();
+                    onProxyFailure(proxyStr);
                     ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
                             extractProxyHost(proxyStr), "EMPTY", 0, (long)latency, "empty response", currentTradeDate);
-                    cachedProxy = null;  // 失效缓存,下次换新代理
                     continue;
                 }
 
@@ -188,7 +197,7 @@ public class ProxyManager {
                             attempt, MAX_RETRIES, latency, resp.substring(0, Math.min(200, resp.length())));
                     consecutiveFailures++;
                     checkCircuitBreaker();
-                    cachedProxy = null;  // 失效缓存,下次换新代理
+                    onProxyFailure(proxyStr);
                     continue;
                 }
 
@@ -213,16 +222,31 @@ public class ProxyManager {
                         attempt, MAX_RETRIES, latency, e.getMessage());
                 consecutiveFailures++;
                 checkCircuitBreaker();
+                // 单 IP 连续失败熔断:同一代理连续失败达到阈值,标记失效强制换新
+                onProxyFailure(proxyStr);
                 // IP 消耗埋点（失败）
                 ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
                         extractProxyHost(proxyStr), "FAILED", 0, (long)latency, e.getMessage(), currentTradeDate);
-                cachedProxy = null;  // 失效缓存,下次换新代理
             }
         }
 
         // ---------- 6. 所有重试耗尽 ----------
         log.error("[ProxyManager] 请求最终失败, 已重试 {} 次, url={}", MAX_RETRIES, url);
         return null;
+    }
+
+    /**
+     * 当前代理一次失败后的 per-IP 熔断处理。
+     * <p>同一代理连续失败达到 {@link #PER_IP_FAIL_THRESHOLD} 次,清除缓存强制下次 acquire 提取新代理,
+     * 避免一个坏 IP(如持续 Connection reset)被长期缓存复用卡死。</p>
+     */
+    private void onProxyFailure(String proxyStr) {
+        currentProxyFails++;
+        if (currentProxyFails >= PER_IP_FAIL_THRESHOLD) {
+            log.warn("[ProxyManager] 代理 {}(连续失败={}/{}) 标记失效,强制换新",
+                    extractProxyHost(proxyStr), currentProxyFails, PER_IP_FAIL_THRESHOLD);
+            cachedProxy = null;
+        }
     }
 
     /**
@@ -260,7 +284,10 @@ public class ProxyManager {
             if (proxy == null) {
                 log.warn("[acquireProxy] provider 返回 null");
             } else {
-                cachedProxy = proxy;  // 缓存,后续请求复用
+                cachedProxy = proxy;
+                // 新代理,重置 per-IP 失败计数(避免把旧 IP 的失败带到新 IP)
+                currentProxyId = proxy;
+                currentProxyFails = 0;
                 stageIpCount++;
                 // 超过阈值打 WARN,提醒正在大量烧 IP
                 if (stageIpCount == IP_WARNING_THRESHOLD) {
@@ -316,9 +343,11 @@ public class ProxyManager {
         if (circuitBreakerOpen) {
             long elapsed = System.currentTimeMillis() - circuitBreakerOpenTime;
             long remaining = Math.max(0, CIRCUIT_BREAKER_RESET_MS - elapsed);
-            return String.format("OPEN(连续失败=%d, 剩余=%ds)", consecutiveFailures, remaining / 1000);
+            return String.format("OPEN(连续失败=%d, 剩余=%ds, 当前IP失败=%d/%d)", consecutiveFailures,
+                    remaining / 1000, currentProxyFails, PER_IP_FAIL_THRESHOLD);
         }
-        return String.format("CLOSED(连续失败=%d/%d)", consecutiveFailures, CIRCUIT_BREAKER_THRESHOLD);
+        return String.format("CLOSED(连续失败=%d/%d, 当前IP失败=%d/%d)", consecutiveFailures,
+                CIRCUIT_BREAKER_THRESHOLD, currentProxyFails, PER_IP_FAIL_THRESHOLD);
     }
 
     /** 手动重置熔断器（换代理供应商后调用） */

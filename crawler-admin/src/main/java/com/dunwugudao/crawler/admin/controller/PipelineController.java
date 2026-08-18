@@ -24,11 +24,12 @@ public class PipelineController {
         this.ipConsumptionService = ipConsumptionService;
     }
 
-    /** 幂等跑批:跑完全日批。date 缺省=今天。 */
+    /** 幂等跑批:跑完全日批。date 缺省=今天。force=true 强制重跑(含已 SUCCESS 的任务)。 */
     @PostMapping("/daily")
-    public PipelineRunResult daily(@RequestParam(required = false) String date) {
+    public PipelineRunResult daily(@RequestParam(required = false) String date,
+                                   @RequestParam(required = false, defaultValue = "false") boolean force) {
         String d = (date == null || date.isBlank()) ? java.time.LocalDate.now().toString() : date;
-        return orchestrator.run(d);
+        return orchestrator.run(d, force);
     }
 
     /** 断点续跑:从首个未完成阶段继续。 */

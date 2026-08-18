@@ -772,9 +772,17 @@ public class SeedGenerator {
         }
 
         int total = 0;
+        int failedProbes = 0;
         for (BoardBasic b : deduped) {
-            // 先请求一次（pz=1）拿 total，计算页数
-            int totalCount = fetchBoardStockTotal(b.getBoardCode(), date);
+            // 先请求一次（pz=1）拿 total，计算页数。单个板块探测失败只跳过,不崩整个阶段。
+            int totalCount;
+            try {
+                totalCount = fetchBoardStockTotal(b.getBoardCode(), date);
+            } catch (Exception e) {
+                failedProbes++;
+                log.warn("[seedByBoard] 探测板块 {}({}) 总数失败,跳过该板块: {}", b.getBoardCode(), b.getBoardName(), e.getMessage());
+                continue;
+            }
             int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
             // 按页拆任务：每页一个 task（pn 从 1 开始）
             String boardCode = b.getBoardCode();
@@ -788,6 +796,9 @@ public class SeedGenerator {
                 task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey("STOCK_BY_BOARD", source, date, pn) + "|" + boardCode);
                 total += mapper.insertIfAbsent(task);
             }
+        }
+        if (failedProbes > 0) {
+            log.warn("[seedByBoard] date={} 共 {} 个板块探测失败(总板块 {}),已跳过", date, failedProbes, deduped.size());
         }
         log.info("seedByBoard date={} boards={} inserted={}", date, deduped.size(), total);
         return total;
@@ -1011,8 +1022,14 @@ public class SeedGenerator {
         }
         String boardName = bb.getBoardName();
         int boardType = bb.getBoardType();
-        // 探测 total
-        int totalCount = fetchBoardStockTotal(boardCode, date);
+        // 探测 total(失败则跳过该板块,不崩)
+        int totalCount;
+        try {
+            totalCount = fetchBoardStockTotal(boardCode, date);
+        } catch (Exception e) {
+            log.warn("[seedSingleBoard] 探测板块 {}({}) 总数失败,跳过: {}", boardCode, boardName, e.getMessage());
+            return 0;
+        }
         int totalPages = (totalCount <= 0) ? 1 : ((totalCount + BOARD_BY_BOARD_PAGE_SIZE - 1) / BOARD_BY_BOARD_PAGE_SIZE);
         int inserted = 0;
         for (int pn = 1; pn <= totalPages; pn++) {
@@ -1106,29 +1123,12 @@ public class SeedGenerator {
     }
 
     /**
-     * 池子任务下发：先探测 total，再按 ceil(tc/100) 拆任务。
-     * @return 插入的任务数
+     * 池子任务下发：每个池子 1 个任务，由 worker 翻页抓全量后整日覆盖写入。
+     * <p>历史上按 ceil(tc/100) 拆页，配合写库「先 DELETE 全日再 INSERT 本页」，
+     * 大于 100 条的池子只剩最后一页（次新 147→47、强势 117→尾页）。</p>
      */
     private int seedPoolTasks(String limitType, int source, String date) {
-        int tc = fetchPoolTotal(limitType, date);
-        int numTasks;
-        if (tc <= 0) {
-            // 探测失败或无数据：仍下发 1 个 task（兜底，避免漏跑）
-            numTasks = 1;
-            log.info("[seedPoolTasks] limitType={} 探测无数据(tc={})，下发 1 个兜底 task", limitType, tc);
-        } else {
-            numTasks = (tc + 99) / 100; // ceil(tc/100)
-        }
-        String taskType = taskTypeForLimitType(limitType);
-        int inserted = 0;
-        for (int i = 0; i < numTasks; i++) {
-            String params = buildPoolParams(date, limitType, i, 100);
-            CrawlTask task = buildTask(taskType, source, date, null, null, params);
-            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, i));
-            inserted += mapper.insertIfAbsent(task);
-        }
-        log.info("[seedPoolTasks] limitType={} tc={} numTasks={} inserted={}", limitType, tc, numTasks, inserted);
-        return inserted;
+        return seedPoolTasksSingleResult(limitType, source, date).inserted();
     }
 
     /**
@@ -1277,25 +1277,23 @@ public class SeedGenerator {
         return seedPoolTasksSingleResult(limitType, source, date).inserted();
     }
 
-    /** 池子种子,返回 SeedResult(含上游总数 tc)。 */
+    /** 池子种子,返回 SeedResult(含上游总数 tc)。每个池子只下发 1 个全日任务。 */
     public SeedResult seedPoolTasksSingleResult(String limitType, int source, String date) {
         int tc = fetchPoolTotalByProxy(limitType, date);
-        int numTasks;
-        if (tc <= 0) {
-            numTasks = 1;
-            log.info("[seedPoolTasksSingle] limitType={} 探测无数据(tc={})，下发 1 个兜底 task", limitType, tc);
-        } else {
-            numTasks = (tc + 99) / 100;
-        }
         String taskType = taskTypeForLimitType(limitType);
-        int inserted = 0;
-        for (int i = 0; i < numTasks; i++) {
-            String params = buildPoolParams(date, limitType, i, 100);
-            CrawlTask task = buildTask(taskType, source, date, null, null, params);
-            task.setUniqueKey(TaskTypeCatalog.buildPageUniqueKey(taskType, source, date, i));
-            inserted += mapper.insertIfAbsent(task);
+        String uniqueKey = TaskTypeCatalog.buildUniqueKey(taskType, source, date);
+        // 作废历史上按页拆的旧任务（unique_key = type|source|date|pn），避免 worker 再抓尾页把全日数据删掉
+        int cancelled = mapper.cancelPagedTasks(taskType, uniqueKey);
+        if (cancelled > 0) {
+            log.info("[seedPoolTasksSingle] cancelled {} legacy page-split tasks prefix={}", cancelled, uniqueKey);
         }
-        log.info("[seedPoolTasksSingle] limitType={} tc={} numTasks={} inserted={}", limitType, tc, numTasks, inserted);
+        String params = buildPoolParams(date, limitType, 0, 100);
+        Integer expected = tc > 0 ? tc : null;
+        CrawlTask task = buildTask(taskType, source, date, null, expected, params);
+        task.setUniqueKey(uniqueKey);
+        int inserted = mapper.insertIfAbsent(task);
+        log.info("[seedPoolTasksSingle] limitType={} tc={} uniqueKey={} inserted={}",
+                limitType, tc, uniqueKey, inserted);
         return new SeedResult(inserted, Math.max(tc, 0), List.of(), limitType + " 上游tc=" + tc);
     }
 
@@ -1475,7 +1473,7 @@ public class SeedGenerator {
                 continue;
             }
             if ("LIMIT_POOL".equals(spec.taskType())) {
-                // 涨停/跌停/炸板：先探测 total，按 ceil(tc/100) 拆任务（即时入库）
+                // 涨停/跌停/炸板：每个子类型 1 个全日任务（worker 翻页抓全量）
                 for (String limitType : LIMIT_SUBTYPES) {
                     inserted += seedPoolTasks(limitType, source, date);
                 }
@@ -1483,7 +1481,7 @@ public class SeedGenerator {
                 // 历史回填也按页拆（探测 total 后拆分，即时入库）
                 inserted += seedStockDailyPages(source, date);
             } else if ("STRONG_POOL".equals(spec.taskType()) || "CIXIN_POOL".equals(spec.taskType())) {
-                // 强势/次新：先探测 total，按 ceil(tc/100) 拆任务（即时入库）
+                // 强势/次新：1 个全日任务（worker 翻页抓全量）
                 inserted += seedPoolTasks(spec.taskType(), source, date);
             } else if ("REGION_DAILY".equals(spec.taskType())) {
                 inserted += seedClistType(spec.taskType(), source, date, 1);

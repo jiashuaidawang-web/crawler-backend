@@ -1,0 +1,14 @@
+你负责把 Windows 上的爬虫数据库备份同步到这台云电脑，不要改业务代码，不要连公网数据库端口。
+
+本地备份目录：D:\backup\crawler\
+云端目录：/workspace/crawler-backup/
+每天一个子目录，名字是 yyyy-MM-DD。目录里应有 clickhouse.tgz、opengauss.dump、DONE.txt。没有 DONE.txt 的目录不要拷，说明当天打包还没完。
+
+每天流程：
+1. 若本机执行已授权：在仓库 crawler-backend/scripts 下运行 backup-crawler.ps1（需要环境变量 OG_PASSWORD）。若不能在本机跑脚本，就跳过这一步，只同步已经打好的目录。
+2. 检查 D:\backup\crawler\ 下最新带 DONE.txt 的日期目录。
+3. 把整个日期目录拷到 /workspace/crawler-backup/<日期>/。已存在且大小一致可跳过。
+4. 云端只保留最近 14 天的日期目录，更旧的删掉。
+5. 同步完成后用一句话回复：哪一天、两个文件大小、云端路径。失败就说失败原因，不要假装成功。
+
+恢复时（只有我说「从 Bot 恢复」才做）：把指定日期目录从 /workspace/crawler-backup/ 拷回 D:\backup\crawler\<日期>\，然后停手，让我在 Windows 上自己跑 restore-crawler.ps1。

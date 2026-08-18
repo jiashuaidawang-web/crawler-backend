@@ -53,9 +53,9 @@ public interface CrawlTaskMapper {
             "FROM crawl_task GROUP BY last_node ORDER BY cnt DESC")
     List<Map<String, Object>> countByNode();
 
-    /** 按 unique_key 前缀 + 未终态(PENDING/CLAIMED)统计,用于编排阶段完成探测。 */
+    /** 按 unique_key 前缀 + 未完成状态统计,用于编排阶段完成探测。CLAIMED 必须算进去,否则 worker 还在跑编排器会误判完成。 */
     @Select("SELECT status, count(*) AS cnt FROM crawl_task " +
-            "WHERE unique_key LIKE #{like} AND status IN ('PENDING','RETRY') " +
+            "WHERE unique_key LIKE #{like} AND status IN ('PENDING','RETRY','CLAIMED') " +
             "GROUP BY status")
     List<Map<String, Object>> countByStatusLike(@Param("like") String like);
 
@@ -135,6 +135,7 @@ public interface CrawlTaskMapper {
      * 强制重跑:把某日期下 DEAD/FAILED 的任务重置为 PENDING,让 worker 重新认领。
      * <p>seed 幂等会跳过已存在的任务,但这些任务状态已是终态无法被认领,需先重置。</p>
      *
+     * @param like unique_key LIKE 模式,调用方应传入 '%2026-08-17%'
      * @return 重置的任务数
      */
     @Update("""
@@ -144,6 +145,41 @@ public interface CrawlTaskMapper {
             WHERE unique_key LIKE #{like} AND status IN ('DEAD','FAILED')
             """)
     int forceResetDeadTasks(@Param("like") String like);
+
+    /**
+     * 强制重跑:把某日期下所有已执行过的任务重置为 PENDING(含 SUCCESS)。
+     * unique_key 形如 taskType|source|date 或 taskType|source|date|pn,用 '%date%' 匹配。
+     */
+    @Update("""
+            UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
+              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              error_msg='force reset all by pipeline re-run', updated_at=now()
+            WHERE unique_key LIKE CONCAT('%', #{date}, '%')
+              AND status IN ('SUCCESS','FAILED','DEAD','CLAIMED','RETRY')
+            """)
+    int forceResetAllTasksForDate(@Param("date") String date);
+
+    /**
+     * 作废按页拆分的旧池子任务。prefix=taskType|source|date,匹配 unique_key 带 |pn 后缀的行。
+     */
+    @Update("""
+            UPDATE crawl_task SET status='DEAD', finished_at=now(),
+              error_msg='superseded by full-snapshot pool task', updated_at=now()
+            WHERE task_type = #{taskType}
+              AND unique_key LIKE CONCAT(#{prefix}, '|%')
+              AND status NOT IN ('DEAD')
+            """)
+    int cancelPagedTasks(@Param("taskType") String taskType, @Param("prefix") String prefix);
+
+    /** 按精确 unique_key 重置为 PENDING(池子全日任务重跑,避免把已作废的分页任务又救活)。 */
+    @Update("""
+            UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
+              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              error_msg='reset by stage replay', updated_at=now()
+            WHERE unique_key = #{uniqueKey}
+              AND status IN ('SUCCESS','FAILED','DEAD','CLAIMED','RETRY')
+            """)
+    int resetTaskByUniqueKey(@Param("uniqueKey") String uniqueKey);
 
     /**
      * 重置某日期前缀下指定状态的任务为 PENDING(用于手动重试失败阶段)。

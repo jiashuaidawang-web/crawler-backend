@@ -52,6 +52,7 @@ public class DailyPipelineOrchestrator {
             PipelineStage.NORTHBOUND,
             PipelineStage.INDEX_DAILY,
             PipelineStage.DRAGON_TIGER,
+            PipelineStage.DRAGON_TIGER_DETAIL,
             PipelineStage.BOARD_BASIC,
             PipelineStage.STOCK_BY_BOARD,
             PipelineStage.STOCK_WEEKLY
@@ -141,10 +142,10 @@ public class DailyPipelineOrchestrator {
     public PipelineRunResult run(String dateStr, boolean force) {
         LocalDate date = LocalDate.parse(dateStr);
         if (force) {
-            // 重置 DEAD/FAILED 任务为 PENDING,使 seed 幂等跳过后的任务仍能被 worker 认领
-            int resetCount = crawlTaskMapper.forceResetDeadTasks(dateStr + "%");
+            // 重置该日全部已执行任务(含 SUCCESS),否则 seed 幂等跳过已成功任务,数据不会重抓
+            int resetCount = crawlTaskMapper.forceResetAllTasksForDate(dateStr);
             if (resetCount > 0) {
-                log.info("[run-pipeline] force=true, reset {} DEAD/FAILED tasks to PENDING for date={}",
+                log.info("[run-pipeline] force=true, reset {} tasks to PENDING for date={}",
                         resetCount, dateStr);
             }
             PipelineRun existing = pipelineMapper.selectRunByDate(date);
@@ -277,12 +278,12 @@ public class DailyPipelineOrchestrator {
         // 失败
         if ("FAILED".equals(status)) {
             if (lost > 0) {
-                return String.format("校验失败:期望 %d 行,实际写入 %d 行,丢失 %d 行。建议「断点续跑」补数据。", expected, actual, lost);
+                return String.format("校验失败:期望 %d 行,实际写入 %d 行,丢失 %d 行。点「修复数据」重抓该阶段。", expected, actual, lost);
             }
             if (actual > expected && expected > 0) {
                 return String.format("校验失败:实际 %d 行超过期望 %d 行,可能存在重复口径。建议确认上游数据源口径。", actual, expected);
             }
-            return "校验失败。建议「断点续跑」或查看校验明细。";
+            return "校验失败。点「修复数据」重抓该阶段。";
         }
         // 成功
         if ("DONE".equals(status) || "SUCCESS".equals(status)) {
@@ -597,8 +598,8 @@ public class DailyPipelineOrchestrator {
         int deadTasks = 0;
         int successTasks = 0;
         if (todaySeeded > 0 && run != null) {
-            String like = "%|" + dateStr;
-            List<java.util.Map<String, Object>> statusList = crawlTaskMapper.countByStatusForLike(like);
+            List<java.util.Map<String, Object>> statusList =
+                    crawlTaskMapper.countByTaskTypesAndDate(stage.getTaskTypes(), dateStr);
             for (java.util.Map<String, Object> row : statusList) {
                 String st = (String) row.get("status");
                 int cnt = ((Number) row.get("cnt")).intValue();
@@ -611,15 +612,33 @@ public class DailyPipelineOrchestrator {
         diag.put("deadTasks", deadTasks);
         diag.put("successTasks", successTasks);
 
+        int expected = 0;
+        int actual = 0;
+        if (run != null) {
+            PipelineStageRecord rec = pipelineMapper.selectStage(run.getRunId(), stageName);
+            if (rec != null) {
+                expected = rec.getExpectedTotal() == null ? 0 : rec.getExpectedTotal();
+                actual = rec.getActualTotal() == null ? 0 : rec.getActualTotal();
+                if (realtimeCount) {
+                    actual = totalCountValidator.countActualByStage(stageName, date, defaultSource);
+                }
+            }
+        }
+        diag.put("expectedTotal", expected);
+        diag.put("actualTotal", actual);
+
         // 5. 诊断结论
         String reason;
         String action;
         if (!seedComplete) {
             reason = "SEED_INCOMPLETE";
-            action = "admin 未完整下发任务,请检查 seed 逻辑或手动补发";
+            action = "任务未完整下发,点「修复数据」会重新探测并下发";
         } else if (failedTasks > 0 || deadTasks > 0) {
             reason = "TASK_FAILED";
-            action = String.format("存在失败 task(FAILED=%d, DEAD=%d),可重试", failedTasks, deadTasks);
+            action = String.format("存在失败 task(FAILED=%d, DEAD=%d),点「修复数据」重抓", failedTasks, deadTasks);
+        } else if (expected > 0 && actual < expected) {
+            reason = "DATA_INCOMPLETE";
+            action = String.format("任务都成功但数据不足(实/期=%d/%d),点「修复数据」整阶段重抓", actual, expected);
         } else {
             reason = "ENGINE_DEDUP";
             action = "task 全部成功,行数差异疑似引擎去重或口径差异,需人工确认";
@@ -650,14 +669,15 @@ public class DailyPipelineOrchestrator {
             throw new IllegalStateException("该日期无跑批记录: " + dateStr);
         }
 
-        // 2. 重置该日期下 DEAD/FAILED 任务为 PENDING
-        String like = "%|" + dateStr;  // 匹配所有以 |date 结尾的 unique_key
-        int reset = crawlTaskMapper.forceResetDeadTasks(like);
-        log.info("[pipeline] retryStage date={} stage={} 重置 {} 个 DEAD/FAILED 任务", dateStr, stageName, reset);
+        // 2. 重新下发(池子会作废旧分页任务)并把该阶段任务重置为 PENDING
+        SeedResult seed = replayStageTasks(stage, dateStr);
+        updateStageSeedInfo(run, stageName, seed);
+        log.info("[pipeline] retryStage date={} stage={} seedInserted={} expected={}",
+                dateStr, stageName, seed.inserted(), seed.expectedTotal());
 
-        // 3. 重置该阶段行为 RUNNING(清空旧结果)
+        // 3. 重置该阶段行为 RUNNING(保留 expected,校验要用)
         pgJdbc.update(
-                "UPDATE pipeline_stage SET status='RUNNING', seeded_count=NULL, expected_total=NULL, " +
+                "UPDATE pipeline_stage SET status='RUNNING', " +
                 "actual_total=NULL, dup_rows=NULL, lost_rows=NULL, duration_ms=NULL, " +
                 "check_result=NULL, error_msg=NULL, started_at=now(), finished_at=NULL " +
                 "WHERE run_id=? AND stage_name=?",
@@ -668,9 +688,10 @@ public class DailyPipelineOrchestrator {
         result.stage = stageName;
         long t0 = System.currentTimeMillis();
         try {
-            // 4.1 取当前该阶段的 expectedTotal(从 stage 记录或重新探测)
-            PipelineStageRecord rec = pipelineMapper.selectStage(run.getRunId(), stageName);
-            int expectedTotal = rec != null && rec.getExpectedTotal() != null ? rec.getExpectedTotal() : 0;
+            int expectedTotal = seed.expectedTotal() > 0 ? seed.expectedTotal()
+                    : (pipelineMapper.selectStage(run.getRunId(), stageName) != null
+                    && pipelineMapper.selectStage(run.getRunId(), stageName).getExpectedTotal() != null
+                    ? pipelineMapper.selectStage(run.getRunId(), stageName).getExpectedTotal() : 0);
 
             // 4.2 等待完成
             await(date, stage);
@@ -685,6 +706,7 @@ public class DailyPipelineOrchestrator {
             result.checkResults = checkResults;
             boolean allPassed = checkResults.stream().allMatch(ValidateResult::passed);
             result.status = allPassed ? "DONE" : "FAILED";
+            result.seededCount = seed.inserted();
             result.expectedTotal = expectedTotal;
             result.actualTotal = actualTotal(checkResults);
             result.dupRows = dupRows(checkResults);
@@ -747,18 +769,9 @@ public class DailyPipelineOrchestrator {
     }
 
     /**
-     * 万能修复:自动诊断阶段失败原因并尝试修复,目标是"数据对得上"。
-     *
-     * <p>诊断→修复逻辑(按优先级):</p>
-     * <ol>
-     *   <li>无任务(seed=0 或任务数=0) → 重新 seed</li>
-     *   <li>存在 FAILED/DEAD 任务 → 重置为 PENDING(让 worker 重新消费)</li>
-     *   <li>存在卡住的 CLAIMED 任务(>2min) → 回收为 PENDING</li>
-     *   <li>所有任务 SUCCESS 但 actual&lt;expected → 尝试 reseed 补数据;仍不足则自动确认(误报)</li>
-     *   <li>actual&gt;=expected 但阶段未标记 DONE → 确认通过</li>
-     * </ol>
-     *
-     * @return 修复结果 Map,含 action / message / tasks 等
+     * 修复失败阶段:重新下发 + 把该阶段任务重置为 PENDING,等 worker 抓完再校验。
+     * <p>池子类失败常见原因是旧分页任务写库时互相覆盖,任务状态仍是 SUCCESS,
+     * 只重置 FAILED/DEAD 或自动确认都修不好数据。点一次就会整阶段重抓。</p>
      */
     public Map<String, Object> fixStage(String dateStr, String stageName) {
         PipelineStage stage = resolveStage(stageName);
@@ -767,79 +780,64 @@ public class DailyPipelineOrchestrator {
         r.put("stage", stageName);
         r.put("date", dateStr);
 
-        // 1. 统计该阶段任务状态
-        List<String> taskTypes = stage.getTaskTypes();
-        List<Map<String, Object>> statusRows = taskTypes.isEmpty() ? List.of()
-                : crawlTaskMapper.countByTaskTypesAndDate(taskTypes, dateStr);
-        Map<String, Integer> byStatus = new HashMap<>();
-        int totalTasks = 0;
-        for (Map<String, Object> row : statusRows) {
-            String st = (String) row.get("status");
-            int cnt = ((Number) row.get("cnt")).intValue();
-            byStatus.put(st, cnt);
-            totalTasks += cnt;
-        }
-        int pending = byStatus.getOrDefault("PENDING", 0) + byStatus.getOrDefault("RETRY", 0);
-        int claimed = byStatus.getOrDefault("CLAIMED", 0);
-        int success = byStatus.getOrDefault("SUCCESS", 0);
-        int failed = byStatus.getOrDefault("FAILED", 0) + byStatus.getOrDefault("DEAD", 0);
-        r.put("tasksTotal", totalTasks);
-        r.put("tasksByStatus", byStatus);
-
-        // 2. 读阶段记录
         PipelineRun run = pipelineMapper.selectRunByDate(date);
-        PipelineStageRecord rec = run != null ? pipelineMapper.selectStage(run.getRunId(), stageName) : null;
-        int expected = rec != null && rec.getExpectedTotal() != null ? rec.getExpectedTotal() : 0;
-        int actual = rec != null && rec.getActualTotal() != null ? rec.getActualTotal() : 0;
-
-        // 3. 诊断 + 修复
-        String action;
-        String message;
-
-        if (totalTasks == 0) {
-            // 从未下发 → reseed
-            SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
-            updateStageSeedInfo(run, stageName, seed);
-            action = "RESEED";
-            message = String.format("未检测到任务,已重新下发(%d 个新任务,期望 %d 行)", seed.inserted(), seed.expectedTotal());
-        } else if (failed > 0) {
-            // 有失败任务 → 重置为 PENDING
-            int reset = crawlTaskMapper.resetTasksByTaskTypesAndDate(taskTypes, dateStr, List.of("FAILED", "DEAD"));
-            markStageRunning(run, stageName);
-            action = "RESET_FAILED";
-            message = String.format("存在 %d 个失败任务,已重置为 PENDING 等待 worker 重新消费", reset);
-        } else if (claimed > 0) {
-            // CLAIMED 卡住 → 回收(>2min 的僵尸)
-            int reclaimed = crawlTaskMapper.reclaimZombies(2);
-            action = "RECLAIM_CLAIMED";
-            message = String.format("存在 %d 个卡住的 CLAIMED 任务,已回收 %d 个为 PENDING", claimed, reclaimed);
-        } else if (pending > 0) {
-            // 有待消费任务 → worker 工作中,等待
-            action = "WAITING";
-            message = String.format("还有 %d 个任务待 worker 消费,请稍后再试", pending);
-        } else if (actual < expected) {
-            // 全 SUCCESS 但仍不够 → 尝试 reseed 看能否补更多;否则确认(误报)
-            SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
-            if (seed.inserted() > 0) {
-                updateStageSeedInfo(run, stageName, seed);
-                action = "RESEED_SUPPLEMENT";
-                message = String.format("任务已全部执行,数据仍不足(实/期=%d/%d),已补发 %d 个新任务", actual, expected, seed.inserted());
-            } else {
-                // 无法补发 → 自动确认(误报)
-                confirmStage(dateStr, stageName);
-                action = "AUTO_CONFIRM";
-                message = String.format("任务已全部执行,数据差异(实/期=%d/%d)疑似 tc 虚高误报,已自动确认通过", actual, expected);
-            }
-        } else {
-            // actual >= expected 但未标 DONE → 确认
-            confirmStage(dateStr, stageName);
-            action = "CONFIRM";
-            message = String.format("数据已满足(实/期=%d/%d),已确认通过", actual, expected);
+        if (run == null) {
+            throw new IllegalStateException("该日期无跑批记录: " + dateStr);
         }
 
-        r.put("action", action);
-        r.put("message", message);
-        log.info("[fixStage] date={} stage={} action={} message={}", dateStr, stageName, action, message);
+        int actualBefore = totalCountValidator.countActualByStage(stageName, date, defaultSource);
+        SeedResult seed = replayStageTasks(stage, dateStr);
+        updateStageSeedInfo(run, stageName, seed);
+        markStageRunning(run, stageName);
+        log.info("[fixStage] date={} stage={} seedInserted={} expected={} actualBefore={}",
+                dateStr, stageName, seed.inserted(), seed.expectedTotal(), actualBefore);
+
+        PipelineStageResult result = new PipelineStageResult();
+        result.stage = stageName;
+        long t0 = System.currentTimeMillis();
+        try {
+            int expectedTotal = seed.expectedTotal() > 0 ? seed.expectedTotal() : 0;
+            if (!stage.getTaskTypes().isEmpty()) {
+                await(date, stage);
+            }
+            ValidateContext ctx = ValidateContext.of(expectedTotal, defaultSource, seed.taskIds());
+            List<ValidateResult> checkResults = new ArrayList<>();
+            for (PipelineValidator v : validators) {
+                checkResults.add(v.validate(date, stage, ctx));
+            }
+            result.checkResults = checkResults;
+            boolean allPassed = checkResults.stream().allMatch(ValidateResult::passed);
+            result.status = allPassed ? "DONE" : "FAILED";
+            result.seededCount = seed.inserted();
+            result.expectedTotal = expectedTotal;
+            result.actualTotal = actualTotal(checkResults);
+            result.dupRows = dupRows(checkResults);
+            result.lostRows = lostRows(checkResults);
+            if (!allPassed) {
+                writeAlert(date, stage, result, checkResults);
+            }
+            persistStage(run.getRunId(), stageName, result);
+        } catch (Exception e) {
+            log.error("[fixStage] date={} stage={} 异常: {}", dateStr, stageName, e.getMessage(), e);
+            result.status = "FAILED";
+            result.errorMsg = e.getMessage();
+            persistStage(run.getRunId(), stageName, result);
+        }
+        result.durationMs = System.currentTimeMillis() - t0;
+
+        r.put("action", "REPLAY");
+        r.put("seedInserted", seed.inserted());
+        r.put("expectedTotal", result.expectedTotal);
+        r.put("actualBefore", actualBefore);
+        r.put("actualAfter", result.actualTotal);
+        r.put("status", result.status);
+        r.put("message", "DONE".equals(result.status)
+                ? String.format("已重抓完成。期望 %d 行,实际 %d 行(修复前 %d)",
+                result.expectedTotal, result.actualTotal, actualBefore)
+                : String.format("已重抓,仍未对齐。期望 %d 行,实际 %d 行(修复前 %d)。可再点一次或查看 worker 日志",
+                result.expectedTotal, result.actualTotal, actualBefore));
+        log.info("[fixStage] date={} stage={} action=REPLAY status={} actual {} -> {}",
+                dateStr, stageName, result.status, actualBefore, result.actualTotal);
         return r;
     }
 
@@ -848,6 +846,31 @@ public class DailyPipelineOrchestrator {
                 .filter(s -> s.name().equals(stageName))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("未知阶段: " + stageName));
+    }
+
+    private static final Set<String> POOL_STAGE_NAMES = Set.of(
+            "LIMIT_UP", "LIMIT_DOWN", "LIMIT_ZHABAN", "STRONG_POOL", "CIXIN_POOL");
+
+    /**
+     * 重新下发并重置该阶段任务,使 worker 再抓一次。
+     * 池子:作废 unique_key 带页码后缀的旧任务,只把全日任务打回 PENDING。
+     */
+    private SeedResult replayStageTasks(PipelineStage stage, String dateStr) {
+        SeedResult seed = stageSeeder.seed(stage, LocalDate.parse(dateStr), defaultSource);
+        List<String> taskTypes = stage.getTaskTypes();
+        if (taskTypes.isEmpty()) {
+            return seed;
+        }
+        if (POOL_STAGE_NAMES.contains(stage.name())) {
+            for (String t : taskTypes) {
+                String key = t + "|" + defaultSource + "|" + dateStr;
+                crawlTaskMapper.resetTaskByUniqueKey(key);
+            }
+        } else {
+            crawlTaskMapper.resetTasksByTaskTypesAndDate(
+                    taskTypes, dateStr, List.of("SUCCESS", "FAILED", "DEAD", "CLAIMED", "RETRY"));
+        }
+        return seed;
     }
 
     private void updateStageSeedInfo(PipelineRun run, String stageName, SeedResult seed) {

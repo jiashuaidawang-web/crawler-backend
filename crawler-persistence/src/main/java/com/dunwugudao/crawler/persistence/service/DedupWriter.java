@@ -490,10 +490,11 @@ public class DedupWriter {
         return toLocalDate(rows.get(0).get("trade_date"));
     }
 
-    /** 写入前删除该日期+数据源的旧数据，避免累积。 */
+    /** 写入前删除该日期+数据源的旧数据，避免累积。mutations_sync=1 等 mutation 落地后再 INSERT，避免异步删除把刚写入的行抹掉。 */
     private void deleteOldPoolData(String table, LocalDate tradeDate, SourceType source) {
         try {
-            String sql = "ALTER TABLE " + table + " DELETE WHERE trade_date = ? AND data_source = ?";
+            String sql = "ALTER TABLE " + table
+                    + " DELETE WHERE trade_date = ? AND data_source = ? SETTINGS mutations_sync = 1";
             chJdbc.update(sql, tradeDate.toString(), source.getCode());
         } catch (Exception e) {
             log.warn("[DedupWriter] 删除旧数据失败 table={} date={}: {}", table, tradeDate, e.getMessage());

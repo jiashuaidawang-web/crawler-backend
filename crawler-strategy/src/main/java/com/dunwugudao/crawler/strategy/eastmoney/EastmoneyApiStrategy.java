@@ -122,10 +122,14 @@ public class EastmoneyApiStrategy implements SourceStrategy {
 
     /** ZT_POOL/DATACENTER 单独处理:涨停池/跌停池/龙虎榜 */
     private CrawlResult fetchZtPoolOrDatacenter(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
-        String td = EastmoneyEndpoints.requireTradeDate(params);
+        EastmoneyEndpoints.requireTradeDate(params);
         List<Map<String, Object>> allRows = new ArrayList<>();
         String lastRaw = "";
         String lastUrl = "";
+        int pagesize = EastmoneyEndpoints.parseInt(params.getOrDefault("pagesize", 100), 100);
+        if (pagesize <= 0) {
+            pagesize = 100;
+        }
         int pageIdx = 0;
         while (pageIdx < POOL_MAX_PAGES) {
             rateLimiter.acquire();
@@ -137,9 +141,16 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             JsonNode root = readTree(cleaned);
             List<Map<String, Object>> rows;
             if (spec.getParserType() == EastmoneyEndpoints.ParserType.ZT_POOL) {
+                // 池子是当日快照：一个任务翻页抓全量，写库时再整日覆盖。
+                // 旧逻辑 break 只拿一页 + 写库先 DELETE 全日，大于 100 条的池子只剩最后一页。
                 rows = EastmoneyParsers.parseZtPool(root.path("data"), spec, params);
                 allRows.addAll(rows);
-                break;
+                log.info("[fetchZtPool] taskType={} page={} rows={} accumulated={}",
+                        taskType, pageIdx, rows.size(), allRows.size());
+                if (rows.isEmpty() || rows.size() < pagesize) {
+                    break;
+                }
+                pageIdx++;
             } else {
                 rows = EastmoneyParsers.parseDatacenter(root.path("result").path("data"), spec, params);
                 allRows.addAll(rows);
