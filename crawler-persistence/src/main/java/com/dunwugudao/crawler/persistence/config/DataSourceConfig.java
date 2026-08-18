@@ -95,6 +95,13 @@ public class DataSourceConfig {
         cfg.setDriverClassName("com.clickhouse.jdbc.ClickHouseDriver");
         cfg.setMaximumPoolSize(5);
         cfg.setConnectionTimeout(10000);
+        // CK 服务端 keep_alive_timeout 默认 30s 会主动掐断空闲 TCP，LB/防火墙也会判死空闲连接。
+        // 1) keepaliveTime 周期性发请求保持连接活性，避免被中间设备 drop；
+        // 2) maxLifetime 让连接在被判死之前主动退役回收；
+        // 3) connectionTestQuery 借用时校验，兜底踢掉僵尸连接（防 SQLSTATE(08000) ErrorCode(210)）。
+        cfg.setKeepaliveTime(60000);
+        cfg.setMaxLifetime(1800000);
+        cfg.setConnectionTestQuery("SELECT 1");
         return new HikariDataSource(cfg);
     }
 
