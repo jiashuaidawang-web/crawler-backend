@@ -97,7 +97,7 @@ public class CloakVsSelfTest {
         System.out.println("[cloak-cdp-url] " + cfg.getCloakCdpUrl());
 
         BrowserPool pool = new BrowserPool();
-        TonghuashunBrowserStrategy tonghuashun = new TonghuashunBrowserStrategy(cfg, pool);
+        TonghuashunBrowserStrategy tonghuashun = new TonghuashunBrowserStrategy(cfg, pool,null);
         EastmoneyPlaywrightStrategy eastmoney = new EastmoneyPlaywrightStrategy(cfg, pool);
 
         List<String[]> rows = new ArrayList<>();
