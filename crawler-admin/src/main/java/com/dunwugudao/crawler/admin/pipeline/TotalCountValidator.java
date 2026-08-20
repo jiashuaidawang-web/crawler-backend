@@ -112,28 +112,40 @@ public class TotalCountValidator implements PipelineValidator {
                 expected, actual, dupGroups, lost, ctx.taskIds());
     }
 
-    /** 实时查 CK 某阶段的 actualCount(用于接口返回覆盖 stored actualTotal)。 */
-    public int countActualByStage(String stageName, LocalDate date, int source) {
+    /** 实时查 CK 某阶段的 actualCount(用于接口返回覆盖 stored actualTotal)。
+     *  onlyCurrentRun=true 时只统计 create_date=当天的行(本次 run 产出),排除历史存量干扰。 */
+    public int countActualByStage(String stageName, LocalDate date, int source, boolean onlyCurrentRun) {
         try {
             PipelineStage stage = PipelineStage.valueOf(stageName);
             TableQuery tq = tableQuery(stage);
             if (tq == null) {
                 return 0;
             }
-            return countActual(tq, date, source);
+            return countActual(tq, date, source, onlyCurrentRun);
         } catch (Exception e) {
             log.warn("[TOTAL_COUNT] countActualByStage {} 失败: {}", stageName, e.getMessage());
             return 0;
         }
     }
 
-    /** 实时查 CK 某阶段的 dupGroups(用于 buildResultWithMessage 重算)。 */
-    public int countDupGroups(PipelineStage stage, LocalDate date, int source) {
+    /** 兼容旧口径:统计全量(含历史)。 */
+    public int countActualByStage(String stageName, LocalDate date, int source) {
+        return countActualByStage(stageName, date, source, false);
+    }
+
+    /** 实时查 CK 某阶段的 dupGroups(用于 buildResultWithMessage 重算)。
+     *  onlyCurrentRun=true 时只统计 create_date=当天的行。 */
+    public int countDupGroups(PipelineStage stage, LocalDate date, int source, boolean onlyCurrentRun) {
         TableQuery tq = tableQuery(stage);
         if (tq == null) {
             return 0;
         }
-        return countDupGroups(tq, date, source);
+        return countDupGroups(tq, date, source, onlyCurrentRun);
+    }
+
+    /** 兼容旧口径:不过滤 create_date。 */
+    public int countDupGroups(PipelineStage stage, LocalDate date, int source) {
+        return countDupGroups(stage, date, source, false);
     }
 
     /** 构建阶段的 CK 查询参数(表名+额外过滤条件)。 */
@@ -160,7 +172,7 @@ public class TotalCountValidator implements PipelineValidator {
         };
     }
 
-    private int countActual(TableQuery tq, LocalDate date, int source) {
+    private int countActual(TableQuery tq, LocalDate date, int source, boolean onlyCurrentRun) {
         StringBuilder sql = new StringBuilder("SELECT count() FROM ").append(tq.table);
         List<Object> params = new ArrayList<>();
         boolean hasWhere = false;
@@ -171,6 +183,12 @@ public class TotalCountValidator implements PipelineValidator {
             params.add(source);
             hasWhere = true;
         }
+        // 仅统计本次 run 产出:create_date = 当天(排除历史存量干扰)
+        if (onlyCurrentRun) {
+            sql.append(hasWhere ? " AND " : " WHERE ").append("create_date = ?");
+            params.add(date.toString());
+            hasWhere = true;
+        }
         if (tq.extraFilter != null && !tq.extraFilter.isEmpty()) {
             sql.append(hasWhere ? " AND " : " WHERE ").append(tq.extraFilter);
         }
@@ -178,8 +196,14 @@ public class TotalCountValidator implements PipelineValidator {
         return v == null ? 0 : v.intValue();
     }
 
-    /** 按自然键+data_source 统计重复组数。 */
-    private int countDupGroups(TableQuery tq, LocalDate date, int source) {
+    /** 兼容旧口径:不过滤 create_date。 */
+    private int countActual(TableQuery tq, LocalDate date, int source) {
+        return countActual(tq, date, source, false);
+    }
+
+    /** 按自然键+data_source 统计重复组数。
+     *  onlyCurrentRun=true 时只统计 create_date=当天的行。 */
+    private int countDupGroups(TableQuery tq, LocalDate date, int source, boolean onlyCurrentRun) {
         try {
             DedupService.TableCfg cfg = DedupService.registry().get(tq.table);
             if (cfg == null || cfg.getNaturalKey() == null) {
@@ -198,8 +222,21 @@ public class TotalCountValidator implements PipelineValidator {
             String sql = "SELECT countIf(cnt > 1) AS dup FROM (SELECT " + groupKey +
                     " AS k, count() AS cnt FROM " + tq.table;
             if (tq.dateCol != null && !tq.dateCol.isEmpty()) {
-                sql += " WHERE " + tq.dateCol + " = ? AND data_source = ? GROUP BY k)";
+                sql += " WHERE " + tq.dateCol + " = ? AND data_source = ?";
+                // 仅统计本次 run 产出:追加 create_date 过滤
+                if (onlyCurrentRun) {
+                    sql += " AND create_date = ?";
+                    sql += " GROUP BY k)";
+                    Long dup = chJdbc.queryForObject(sql, Long.class, date.toString(), source, date.toString());
+                    return dup == null ? 0 : dup.intValue();
+                }
+                sql += " GROUP BY k)";
                 Long dup = chJdbc.queryForObject(sql, Long.class, date.toString(), source);
+                return dup == null ? 0 : dup.intValue();
+            }
+            if (onlyCurrentRun) {
+                sql += " WHERE create_date = ? GROUP BY k)";
+                Long dup = chJdbc.queryForObject(sql, Long.class, date.toString());
                 return dup == null ? 0 : dup.intValue();
             }
             sql += " GROUP BY k)";
@@ -209,6 +246,11 @@ public class TotalCountValidator implements PipelineValidator {
             log.warn("[TOTAL_COUNT] 查重复失败 table={}: {}", tq.table, e.getMessage());
             return 0;
         }
+    }
+
+    /** 兼容旧口径:不过滤 create_date。 */
+    private int countDupGroups(TableQuery tq, LocalDate date, int source) {
+        return countDupGroups(tq, date, source, false);
     }
 
     private List<String> existingColumns(String table) {

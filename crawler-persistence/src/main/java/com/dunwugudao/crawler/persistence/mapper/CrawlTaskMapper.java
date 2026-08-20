@@ -78,6 +78,23 @@ public interface CrawlTaskMapper {
     List<Map<String, Object>> countByTaskTypesAndDate(@Param("taskTypes") List<String> taskTypes,
                                                        @Param("date") String date);
 
+    /** 统计某阶段失败任务的错误信息分布(取 top N),用于诊断"worker 没认领"vs"执行失败"vs"数据源问题"。 */
+    @Select("""
+            <script>
+            SELECT error_msg, COUNT(*) AS cnt FROM crawl_task
+            WHERE unique_key LIKE CONCAT('%', #{date}, '%')
+              AND task_type IN
+              <foreach collection="taskTypes" item="t" open="(" separator="," close=")">
+                #{t}
+              </foreach>
+              AND status IN ('FAILED', 'DEAD')
+            GROUP BY error_msg ORDER BY cnt DESC LIMIT #{limit}
+            </script>
+            """)
+    List<Map<String, Object>> countErrorsByTaskTypesAndDate(@Param("taskTypes") List<String> taskTypes,
+                                                             @Param("date") String date,
+                                                             @Param("limit") int limit);
+
     // ---------------------- M3：种子生成（幂等） ----------------------
 
     /**
