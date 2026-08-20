@@ -2,6 +2,11 @@
 <project version="4">
   <component name="RemoteRepositoriesConfiguration">
     <remote-repository>
+      <option name="id" value="master-repo" />
+      <option name="name" value="master-repo" />
+      <option name="url" value="https://devops.cnbm.com.cn/api/mavenRepoServer/2079373527837351938" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="central" />
       <option name="name" value="Central Repository" />
       <option name="url" value="https://repo.maven.apache.org/maven2" />
