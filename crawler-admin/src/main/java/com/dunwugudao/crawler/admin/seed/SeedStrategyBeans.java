@@ -15,10 +15,10 @@ public class SeedStrategyBeans {
         return new EastmoneyClient();
     }
 
-    /** 青果长效 IP 提供者。 */
+    /** 青果长效 IP 提供者(凭证从 proxy.qg.* 配置读取,与 worker 一致)。 */
     @Bean
-    public ProxyProvider qgProxyProvider() {
-        return new QgLongTermProxyProvider("2D4620A7", "7pabvimp", "0EB7EA50A3E2");
+    public ProxyProvider qgProxyProvider(QgLongTermConfig qgConfig) {
+        return new QgLongTermProxyProvider(qgConfig.getAuthKey(), qgConfig.getBusinessId(), qgConfig.getPassword());
     }
 
     @Bean

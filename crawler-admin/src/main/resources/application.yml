@@ -71,3 +71,12 @@ xxl:
 crawler:
   proxy:
     agent: qingguo
+
+# ---------------------- 青果长效 IP 代理配置 ------------------------------
+# 长效 IP 每 30 分钟自动换一次,不限流量。与 worker 共用同一套凭证。
+# 提取 API: https://share.proxy.qg.net/get?key=...&num=1&format=json&distinct=true
+proxy:
+  qg:
+    auth-key: NM8XFDR2
+    business-id: 7pabvimp
+    password: 22574E11640D
