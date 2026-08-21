@@ -166,6 +166,7 @@ public class DataSourceConfig {
     @Bean public MapperFactoryBean<NorthboundFlowMapper> northboundFlowMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, NorthboundFlowMapper.class); }
     @Bean public MapperFactoryBean<TradeCalendarMapper> tradeCalendarMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, TradeCalendarMapper.class); }
     @Bean public MapperFactoryBean<ThsPlateMapper> thsPlateMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, ThsPlateMapper.class); }
+    @Bean public MapperFactoryBean<StockAnomalyMapper> stockAnomalyMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockAnomalyMapper.class); }
 
     @Bean public MapperFactoryBean<StockTaskConfigMapper> stockTaskConfigMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockTaskConfigMapper.class); }
 

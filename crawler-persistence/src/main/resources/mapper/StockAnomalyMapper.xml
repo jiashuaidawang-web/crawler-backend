@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dunwugudao.crawler.persistence.mapper.StockAnomalyMapper">
+
+    <!-- 批量追加（去重由 ReplacingMergeTree(data_source) 承接） -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO stock_anomaly
+        (ts_code, anomaly_id, anomaly_date, tag_code, tag_name, reason, keywords,
+         stock_name, feature, data_source, create_date, update_date)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (
+             #{r.tsCode}, #{r.anomalyId}, #{r.anomalyDate}, #{r.tagCode}, #{r.tagName},
+             #{r.reason}, #{r.keywords}, #{r.stockName}, #{r.feature}, #{r.dataSource},
+             #{r.createDate}, #{r.updateDate}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 查询已存在的 anomaly_id（增量去重） -->
+    <select id="findExistingAnomalyIds" resultType="java.lang.Long">
+        SELECT anomaly_id FROM stock_anomaly
+        WHERE anomaly_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>
