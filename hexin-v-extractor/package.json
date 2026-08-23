@@ -12,6 +12,8 @@
     "test": "node cli.js"
   },
   "dependencies": {
-    "playwright": "^1.40.0"
+    "iconv-lite": "^0.7.3",
+    "jsdom": "^30.0.1",
+    "playwright": "^1.62.1"
   }
 }

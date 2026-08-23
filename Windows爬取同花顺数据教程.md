@@ -1,6 +1,6 @@
 # 从零在 Windows 搭建同花顺股票数据爬取 + 入库系统
 
-> 一篇手把手的教学，覆盖环境安装、数据库建表、爬虫脚本、Java 后端构建、增量入库的完整链路。
+> 一篇手把手的教学，覆盖环境安装、模拟器抓包、证书配置、反爬浏览器、数据库建表、爬虫脚本、Java 后端构建、增量入库的完整链路。
 >
 > **目标**：每天自动爬取同花顺「个股异动」和「股票-板块关联关系」数据，增量写入 ClickHouse。
 
@@ -9,52 +9,68 @@
 ## 目录
 
 1. [系统架构概览](#1-系统架构概览)
-2. [环境准备](#2-环境准备)
+2. [环境准备（基础）](#2-环境准备基础)
    - 2.1 Python 环境
    - 2.2 JDK 21 + Maven
    - 2.3 ClickHouse
-3. [数据库建表](#3-数据库建表)
-4. [爬虫脚本](#4-爬虫脚本)
-   - 4.1 个股异动爬虫
-   - 4.2 股票-板块关联爬虫
-5. [Java 后端服务](#5-java-后端服务)
-   - 5.1 项目结构说明
-   - 5.2 双数据源配置
-   - 5.3 构建与启动
-   - 5.4 入库 API
-6. [每日操作流程](#6-每日操作流程)
-   - 6.1 异动数据（全量爬取 → 增量入库）
-   - 6.2 板块关联（备份 → 爬取 → 对比 → 增量入库）
-7. [踩坑记录与常见问题](#7-踩坑记录与常见问题)
-8. [附录：一键启动脚本](#8-附录一键启动脚本)
+3. [环境准备（同花顺联通）](#3-环境准备同花顺联通)
+   - 3.1 雷电模拟器安装
+   - 3.2 mitmproxy 代理 + 证书安装
+   - 3.3 同花顺 App 登录与 Cookie 捕获
+   - 3.4 CloakBrowser 反爬浏览器
+4. [数据库建表](#4-数据库建表)
+5. [爬虫脚本](#5-爬虫脚本)
+   - 5.1 个股异动爬虫
+   - 5.2 股票-板块关联爬虫
+6. [Java 后端服务](#6-java-后端服务)
+   - 6.1 项目结构说明
+   - 6.2 双数据源配置
+   - 6.3 构建与启动
+   - 6.4 入库 API
+7. [每日操作流程](#7-每日操作流程)
+   - 7.1 异动数据（全量爬取 → 增量入库）
+   - 7.2 板块关联（备份 → 爬取 → 对比 → 增量入库）
+8. [踩坑记录与常见问题](#8-踩坑记录与常见问题)
+9. [附录：一键启动脚本](#9-附录一键启动脚本)
 
 ---
 
 ## 1. 系统架构概览
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Windows 本机                                            │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────┐                   │
-│  │ ths_anomaly  │    │ stock_board  │   ← Python 爬虫   │
-│  │ _crawler.py  │    │ _ref.py      │                   │
-│  └──────┬───────┘    └──────┬───────┘                   │
-│         │                   │                           │
-│         ▼                   ▼                           │
-│  ┌──────────────┐    ┌──────────────┐                   │
-│  │ ths_anomaly  │    │ stockBoard   │   ← JSON 文件     │
-│  │ _data/stocks │    │ Ref/         │                   │
-│  └──────┬───────┘    └──────┬───────┘                   │
-│         │                   │                           │
-│         ▼                   ▼                           │
-│  ┌─────────────────────────────────────┐                │
-│  │     Spring Boot (crawler-admin)      │                │
-│  │     POST /api/init/stock-anomaly     │                │
-│  │     POST /api/init/stock-board-rel   │                │
-│  └──────────────────┬──────────────────┘                │
-│                     │                                   │
-└─────────────────────┼───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  Windows 本机                                                        │
+│                                                                     │
+│  ┌─────────────────────┐     ┌─────────────────────────────────┐   │
+│  │  雷电模拟器 + 同花顺  │     │  CloakBrowser (隐身浏览器)       │   │
+│  │  + mitmproxy 抓包    │     │  - 绕过 TLS 指纹/滑块检测        │   │
+│  │  → 获取 Cookie      │     │  - CDP 9222 端口                 │   │
+│  └─────────┬───────────┘     └──────────┬──────────────────────┘   │
+│            │                            │                           │
+│            ▼                            ▼                           │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │              Cookie 文件 (cookies/*.json)                    │   │
+│  └────────────────────────────┬────────────────────────────────┘   │
+│                               │                                     │
+│  ┌──────────────┐    ┌────────┴───────┐                             │
+│  │ ths_anomaly  │    │ stock_board    │   ← Python 爬虫             │
+│  │ _crawler.py  │    │ _ref.py        │                             │
+│  └──────┬───────┘    └────────┬───────┘                             │
+│         │                     │                                     │
+│         ▼                     ▼                                     │
+│  ┌──────────────┐    ┌──────────────┐                               │
+│  │ ths_anomaly  │    │ stockBoard   │   ← JSON 文件                 │
+│  │ _data/stocks │    │ Ref/         │                               │
+│  └──────┬───────┘    └──────┬───────┘                               │
+│         │                   │                                       │
+│         ▼                   ▼                                       │
+│  ┌─────────────────────────────────────┐                            │
+│  │     Spring Boot (crawler-admin)      │                            │
+│  │     POST /api/init/stock-anomaly     │                            │
+│  │     POST /api/init/stock-board-rel   │                            │
+│  └──────────────────┬──────────────────┘                            │
+│                     │                                               │
+└─────────────────────┼───────────────────────────────────────────────┘
                       │
                       ▼
          ┌────────────────────────┐
@@ -64,11 +80,11 @@
          └────────────────────────┘
 ```
 
-**数据流**：Python 爬虫 → 桌面 JSON 文件 → Java 接口 → ClickHouse
+**数据流**：雷电模拟器抓包获取 Cookie → Python 爬虫（带 Cookie 请求同花顺 API）→ 桌面 JSON 文件 → Java 接口 → ClickHouse
 
 ---
 
-## 2. 环境准备
+## 2. 环境准备（基础）
 
 ### 2.1 Python 环境
 
@@ -149,11 +165,212 @@ curl "http://100.97.74.45:8123/?user=default&password=pamirs@123&query=SELECT+1"
 
 ---
 
-## 3. 数据库建表
+## 3. 环境准备（同花顺联通）
+
+> ⚠️ 这是最关键的环节。同花顺有较强的反爬机制（TLS 指纹、滑块验证、App 端加密），需要一套组合拳才能稳定抓取。
+
+### 3.1 雷电模拟器安装
+
+**为什么需要模拟器？**
+
+同花顺 PC 网页版有严格的反爬检测（WebDriver 检测、TLS 指纹、行为分析），而移动端 App 端的 API 相对容易抓取。我们在安卓模拟器中运行同花顺 App，通过 mitmproxy 中间人代理抓包，获取 API 请求格式和 Cookie。
+
+**安装步骤**：
+
+1. 下载 [雷电模拟器 9](https://www.ldmnq.com/)
+2. 安装到默认路径
+3. 启动模拟器，进入安卓桌面
+
+**模拟器配置**：
+- Android 9（推荐）
+- 分辨率：1280×720
+- 开启 Root 权限（设置 → 其他设置 → 开启 Root）
+- 开启 ADB 调试（设置 → 其他设置 → 开启 ADB 调试）
+
+**安装同花顺 App**：
+
+1. 在模拟器中打开浏览器，搜索「同花顺」下载 APK
+2. 或通过 `adb install` 安装：
+   ```bash
+   adb install ths_android.apk
+   ```
+3. 启动同花顺，**登录你的同花顺账号**
+
+### 3.2 mitmproxy 代理 + 证书安装
+
+**原理**：在 Windows 上运行 mitmproxy 作为中间人代理，模拟器所有 HTTP/HTTPS 流量经过它。mitmproxy 动态生成证书解密 HTTPS，我们就能抓到同花顺 API 的请求和响应。
+
+**安装 mitmproxy**：
+
+```bash
+pip install mitmproxy
+```
+
+**配置模拟器代理**：
+
+```bash
+# 查看模拟器 ADB 端口（雷电模拟器默认 5555）
+adb devices
+# 输出: 127.0.0.1:5555 device
+
+# 设置代理指向 Windows 本机（192.168.3.27 是本机内网 IP，8080 是 mitmproxy 端口）
+adb shell settings put global http_proxy 192.168.3.27:8080
+```
+
+**启动 mitmproxy**：
+
+```bash
+# 启动 mitmproxy，监听 8080 端口
+mitmproxy -p 8080
+
+# 或启动 mitmdump（命令行模式，无 UI）
+mitmdump -p 8080
+```
+
+**安装 SSL 证书到模拟器**：
+
+1. 设置好代理后，在模拟器浏览器访问 `http://mitm.it`
+2. 点击 Android → 下载证书
+3. 证书文件名为 `c8750f0d.0`（mitmproxy 的 CA 证书）
+
+**将证书安装到系统信任区**（需要 Root）：
+
+```bash
+# 推送证书到模拟器
+adb push c8750f0d.0 /data/local/tmp/
+
+# 挂载到系统证书目录
+adb shell "cp /data/local/tmp/c8750f0d.0 /data/local/tmp/cacerts/"
+adb shell "chmod 644 /data/local/tmp/cacerts/c8750f0d.0"
+adb shell "chown root:root /data/local/tmp/cacerts/c8750f0d.0"
+adb shell "chcon u:object_r:system_security_ca_cert:s0 /data/local/tmp/cacerts/c8750f0d.0"
+adb shell "mount --bind /data/local/tmp/cacerts /system/etc/security/cacerts"
+```
+
+> 💡 桌面上的 `fix_proxy_cert.bat` 脚本可以一键完成上述证书安装步骤。
+
+**验证**：
+
+```bash
+# 在模拟器中打开同花顺 App，操作几下
+# mitmproxy 终端应该能看到请求流过
+# 如果看不到，检查代理设置和证书
+```
+
+### 3.3 同花顺 App 登录与 Cookie 捕获
+
+**通过 mitmproxy 抓包获取 Cookie**：
+
+1. 启动 mitmproxy 后，在模拟器中操作同花顺 App（浏览行情、查看异动等）
+2. mitmproxy 会显示所有经过的请求
+3. 找到目标 API 请求（如 `flow.10jqka.com.cn/anomaly/v1/history`）
+4. 查看请求头中的 Cookie 字段
+
+**更优雅的方式：使用 TonghuashunLogin.java 自动导出 Cookie**
+
+项目内置了 `TonghuashunLogin.java`，可以自动完成登录并导出 Cookie：
+
+```bash
+# 编译并运行
+set JAVA_HOME=D:\Development\Environment\Jdk\jdk-21.0.11
+cd D:\Development\IDEAWorkSpace\Github\new\crawler-backend
+
+# 运行登录工具（使用 Cloak 模式绕过反爬）
+STEALTH_MODE=CLOAK java -cp crawler-strategy/target/classes com.dunwugudao.crawler.strategy.tonghuashun.TonghuashunLogin <你的手机号> <你的密码>
+```
+
+**Cookie 文件存储位置**：
+
+```
+项目根目录/cookies/
+├── quote.10jqka.com.cn.json      ← 同花顺行情 Cookie
+├── stockpage.10jqka.com.cn.json  ← 个股页 Cookie
+├── www.10jqka.com.cn.json        ← 主站 Cookie
+├── data.10jqka.com.cn.json       ← 数据中心 Cookie
+└── q.10jqka.com.cn.json          ← 其他接口 Cookie
+```
+
+**Cookie 有效期**：通常 7-30 天，过期后需要重新登录导出。
+
+### 3.4 CloakBrowser 反爬浏览器
+
+> 对于需要浏览器访问的同花顺页面（如板块详情、龙虎榜等），使用 CloakBrowser 绕过反爬检测。
+
+**CloakBrowser 是什么？**
+
+一个 C++ 源码级隐身浏览器，相比 Playwright/Puppeteer 的自带反检测：
+- 完全隐藏 WebDriver 特征
+- 随机化浏览器指纹（Canvas、WebGL、AudioContext 等）
+- 模拟人类操作轨迹
+- 绕过 TLS 指纹检测（JA3/JA4）
+
+**安装 CloakBrowser**：
+
+```bash
+pip install cloakbrowser
+
+# 下载 Chromium binary（约 200MB）
+python -m cloakbrowser install
+```
+
+**启动 CloakBrowser**：
+
+项目提供了启动脚本 `scripts/cloak_serve.py`：
+
+```bash
+# 基础启动
+python scripts/cloak_serve.py
+
+# 带许可证 key（提升效果，免费申请）
+set CLOAKBROWSER_LICENSE_KEY=cb_你的key
+python scripts/cloak_serve.py
+
+# 带代理（青果长效 IP）
+set CLOAK_PROXY=http://user:pass@proxy:port
+python scripts/cloak_serve.py
+```
+
+**环境变量**：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CLOAK_PORT` | 9222 | CDP 调试端口 |
+| `CLOAKBROWSER_LICENSE_KEY` | 空 | 许可证 key（空=免费版） |
+| `CLOAK_PROXY` | 空 | 代理地址 |
+| `CLOAK_HEADLESS` | true | 是否无头模式 |
+| `CLOAK_HUMANIZE` | true | 是否模拟人类操作 |
+| `CLOAK_FINGERPRINT_SEED` | 空 | 固定指纹 seed（留空=每次随机） |
+
+**免费 License Key**：
+
+到 <https://cloakbrowser.dev/github> 登录获取免费 key，能拿到最新构建（71 补丁）。不拿 key 也能跑，但只用的 v146 公开版（58 补丁）。
+
+**验证 CloakBrowser 是否工作**：
+
+```bash
+# 启动后，用 curl 测试 CDP 端口
+curl http://127.0.0.1:9222/json/version
+# 应该返回浏览器版本信息
+```
+
+**CloakBrowser 与 Java 端的集成**：
+
+Java 端通过 Playwright 连接 CloakBrowser 的 CDP 端口：
+
+```java
+// 连接 CloakBrowser
+Browser browser = playwright.chromium().connectOverCDP("http://127.0.0.1:9222");
+```
+
+Java 端的 `CloakServerProcess` 会自动检测并启动 `cloak_serve.py`，无需手动启动。
+
+---
+
+## 4. 数据库建表
 
 在 ClickHouse 中执行以下建表语句：
 
-### 3.1 异动数据表
+### 4.1 异动数据表
 
 ```sql
 -- 文件: schema-stock-anomaly.sql
@@ -181,7 +398,7 @@ SETTINGS index_granularity = 8192;
 - `ORDER BY (ts_code, anomaly_id)`：主键，去重依据
 - `PARTITION BY toYYYYMM(anomaly_date)`：按月分区
 
-### 3.2 股票-板块关联表
+### 4.2 股票-板块关联表
 
 ```sql
 -- 来自 clickhouse-schema.sql
@@ -213,11 +430,11 @@ SETTINGS index_granularity = 8192, allow_nullable_key = 1;
 
 ---
 
-## 4. 爬虫脚本
+## 5. 爬虫脚本
 
 脚本放在桌面 `C:\Users\Administrator\Desktop\` 下，直接用 Python 运行。
 
-### 4.1 个股异动爬虫
+### 5.1 个股异动爬虫
 
 **文件**：`ths_anomaly_crawler.py`
 
@@ -281,7 +498,7 @@ python ths_anomaly_crawler.py --test
 }
 ```
 
-### 4.2 股票-板块关联爬虫
+### 5.2 股票-板块关联爬虫
 
 **文件**：`stock_board_ref.py`
 
@@ -329,9 +546,9 @@ python stock_board_ref.py --test
 
 ---
 
-## 5. Java 后端服务
+## 6. Java 后端服务
 
-### 5.1 项目结构
+### 6.1 项目结构
 
 ```
 crawler-backend/
@@ -343,10 +560,11 @@ crawler-backend/
 ├── pom.xml                 ← 父 POM
 ├── schema-stock-anomaly.sql
 ├── schema-stock-board-rel.sql
-└── clickhouse-schema.sql
+├── clickhouse-schema.sql
+└── cookies/                ← 同花顺 Cookie 文件
 ```
 
-### 5.2 双数据源配置
+### 6.2 双数据源配置
 
 **配置文件**：`crawler-admin/src/main/resources/application.yml`
 
@@ -374,7 +592,7 @@ init:
     json-dir: C:/Users/Administrator/Desktop/stockBoardRef
 ```
 
-### 5.3 双数据源架构说明
+### 6.3 双数据源架构说明
 
 > ⚠️ 这是一个容易踩坑的点。
 
@@ -397,7 +615,7 @@ public MapperFactoryBean<StockAnomalyMapper> stockAnomalyMapper(
 Parameter 0 of constructor in StockAnomalyInitService required a bean of type 'StockAnomalyMapper' that could not be found.
 ```
 
-### 5.4 构建与启动
+### 6.4 构建与启动
 
 **构建**：
 
@@ -421,7 +639,7 @@ crawler-admin/target/crawler-admin-0.1.0.jar
 **启动**：
 
 ```bash
-set JAVA_HOME=D:\Development\Environment\Jdk\jdk-1.0.11
+set JAVA_HOME=D:\Development\Environment\Jdk\jdk-21.0.11
 set PATH=%JAVA_HOME%\bin;%PATH%
 
 cd D:\Development\IDEAWorkSpace\Github\new\crawler-backend
@@ -435,7 +653,7 @@ Started CrawlerAdminApplication in 3.654 seconds
 Tomcat started on port 8081 (http)
 ```
 
-### 5.5 入库 API
+### 6.5 入库 API
 
 | 接口 | 说明 |
 |---|---|
@@ -472,15 +690,15 @@ curl -X POST "http://localhost:8081/api/init/stock-board-rel?dir=C:/Users/Admini
 
 ---
 
-## 6. 每日操作流程
+## 7. 每日操作流程
 
-### 6.1 异动数据（增量入库）
+### 7.1 异动数据（增量入库）
 
 异动数据天然适合增量——每只股票的 `anomaly_id` 是全局唯一的，新记录只会增加不会修改。
 
 ```bash
 # 第一步：爬取（增量更新 JSON 文件）
-cd C:\Users\Administrator\Desktop
+cd C:\Users\Administrator\Administrator\Desktop
 python ths_anomaly_crawler.py --all --workers 2 --delay 1.0
 # 耗时约 2 小时
 
@@ -493,7 +711,7 @@ curl -X POST http://localhost:8081/api/init/stock-anomaly
 2. Java 服务解析 JSON 后，先查数据库中已存在的 `anomaly_id`
 3. 过滤掉已存在的，只插入新记录
 
-### 6.2 板块关联（文件对比增量）
+### 7.2 板块关联（文件对比增量）
 
 板块关联的变化频率很低（大部分股票所属板块不变），所以用文件对比的方式更高效。
 
@@ -551,7 +769,7 @@ curl -X POST "http://localhost:8081/api/init/stock-board-rel?dir=C:/Users/Admini
 
 ---
 
-## 7. 踩坑记录与常见问题
+## 8. 踩坑记录与常见问题
 
 ### 坑 1：JDK 版本不对导致构建失败
 
@@ -592,17 +810,46 @@ Cannot parse string '2026-08-17 13:24:23.2546284' as DateTime: syntax error at p
 LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
 ```
 
-### 坑 4：爬虫脚本最后的 NameError
+### 坑 4：mitmproxy 证书安装后仍无法抓 HTTPS
+
+**原因**：Android 7+ 不再信任用户安装的证书，需要将证书安装到系统信任区。
+
+**解决**：
+1. 模拟器需要 Root 权限
+2. 使用 `mount --bind` 将证书挂载到 `/system/etc/security/cacerts`
+3. 参考 `fix_proxy_cert.bat` 脚本
+
+### 坑 5：同花顺 Cookie 过期
+
+**现象**：爬虫返回 401 或重定向到登录页。
+
+**原因**：Cookie 有效期通常 7-30 天。
+
+**解决**：重新运行 `TonghuashunLogin.java` 导出 Cookie。
+
+### 坑 6：CloakBrowser 启动失败
+
+```
+cloakbrowser not installed
+```
+
+**解决**：
+```bash
+pip install cloakbrowser
+python -m cloakbrowser install
+```
+
+### 坑 7：爬虫脚本最后的 NameError
 
 ```
 NameError: name 'results' is not defined.
 ```
 
-**原因**：`crawl_all()` 函数末尾有个多余的 `return results`，但 `result` 变量从未定义。
+**原因**：`crawl_all()` 函数末尾有个多余的 `return results`，但 `results` 变量从未定义。
 
 **影响**：**无影响**。数据已经全部保存完毕，这只是最后一句无关紧要的代码。可以忽略或删掉。
 
-### 坑 5：端口被占用导致新实例启动失败
+### 坑 8：端口被占用导致新实例启动失败
 
 ```
 Web server failed to start. Port 8081 was already in use.
@@ -620,7 +867,7 @@ netstat -ano | findstr 8081
 taskkill //F //PID <进程ID>
 ```
 
-### 坑 6：增量目录残留旧文件
+### 坑 9：增量目录残留旧文件
 
 如果增量目录 `stockBoardRef_incremental` 没有先清空，旧文件会混入导致重复入库。
 
@@ -631,7 +878,7 @@ rm -rf stockBoardRef_incremental
 
 ---
 
-## 8. 附录：一键启动脚本
+## 9. 附录：一键启动脚本
 
 ### `start_app.bat`（启动 Java 服务）
 
