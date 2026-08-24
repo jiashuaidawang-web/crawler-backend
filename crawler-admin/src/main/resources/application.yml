@@ -49,6 +49,13 @@ proxy:
   juliang:
     trade_no: 1197466623622927
     sign: 28657a86eb21269ec97587a7333ac652
+  # ---------------------- 青果长效 IP 代理配置 ------------------------------
+  # 长效 IP 每 30 分钟自动换一次,不限流量。与 worker 共用同一套凭证。
+  # 提取 API: https://share.proxy.qg.net/get?key=...&num=1&format=json&distinct=true
+  qg:
+    auth-key: NM8XFDR2
+    business-id: 7pabvimp
+    password: 22574E11640D
 
 # ---------------------- XXL-JOB 执行器（调度接入 M3） ----------------------
 # 执行器挂在 admin（控制面）：worker 只认领、不调度。
@@ -71,11 +78,3 @@ xxl:
 crawler:
   proxy:
     agent: qingguo
-
-# ---------------------- 青果长效 IP 代理配置 ------------------------------
-# 长效 IP 每 30 分钟自动换一次,不限流量。与 worker 共用同一套凭证。
-# 提取 API: https://share.proxy.qg.net/get?key=...&num=1&format=json&distinct=true
-  qg:
-    auth-key: NM8XFDR2
-    business-id: 7pabvimp
-    password: 22574E11640D
