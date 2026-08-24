@@ -124,6 +124,32 @@ public class DailyPipelineOrchestrator {
         }
     }
 
+    /**
+     * 预览各阶段预期数据量(不实际跑批):对每个活跃阶段执行 seed 获取 expectedTotal,
+     * 返回 stageName → {displayName, expectedTotal, message}。
+     */
+    public Map<String, Object> preview(String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        Map<String, Object> previewMap = new LinkedHashMap<>();
+        for (PipelineStage stage : ACTIVE_STAGES) {
+            try {
+                SeedResult seed = stageSeeder.seed(stage, date, defaultSource);
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("displayName", stage.getDisplayName());
+                info.put("expectedTotal", seed.expectedTotal());
+                info.put("message", seed.message());
+                previewMap.put(stage.name(), info);
+            } catch (Exception e) {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("displayName", stage.getDisplayName());
+                info.put("expectedTotal", 0);
+                info.put("message", "预览失败: " + e.getMessage());
+                previewMap.put(stage.name(), info);
+            }
+        }
+        return previewMap;
+    }
+
     /** 幂等入口:跑全日批。FAILED 会 reset 重跑,SUCCESS/RUNNING 直接返回。 */
     public PipelineRunResult run(String dateStr) {
         LocalDate date = LocalDate.parse(dateStr);

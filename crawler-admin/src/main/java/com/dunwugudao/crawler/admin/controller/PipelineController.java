@@ -24,6 +24,13 @@ public class PipelineController {
         this.ipConsumptionService = ipConsumptionService;
     }
 
+    /** 预览各阶段预期数据量(不实际跑批)。 */
+    @GetMapping("/preview")
+    public Map<String, Object> preview(@RequestParam(required = false) String date) {
+        String d = (date == null || date.isBlank()) ? java.time.LocalDate.now().toString() : date;
+        return orchestrator.preview(d);
+    }
+
     /** 幂等跑批:跑完全日批。date 缺省=今天。force=true 强制重跑(含已 SUCCESS 的任务)。 */
     @PostMapping("/daily")
     public PipelineRunResult daily(@RequestParam(required = false) String date,
