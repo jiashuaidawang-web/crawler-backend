@@ -170,6 +170,12 @@ public class DataSourceConfig {
 
     @Bean public MapperFactoryBean<StockTaskConfigMapper> stockTaskConfigMapper(@Qualifier("chSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, StockTaskConfigMapper.class); }
 
+    // ==================== Job 统一调度 (openGauss) ====================
+
+    @Bean public MapperFactoryBean<WorkerNodeMapper> workerNodeMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, WorkerNodeMapper.class); }
+    @Bean public MapperFactoryBean<JobDefinitionMapper> jobDefinitionMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, JobDefinitionMapper.class); }
+    @Bean public MapperFactoryBean<JobExecutionMapper> jobExecutionMapper(@Qualifier("pgSqlSessionFactory") SqlSessionFactory f) throws Exception { return newMapper(f, JobExecutionMapper.class); }
+
     private <T> MapperFactoryBean<T> newMapper(SqlSessionFactory f, Class<T> type) throws Exception {
         MapperFactoryBean<T> fb = new MapperFactoryBean<>(type);
         fb.setSqlSessionFactory(f);

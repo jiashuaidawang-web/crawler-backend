@@ -41,8 +41,9 @@ public class ClaimService {
     public void complete(Long taskId, int actualCount, Long durationMs) {
         // 状态守卫：允许 CLAIMED/PENDING/RETRY → SUCCESS，避免与 retryScan 的 reclaim 竞态
         // （retryScan 可能把超时 CLAIMED 重置为 PENDING，此时 complete 仍可更新为 SUCCESS）
+        // 完成后清空 worker_id，表示该任务不再被任何节点持有
         int updated = pgJdbcTemplate.update(
-                "UPDATE crawl_task SET status='SUCCESS', actual_count=?, finished_at=now(), duration_ms=? " +
+                "UPDATE crawl_task SET status='SUCCESS', actual_count=?, finished_at=now(), duration_ms=?, worker_id=NULL, progress_pct=100 " +
                 "WHERE task_id=? AND status IN ('CLAIMED','PENDING','RETRY')",
                 actualCount, durationMs, taskId);
         if (updated == 0) {
@@ -76,9 +77,10 @@ public class ClaimService {
         }
         String errMsg = truncate(err);
         // 状态守卫：仅当任务仍为 CLAIMED/RETRY 时才更新，避免与 retryScan 竞态
+        // 失败/重试时清空 worker_id，让任务可被其他节点重新认领
         int updated = pgJdbcTemplate.update(
                 "UPDATE crawl_task SET status=?, error_msg=?, retry_count=retry_count+1, " +
-                "next_retry_at=?, finished_at=?, updated_at=now() WHERE task_id=? AND status IN ('CLAIMED','RETRY')",
+                "next_retry_at=?, finished_at=?, worker_id=NULL, updated_at=now() WHERE task_id=? AND status IN ('CLAIMED','RETRY')",
                 status, errMsg, nextRetryAt, finishedAt, taskId);
         if (updated == 0) {
             log.warn("task {} fail 跳过（已非 CLAIMED/RETRY）", taskId);

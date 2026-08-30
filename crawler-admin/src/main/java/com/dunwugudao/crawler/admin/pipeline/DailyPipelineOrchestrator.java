@@ -975,6 +975,83 @@ public class DailyPipelineOrchestrator {
         return r;
     }
 
+    // ---------------- 独立阶段定时调度(18:00 / 18:30) ----------------
+
+    /**
+     * 独立运行龙虎榜主表阶段(DRAGON_TIGER)：seed → 等待完成 → 校验。
+     * <p>供 18:00 定时调度调用(此时东财已发布龙虎榜数据)。
+     * 复用现有 run 记录(不新建),仅执行 DRAGON_TIGER 单个阶段。</p>
+     *
+     * @param dateStr 交易日(yyyy-MM-dd)，缺省当天
+     * @return 阶段执行结果
+     */
+    public PipelineStageResult runDragonTigerStage(String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        PipelineStage stage = PipelineStage.DRAGON_TIGER;
+        log.info("[pipeline-18:00] ===== 龙虎榜主表独立调度启动 date={} =====", dateStr);
+
+        // 1. 确保有 run 记录(复用今天的,不新建)
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        if (run == null) {
+            Long runId = ensureRun(date, true);
+            if (runId == null) {
+                run = pipelineMapper.selectRunByDate(date);
+            } else {
+                run = pipelineMapper.selectRunById(runId);
+            }
+        }
+        if (run == null) {
+            PipelineStageResult empty = new PipelineStageResult();
+            empty.stage = stage.name();
+            empty.status = "FAILED";
+            empty.errorMsg = "无法创建或获取 run 记录";
+            return empty;
+        }
+
+        // 2. 执行该阶段(seed + await + validate)
+        PipelineStageResult result = executeStage(date, run.getRunId(), stage);
+        log.info("[pipeline-18:00] ===== 龙虎榜主表独立调度完成 date={} status={} actual={}/{} =====",
+                dateStr, result.status, result.actualTotal, result.expectedTotal);
+        return result;
+    }
+
+    /**
+     * 独立运行龙虎榜明细阶段(DRAGON_TIGER_DETAIL)：从 dragon_tiger 表读 TRADE_ID → 下发子任务 → 等待完成 → 校验。
+     * <p>供 18:30 定时调度调用(需在 DRAGON_TIGER 爬完并落库 dragon_tiger 表后执行)。</p>
+     *
+     * @param dateStr 交易日(yyyy-MM-dd)，缺省当天
+     * @return 阶段执行结果
+     */
+    public PipelineStageResult runDragonTigerDetailStage(String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        PipelineStage stage = PipelineStage.DRAGON_TIGER_DETAIL;
+        log.info("[pipeline-18:30] ===== 龙虎榜明细独立调度启动 date={} =====", dateStr);
+
+        // 1. 确保有 run 记录(复用今天的)
+        PipelineRun run = pipelineMapper.selectRunByDate(date);
+        if (run == null) {
+            Long runId = ensureRun(date, true);
+            if (runId == null) {
+                run = pipelineMapper.selectRunByDate(date);
+            } else {
+                run = pipelineMapper.selectRunById(runId);
+            }
+        }
+        if (run == null) {
+            PipelineStageResult empty = new PipelineStageResult();
+            empty.stage = stage.name();
+            empty.status = "FAILED";
+            empty.errorMsg = "无法创建或获取 run 记录";
+            return empty;
+        }
+
+        // 2. 执行链式阶段(seed + await + validate)
+        PipelineStageResult result = executeChainStage(date, run.getRunId(), stage);
+        log.info("[pipeline-18:30] ===== 龙虎榜明细独立调度完成 date={} status={} actual={}/{} =====",
+                dateStr, result.status, result.actualTotal, result.expectedTotal);
+        return result;
+    }
+
     /** 兼容旧入口:retryStage 复用 fixStage 的自动诊断 + 修复逻辑。 */
 
     private PipelineStage resolveStage(String stageName) {

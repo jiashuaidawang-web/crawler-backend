@@ -26,10 +26,11 @@ public interface CrawlTaskMapper {
      * <p>openGauss 3.x 支持 {@code FOR UPDATE SKIP LOCKED} 与 {@code RETURNING *}。</p>
      */
     @Select("""
-            UPDATE crawl_task SET status = 'CLAIMED', last_node = #{nodeId}, started_at = now()
+            UPDATE crawl_task SET status = 'CLAIMED', last_node = #{nodeId}, worker_id = #{nodeId}, started_at = now()
              WHERE task_id IN (
                SELECT task_id FROM crawl_task
                WHERE status IN ('PENDING', 'RETRY')
+                 AND executor_type = 'JAVA'
                  AND (next_retry_at IS NULL OR next_retry_at <= now())
                ORDER BY priority DESC, created_at ASC
                LIMIT #{batch}
@@ -102,8 +103,8 @@ public interface CrawlTaskMapper {
      * 使用 WHERE NOT EXISTS 兼容 openGauss（不支持 ON CONFLICT DO NOTHING）。
      */
     @Insert("""
-            INSERT INTO crawl_task (task_type, source, url, params_json, status, priority, retry_count, max_retry, unique_key, expected_count, created_at, updated_at)
-            SELECT #{t.taskType}, #{t.source.code}, #{t.url}, #{t.paramsJson}, 'PENDING', #{t.priority}, 0, #{t.maxRetry}, #{t.uniqueKey}, #{t.expectedCount}, now(), now()
+            INSERT INTO crawl_task (task_type, source, url, params_json, status, priority, retry_count, max_retry, unique_key, expected_count, executor_type, job_type, created_at, updated_at)
+            SELECT #{t.taskType}, #{t.source.code}, #{t.url}, #{t.paramsJson}, 'PENDING', #{t.priority}, 0, #{t.maxRetry}, #{t.uniqueKey}, #{t.expectedCount}, #{t.executorType}, #{t.jobType}, now(), now()
             WHERE NOT EXISTS (SELECT 1 FROM crawl_task WHERE unique_key = #{t.uniqueKey})
             """)
     int insertIfAbsent(@Param("t") CrawlTask t);
@@ -113,9 +114,9 @@ public interface CrawlTaskMapper {
      */
     @Insert("""
             <script>
-            INSERT INTO crawl_task (task_type, source, url, params_json, status, priority, retry_count, max_retry, unique_key, expected_count, created_at, updated_at)
+            INSERT INTO crawl_task (task_type, source, url, params_json, status, priority, retry_count, max_retry, unique_key, expected_count, executor_type, job_type, created_at, updated_at)
             <foreach collection="list" item="t" separator="UNION ALL">
-            SELECT #{t.taskType}, #{t.source.code}, #{t.url}, #{t.paramsJson}, 'PENDING', #{t.priority}, 0, #{t.maxRetry}, #{t.uniqueKey}, #{t.expectedCount}, now(), now()
+            SELECT #{t.taskType}, #{t.source.code}, #{t.url}, #{t.paramsJson}, 'PENDING', #{t.priority}, 0, #{t.maxRetry}, #{t.uniqueKey}, #{t.expectedCount}, #{t.executorType}, #{t.jobType}, now(), now()
             WHERE NOT EXISTS (SELECT 1 FROM crawl_task WHERE unique_key = #{t.uniqueKey})
             </foreach>
             </script>
@@ -125,11 +126,11 @@ public interface CrawlTaskMapper {
     // ---------------------- M3：重试扫描（僵尸回收） ----------------------
 
     /**
-     * 僵尸回收：把 status='CLAIMED' 且 started_at 早于 now()-timeoutMin 的任务重置回 PENDING、清空 last_node、
+     * 僵尸回收：把 status='CLAIMED' 且 started_at 早于 now()-timeoutMin 的任务重置回 PENDING、清空 last_node/worker_id、
      * error_msg 前缀加 'reclaimed by retryScan'。补齐「节点崩溃导致任务卡在 CLAIMED」的缺口。
      */
     @Update("""
-            UPDATE crawl_task SET status='PENDING', last_node=NULL,
+            UPDATE crawl_task SET status='PENDING', last_node=NULL, worker_id=NULL,
               error_msg = CASE WHEN error_msg IS NULL THEN 'reclaimed by retryScan' ELSE 'reclaimed by retryScan; ' || error_msg END,
               updated_at=now()
             WHERE status='CLAIMED' AND started_at < now() - make_interval(mins => #{timeoutMin})
@@ -157,7 +158,7 @@ public interface CrawlTaskMapper {
      */
     @Update("""
             UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
-              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              last_node=NULL, worker_id=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
               error_msg='force reset by pipeline re-run', updated_at=now()
             WHERE unique_key LIKE #{like} AND status IN ('DEAD','FAILED')
             """)
@@ -169,7 +170,7 @@ public interface CrawlTaskMapper {
      */
     @Update("""
             UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
-              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              last_node=NULL, worker_id=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
               error_msg='force reset all by pipeline re-run', updated_at=now()
             WHERE unique_key LIKE CONCAT('%', #{date}, '%')
               AND status IN ('SUCCESS','FAILED','DEAD','CLAIMED','RETRY')
@@ -191,7 +192,7 @@ public interface CrawlTaskMapper {
     /** 按精确 unique_key 重置为 PENDING(池子全日任务重跑,避免把已作废的分页任务又救活)。 */
     @Update("""
             UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
-              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              last_node=NULL, worker_id=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
               error_msg='reset by stage replay', updated_at=now()
             WHERE unique_key = #{uniqueKey}
               AND status IN ('SUCCESS','FAILED','DEAD','CLAIMED','RETRY')
@@ -208,7 +209,7 @@ public interface CrawlTaskMapper {
     @Update("""
             <script>
             UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
-              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              last_node=NULL, worker_id=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
               error_msg='manual retry by user', updated_at=now()
             WHERE unique_key LIKE #{like}
               AND status IN
@@ -223,7 +224,7 @@ public interface CrawlTaskMapper {
     @Update("""
             <script>
             UPDATE crawl_task SET status='PENDING', retry_count=0, next_retry_at=NULL,
-              last_node=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
+              last_node=NULL, worker_id=NULL, started_at=NULL, finished_at=NULL, actual_count=NULL,
               error_msg='auto reset by fixStage', updated_at=now()
             WHERE unique_key LIKE CONCAT('%', #{date}, '%')
               AND task_type IN
