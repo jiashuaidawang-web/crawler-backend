@@ -198,6 +198,8 @@ public class ProxyManager {
                     consecutiveFailures++;
                     checkCircuitBreaker();
                     onProxyFailure(proxyStr);
+                    ipConsumptionService.log("ADMIN", currentStage, currentTaskType, null,
+                            extractProxyHost(proxyStr), "FAILED", 0, (long)latency, "502 Bad Gateway", currentTradeDate);
                     continue;
                 }
 

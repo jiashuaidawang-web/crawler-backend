@@ -1069,6 +1069,11 @@ public class DailyPipelineOrchestrator {
      * 池子:作废 unique_key 带页码后缀的旧任务,只把全日任务打回 PENDING。
      */
     private SeedResult replayStageTasks(PipelineStage stage, String dateStr) {
+        // DRAGON_TIGER_DETAIL 是链式阶段:不从 stageSeeder.seed(返回空),而是显式调 chainDragonTigerDetails
+        if (stage == PipelineStage.DRAGON_TIGER_DETAIL) {
+            int inserted = seedGenerator.chainDragonTigerDetails(dateStr);
+            return new SeedResult(inserted, Math.max(inserted, 0), List.of(), "DRAGON_TIGER_DETAIL chain");
+        }
         SeedResult seed = stageSeeder.seed(stage, LocalDate.parse(dateStr), defaultSource);
         List<String> taskTypes = stage.getTaskTypes();
         if (taskTypes.isEmpty()) {

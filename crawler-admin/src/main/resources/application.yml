@@ -63,6 +63,9 @@ proxy:
 # 仍可通过 JobController 手动 REST 触发任务（见 XxlJobHandlers / JobController）。
 xxl:
   job:
+    # XXL-JOB admin 未部署时设为 false,禁用 executor 启动(消除连接错误日志)
+    # 任务触发改用 JobController (/api/job/** REST 接口)
+    enabled: false
     admin:
       addresses: http://124.223.220.245:8080/
     access:
