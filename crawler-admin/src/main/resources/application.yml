@@ -7,15 +7,15 @@ spring:
   datasource:
     # 主数据源：openGauss（操作型表 crawl_* / trade_log）—— 默认前缀，Spring Boot 自动配置
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://100.97.74.45:5432/postgres
-#    url: jdbc:postgresql://127.0.0.1:5432/postgres
+#    url: jdbc:postgresql://100.97.74.45:5432/postgresql
+    url: jdbc:postgresql://127.0.0.1:5432/postgres
     username: dbuser
     password: OpenGauss@2026
     # 分析型数据源：ClickHouse（行情 / 池子 / 龙虎榜 / 资金流，批量追加 + ReplacingMergeTree）
     ch:
       driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
-      jdbc-url: jdbc:clickhouse://100.97.74.45:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
-#      jdbc-url: jdbc:clickhouse://127.0.0.1:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
+#      jdbc-url: jdbc:clickhouse://100.97.74.45:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
+      jdbc-url: jdbc:clickhouse://127.0.0.1:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
       username: default
       password: pamirs@123
 
