@@ -56,6 +56,9 @@
     <logger name="com.dunwugudao.crawler.strategy.eastmoney" level="INFO"/>
     <logger name="com.dunwugudao.crawler.persistence.service.DedupWriter" level="INFO"/>
 
+    <!-- 抑制 ClickHouse JDBC 批量插入警告（性能建议，不影响功能） -->
+    <logger name="com.clickhouse.jdbc.internal.SqlBasedPreparedStatement" level="ERROR"/>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE_INFO"/>
