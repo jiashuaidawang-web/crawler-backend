@@ -56,7 +56,7 @@ $ready = $false
 while ($waited -lt $maxWait) {
     Start-Sleep -Seconds 10
     $waited += 10
-    $result = docker exec opengauss-verify bash -c 'su - omm -c "gsql -d postgres -p 5432 -c ''SELECT 1''"' 2>&1 | Out-String
+    $result = docker exec -u omm -e LD_LIBRARY_PATH=/usr/local/opengauss/lib opengauss-verify bash -c '/usr/local/opengauss/bin/gsql -d postgres -p 5432 -c "SELECT 1"' 2>&1 | Out-String
     if ($result -match '1 row') {
         $ready = $true
         Write-Host "[OG] Ready after ${waited}s"

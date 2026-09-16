@@ -56,7 +56,8 @@ public class DailyPipelineOrchestrator {
             PipelineStage.BOARD_BASIC,
             // STOCK_BY_BOARD 暂时下线:全量探测板块-个股关联消耗 IP 过大(每个板块 1 次探测),暂停以节省 IP
             // PipelineStage.STOCK_BY_BOARD,
-            PipelineStage.STOCK_WEEKLY
+            PipelineStage.STOCK_WEEKLY,
+            PipelineStage.STOCK_KLINE_MINUTE
     );
 
     /** 链式阶段:依赖前置阶段落库后,从 CK 表读 ID 再下发。 */

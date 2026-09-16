@@ -594,6 +594,21 @@ public class SeedGenerator {
         return inserted;
     }
 
+    /** 分时分钟线种子(返回 SeedResult,含 expectedTotal=股票数×240)。先从5池同步配置表,再下发任务。 */
+    public SeedResult seedStockKlineMinuteResult(int source, String date) {
+        // 1. 幂等同步5池→配置表(确保池子有新股票时配置表也更新)
+        int synced = initTaskConfigFromPools();
+        // 2. 下发任务
+        int inserted = seedStockKlineMinute(source, date);
+        // 3. 查配置表股票数,计算期望行数(A股每天240分钟)
+        int stockCount = taskConfigMapper.selectByTypeAndStatus("minute", 1).size();
+        int expectedTotal = stockCount * 240;
+        log.info("[seedStockKlineMinuteResult] date={} source={} synced={} inserted={} stockCount={} expectedTotal={}",
+                date, source, synced, inserted, stockCount, expectedTotal);
+        return new SeedResult(inserted, expectedTotal, List.of(),
+                String.format("分时分钟线 %d 股票 × 240分钟 = %d 行", stockCount, expectedTotal));
+    }
+
     /** 从5个池子初始化配置表(type=minute):取所有池子的 distinct 股票,幂等插入配置表。 */
     public int initTaskConfigFromPools() {
         List<List<Map<String, Object>>> allPoolRows = new ArrayList<>();

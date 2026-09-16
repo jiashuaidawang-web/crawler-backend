@@ -14,8 +14,8 @@ spring:
     # 分析型数据源：ClickHouse（行情 / 池子 / 龙虎榜 / 资金流，批量追加 + ReplacingMergeTree）
     ch:
       driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
-#      jdbc-url: jdbc:clickhouse://100.97.74.45:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
-      jdbc-url: jdbc:clickhouse://127.0.0.1:8123/crawler?compress=0&use_server_time_zone=false&rewrite_batch_inserts=true
+#      jdbc-url: jdbc:clickhouse://100.97.74.45:8123/crawler?compress=0&use_server_time_zone=true&server_timezone=Asia/Shanghai&rewrite_batch_inserts=true
+      jdbc-url: jdbc:clickhouse://127.0.0.1:8123/crawler?compress=0&use_server_time_zone=true&server_timezone=Asia/Shanghai&rewrite_batch_inserts=true
       username: default
       password: pamirs@123
 
@@ -81,3 +81,11 @@ xxl:
 crawler:
   proxy:
     agent: qingguo
+
+# ---------------------- 数据同步配置（本地 → 远程 100.81.7.96） ----------------------
+sync:
+  enabled: true
+  script:
+    path: scripts/sync/sync_to_remote.py
+  python:
+    cmd: python   # Windows 用 python，Linux/Mac 用 python3

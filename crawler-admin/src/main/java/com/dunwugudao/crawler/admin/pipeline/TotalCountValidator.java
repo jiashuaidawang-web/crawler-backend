@@ -169,6 +169,7 @@ public class TotalCountValidator implements PipelineValidator {
             case STOCK_BY_BOARD -> new TableQuery("stock_board_rel", null, null, "trade_date");
             case BOARD_BASIC -> new TableQuery("board_basic", null, null, "trade_date");
             case STOCK_WEEKLY -> new TableQuery("stock_weekly", null, null, "trade_date");
+            case STOCK_KLINE_MINUTE -> new TableQuery("stock_kline_minute", null, null);
         };
     }
 

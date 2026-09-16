@@ -62,6 +62,7 @@ public class StageSeeder {
             case STOCK_WEEKLY -> seedGenerator.seedWeeklyResult(source, date.toString());
             // DRAGON_TIGER_DETAIL 依赖 DRAGON_TIGER,由链式阶段触发
             case DRAGON_TIGER_DETAIL -> SeedResult.empty("DRAGON_TIGER_DETAIL 依赖 DRAGON_TIGER,由串联触发");
+            case STOCK_KLINE_MINUTE -> seedGenerator.seedStockKlineMinuteResult(source, date.toString());
         };
     }
 

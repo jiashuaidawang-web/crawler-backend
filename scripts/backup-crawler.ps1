@@ -18,16 +18,12 @@ function Assert-Docker {
 }
 
 function Invoke-CkBackup {
-    Write-Host '[CK] Packing inside container...'
+    Write-Host '[CK] Packing via stdout -> host...'
     $tarName = 'clickhouse.tgz'
-    $containerTar = '/tmp/' + $tarName
-    docker exec $CkContainer tar czf $containerTar --warning=no-file-changed --warning=no-file-removed -C /var/lib/clickhouse .
-    if ($LASTEXITCODE -gt 1) { throw 'ClickHouse pack failed (exit code ' + $LASTEXITCODE + ')' }
-    Write-Host '[CK] Copying to host...'
-    docker cp ($CkContainer + ':' + $containerTar) (Join-Path $dest $tarName)
-    if ($LASTEXITCODE -ne 0) { throw 'ClickHouse docker cp failed' }
-    docker exec $CkContainer rm -f $containerTar
-    $size = (Get-Item (Join-Path $dest $tarName)).Length
+    $outFile = Join-Path $dest $tarName
+    docker exec $CkContainer tar cf - --warning=no-file-changed --warning=no-file-removed -C /var/lib/clickhouse . | gzip -c1 > $outFile
+    if ($LASTEXITCODE -ne 0) { throw 'ClickHouse pack failed (exit code ' + $LASTEXITCODE + ')' }
+    $size = (Get-Item $outFile).Length
     Write-Host ('[CK] Done ' + $tarName + ' (' + [math]::Round($size/1MB, 1) + ' MB)')
 }
 

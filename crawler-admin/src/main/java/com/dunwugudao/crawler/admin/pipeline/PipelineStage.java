@@ -27,7 +27,8 @@ public enum PipelineStage {
     STOCK_BY_BOARD     (15, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_BY_BOARD"),         "板块个股"),
     MAIN_FUND_STOCK    (16, FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_STOCK"),        "个股主力资金流"),
     MAIN_FUND_BOARD    (17, FailurePolicy.SKIP,    Set.of(),                List.of("MAIN_FUND_BOARD"),        "板块主力资金流"),
-    NORTHBOUND         (18, FailurePolicy.SKIP,    Set.of(),                List.of("NORTHBOUND_FLOW"),        "北向资金");
+    NORTHBOUND         (18, FailurePolicy.SKIP,    Set.of(),                List.of("NORTHBOUND_FLOW"),        "北向资金"),
+    STOCK_KLINE_MINUTE (19, FailurePolicy.SKIP,    Set.of(),                List.of("STOCK_KLINE_MINUTE"),     "分时分钟线");
 
     private final int seq;
     private final FailurePolicy policy;

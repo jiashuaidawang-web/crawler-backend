@@ -362,7 +362,7 @@ public class DedupWriter {
         k("STOCK_DAILY", "ts_code", "trade_date");
         k("STOCK_DAILY_HISTORY", "ts_code", "trade_date");
         k("STOCK_WEEKLY", "ts_code", "trade_date");
-        k("STOCK_KLINE_MINUTE", "ts_code", "minute_time");
+        k("STOCK_KLINE_MINUTE", "ts_code", "trade_date");
         k("INDEX_DAILY", "index_code", "trade_date");
         k("REGION_DAILY", "board_code", "trade_date");
         k("INDUSTRY_DAILY", "board_code", "trade_date");
@@ -1002,36 +1002,40 @@ public class DedupWriter {
         for (Map.Entry<String, List<Map<String, Object>>> entry : grouped.entrySet()) {
             String tsCode = entry.getKey();
             List<Map<String, Object>> stockRows = entry.getValue();
-            // 取该股票的交易日
-            LocalDate tradeDate = null;
+            // 按 tradeDate 分组,每组单独查已有 minute_time 去重(API 返回全量历史,跨日去重必须按日查)
+            Map<LocalDate, List<Map<String, Object>>> byDate = new LinkedHashMap<>();
             for (Map<String, Object> r : stockRows) {
                 LocalDateTime mt = DateTimeUtil.parseMinuteTime(r.get("trade_date"));
-                if (mt != null) { tradeDate = mt.toLocalDate(); break; }
+                if (mt == null) continue;
+                byDate.computeIfAbsent(mt.toLocalDate(), k -> new ArrayList<>()).add(r);
             }
-            if (tradeDate == null) continue;
-            // 查已有 minute_time,去重
-            Set<LocalDateTime> existing = new HashSet<>(
-                    stockKlineMinuteMapper.selectMinutesByCodeAndDate(tsCode, tradeDate));
-            for (Map<String, Object> r : stockRows) {
-                LocalDateTime minuteTime = DateTimeUtil.parseMinuteTime(r.get("trade_date"));
-                if (minuteTime == null || existing.contains(minuteTime)) continue; // 已存在则跳过
-                StockKlineMinute e = new StockKlineMinute();
-                e.setTradeDate(minuteTime.toLocalDate());
-                e.setTsCode(tsCode);
-                e.setStockName(str(r.get("stock_name")));
-                e.setMinuteTime(minuteTime);
-                e.setOpen(bigDec(r.get("open")));
-                e.setHigh(bigDec(r.get("high")));
-                e.setLow(bigDec(r.get("low")));
-                e.setClose(bigDec(r.get("close")));
-                e.setVol(bigDec(r.get("vol")));
-                e.setAmount(bigDec(r.get("amount")));
-                e.setAmplitude(bigDec(r.get("amplitude")));
-                e.setPctChg(bigDec(r.get("pct_chg")));
-                e.setTurnover(bigDec(r.get("turnover")));
-                e.setDataSource(source.getCode());
-                e.setCreateDate(today);
-                batch.add(e);
+            for (Map.Entry<LocalDate, List<Map<String, Object>>> dateEntry : byDate.entrySet()) {
+                LocalDate tradeDate = dateEntry.getKey();
+                List<Map<String, Object>> dateRows = dateEntry.getValue();
+                // 查该交易日已有 minute_time,去重
+                Set<LocalDateTime> existing = new HashSet<>(
+                        stockKlineMinuteMapper.selectMinutesByCodeAndDate(tsCode, tradeDate));
+                for (Map<String, Object> r : dateRows) {
+                    LocalDateTime minuteTime = DateTimeUtil.parseMinuteTime(r.get("trade_date"));
+                    if (minuteTime == null || existing.contains(minuteTime)) continue; // 已存在则跳过
+                    StockKlineMinute e = new StockKlineMinute();
+                    e.setTradeDate(tradeDate);
+                    e.setTsCode(tsCode);
+                    e.setStockName(str(r.get("stock_name")));
+                    e.setMinuteTime(minuteTime);
+                    e.setOpen(bigDec(r.get("open")));
+                    e.setHigh(bigDec(r.get("high")));
+                    e.setLow(bigDec(r.get("low")));
+                    e.setClose(bigDec(r.get("close")));
+                    e.setVol(bigDec(r.get("vol")));
+                    e.setAmount(bigDec(r.get("amount")));
+                    e.setAmplitude(bigDec(r.get("amplitude")));
+                    e.setPctChg(bigDec(r.get("pct_chg")));
+                    e.setTurnover(bigDec(r.get("turnover")));
+                    e.setDataSource(source.getCode());
+                    e.setCreateDate(today);
+                    batch.add(e);
+                }
             }
         }
         insertInChunks(stockKlineMinuteMapper::batchInsert, batch, "stock_kline_minute", source);
