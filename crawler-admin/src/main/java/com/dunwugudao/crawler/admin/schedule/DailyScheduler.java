@@ -17,6 +17,7 @@ import java.time.LocalDate;
  *   <li>18:00 龙虎榜主表(DRAGON_TIGER)独立调度 — 东财此时已发布龙虎榜数据</li>
  *   <li>18:30 龙虎榜明细(DRAGON_TIGER_DETAIL)独立调度 — 依赖 18:00 主表落库</li>
  * </ul>
+ * <p>所有任务执行前通过 {@link TradingDayChecker} 判断是否为交易日，非交易日自动跳过。</p>
  */
 @Slf4j
 @Component
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 public class DailyScheduler {
 
     private final DailyPipelineOrchestrator pipelineOrchestrator;
+    private final TradingDayChecker tradingDayChecker;
 
     /**
      * 每日 15:30 自动触发日批编排(全阶段)。
@@ -32,6 +34,9 @@ public class DailyScheduler {
     @Scheduled(cron = "0 30 15 * * ?")
     public void autoDailySeed() {
         String date = LocalDate.now().toString();
+        if (!checkTradingDay(date)) {
+            return;
+        }
         log.info("=== 自动日批编排启动 date={} ===", date);
         try {
             PipelineRunResult result = pipelineOrchestrator.run(date);
@@ -49,6 +54,9 @@ public class DailyScheduler {
     @Scheduled(cron = "0 0 18 * * ?")
     public void autoDragonTiger() {
         String date = LocalDate.now().toString();
+        if (!checkTradingDay(date)) {
+            return;
+        }
         log.info("=== 龙虎榜主表独立调度启动(18:00) date={} ===", date);
         try {
             PipelineStageResult result = pipelineOrchestrator.runDragonTigerStage(date);
@@ -66,6 +74,9 @@ public class DailyScheduler {
     @Scheduled(cron = "0 30 18 * * ?")
     public void autoDragonTigerDetail() {
         String date = LocalDate.now().toString();
+        if (!checkTradingDay(date)) {
+            return;
+        }
         log.info("=== 龙虎榜明细独立调度启动(18:30) date={} ===", date);
         try {
             PipelineStageResult result = pipelineOrchestrator.runDragonTigerDetailStage(date);
@@ -74,5 +85,23 @@ public class DailyScheduler {
         } catch (Exception e) {
             log.error("龙虎榜明细调度失败：{}", e.getMessage(), e);
         }
+    }
+
+    // ---------------- 交易日守卫 ----------------
+
+    /**
+     * 检查是否为交易日，非交易日跳过跑批。
+     * <p>{@link TradingDayChecker} 内部已重试 5 次, 全部失败返回 false(跳过)。
+     * 此处返回 false = 非交易日 或 接口不可信, 均跳过。</p>
+     *
+     * @param date 日期字符串 yyyy-MM-dd
+     * @return true=确认交易日(继续执行), false=跳过
+     */
+    private boolean checkTradingDay(String date) {
+        boolean isTrading = tradingDayChecker.isTradingDay(LocalDate.parse(date));
+        if (!isTrading) {
+            log.info("=== 自动调度跳过(非交易日或接口不可信) date={} ===", date);
+        }
+        return isTrading;
     }
 }

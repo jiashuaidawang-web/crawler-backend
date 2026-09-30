@@ -87,7 +87,7 @@ public class DedupService {
 
         // 龙虎榜
         reg("dragon_tiger", "ts_code, trade_date, reason", "toYYYYMM(trade_date)", "update_date", false);
-        reg("dt_detail", "ts_code, trade_date, seat_name, seat_type", "toYYYYMM(trade_date)", "update_date", false);
+        reg("dt_detail", "ts_code, trade_date, seat_name, seat_type, trade_direction", "toYYYYMM(trade_date)", "update_date", false);
 
         // 资金流 / 板块关联
         reg("main_fund_flow", "obj_type, ts_code, board_code, index_code, trade_date, data_source",

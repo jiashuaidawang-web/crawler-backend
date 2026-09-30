@@ -98,6 +98,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
             case ZT_POOL, DATACENTER -> fetchZtPoolOrDatacenter(ctx, taskType, params, spec);
             case KLINE -> fetchKline(ctx, taskType, params, spec);
             case KAMT -> fetchKamt(ctx, taskType, params, spec);
+            case FFLOW -> fetchFflow(ctx, taskType, params, spec);
         };
     }
 
@@ -171,6 +172,17 @@ public class EastmoneyApiStrategy implements SourceStrategy {
         return buildResult(allRows, resp, url);
     }
 
+    /** FFLOW 单独处理:个股/板块主力资金流日频历史（单请求，klines CSV，纯 JSON 非 JSONP）。 */
+    private CrawlResult fetchFflow(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
+        rateLimiter.acquire();
+        String url = spec.buildUrl(params, 1);
+        String resp = fetchWithWorkerProxy(url, randomUa(), ctx);
+        resp = cleanJsonp(resp);
+        JsonNode root = readTree(resp);
+        List<Map<String, Object>> rows = EastmoneyParsers.parseFflow(root.path("data"), spec, params);
+        return buildResult(rows, resp, url);
+    }
+
     /** 北向资金（kamt.rtmin 实时端点，分钟级数据，纯 JSON 非 JSONP）。 */
     private CrawlResult fetchKamt(CrawlContext ctx, String taskType, Map<String, Object> params, EastmoneyEndpoints.EndpointSpec spec) {
         rateLimiter.acquire();
@@ -223,7 +235,7 @@ public class EastmoneyApiStrategy implements SourceStrategy {
                 // 成功:重置连续失败计数(说明代理池恢复可用)
                 workerProxyManager.onSuccess();
                 log.info("[fetchWithWorkerProxy] success, proxy={}, usedIp={}/{}, url={}",
-                        proxy, used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, url);
+                        EastmoneyClient.maskProxy(proxy), used + 1, MAX_PROXY_FETCH_ATTEMPTS_PER_TASK, url);
                 return resp;
             } catch (Exception e) {
                 boolean proxyFailure = isProxyFailure(e);

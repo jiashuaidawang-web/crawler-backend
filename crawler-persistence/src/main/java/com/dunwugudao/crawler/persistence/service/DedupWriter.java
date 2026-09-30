@@ -566,7 +566,8 @@ public class DedupWriter {
             case "INDEX_DAILY" -> writeIndexDaily(rows, source, srcDetail);
             case "REGION_DAILY", "INDUSTRY_DAILY", "CONCEPT_DAILY" ->
                     writeBoardDaily(rows, source, srcDetail);
-            case "MAIN_FUND_STOCK", "MAIN_FUND_BOARD" -> writeMainFundFlow(rows, source, srcDetail);
+            case "MAIN_FUND_STOCK", "MAIN_FUND_BOARD",
+                 "MAIN_FUND_STOCK_HIST", "MAIN_FUND_BOARD_HIST" -> writeMainFundFlow(rows, source, srcDetail);
             case "DRAGON_TIGER" -> writeDragonTiger(rows, source, srcDetail);
             case "DRAGON_TIGER_DETAIL" -> writeDtDetail(rows, source, srcDetail);
             case "STOCK_BY_BOARD" -> writeStockBoardRel(rows, source, srcDetail);

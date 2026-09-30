@@ -26,8 +26,8 @@ public class QgLongTermProxyProvider implements ProxyProvider {
 
     private static final Logger log = LoggerFactory.getLogger(QgLongTermProxyProvider.class);
 
-    private final String authKey;     // 提取 API 的 key(URL 的 key 参数)
-    private final String businessId;  // 业务标识(隧道代理用户名)
+    private final String authKey;     // 提取 API 的 key(URL 的 key 参数) + 隧道代理用户名
+    private final String businessId;  // 业务标识(仅作记录, 不用于代理认证)
     private final String password;    // 隧道代理密码(AuthPwd)
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -37,8 +37,8 @@ public class QgLongTermProxyProvider implements ProxyProvider {
             .build();
 
     /**
-     * @param authKey    提取 API 的 key(URL 的 key 参数)
-     * @param businessId 业务标识(隧道代理用户名)
+     * @param authKey    提取 API 的 key(URL 的 key 参数), 也是代理隧道认证的用户名
+     * @param businessId 业务标识(仅作记录, 不用于代理认证)
      * @param password   隧道代理密码(AuthPwd)
      */
     public QgLongTermProxyProvider(String authKey, String businessId, String password) {
@@ -54,7 +54,8 @@ public class QgLongTermProxyProvider implements ProxyProvider {
     }
 
     /**
-     * 从青果长效 IP 提取 1 个代理,返回 {@code http://businessId:pass@ip:port}。
+     * 从青果长效 IP 提取 1 个代理,返回 {@code http://authKey:pass@ip:port}。
+     * <p>注意：代理隧道认证的用户名是 authKey(提取 API 的 key), 不是 businessId。</p>
      *
      * @return 代理字符串；提取失败返回 null
      */
@@ -91,9 +92,10 @@ public class QgLongTermProxyProvider implements ProxyProvider {
                 log.warn("[QgLongTerm] unexpected server: {}", server);
                 return null;
             }
-            // "ip:port" → "http://businessId:pass@ip:port"
-            String proxy = "http://" + businessId + ":" + password + "@" + server;
-            log.info("[QgLongTerm] acquired {}", proxy);
+            // "ip:port" → "http://authKey:pass@ip:port"
+            // 关键：代理隧道认证的用户名是 authKey(不是 businessId), 2026-09-26 已实测验证!
+            String proxy = "http://" + authKey + ":" + password + "@" + server;
+            log.info("[QgLongTerm] acquired {}", EastmoneyClient.maskProxy(proxy));
             return proxy;
         } catch (IOException e) {
             log.warn("[QgLongTerm] acquire failed: {}", e.getMessage());

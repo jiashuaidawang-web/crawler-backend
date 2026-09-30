@@ -1631,7 +1631,18 @@ public class SeedGenerator {
         if (batch.isEmpty()) {
             return 0;
         }
-        return mapper.batchInsertIfAbsent(batch);
+        try {
+            return mapper.batchInsertIfAbsent(batch);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // openGauss 批量 WHERE NOT EXISTS 模式在批内有冲突时会报 unique violation,
+            // 降级为逐条 insertIfAbsent(冲突返回 0,不影响其他行)
+            log.warn("[flush] 批量插入冲突,降级为逐条插入 batchSize={}", batch.size());
+            int inserted = 0;
+            for (CrawlTask t : batch) {
+                inserted += mapper.insertIfAbsent(t);
+            }
+            return inserted;
+        }
     }
 
     private int insertOne(String taskType, int source, String date, String code, Integer expected) {

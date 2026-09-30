@@ -22,7 +22,8 @@ public final class EastmoneyEndpoints {
         KLINE,      // push2his kline（个股/指数日周线）
         ZT_POOL,    // push2ex 涨停/跌停/炸板池
         DATACENTER, // datacenter-web 龙虎榜
-        KAMT        // push2 kamt 北向资金实时端点（纯 JSON，非 JSONP）
+        KAMT,       // push2 kamt 北向资金实时端点（纯 JSON，非 JSONP）
+        FFLOW       // push2his fflow/daykline（个股/板块主力资金流日频历史，~120 交易日窗口）
     }
 
     /** 端点规格（数据持有 + URL 构建）。 */
@@ -104,6 +105,19 @@ public final class EastmoneyEndpoints {
                             + "&end=20500101"
                             + "&lmt=50000"
                             + "&_=" + ts;
+                }
+                case FFLOW: {
+                    // 主力资金流日频历史：lmt=0 一次拿满窗口（实测 ~120 个交易日）。
+                    // 板块 secid=90.BKxxxx；个股复用 secidFor（tsCode 带后缀）。
+                    String secid = "MAIN_FUND_BOARD_HIST".equals(taskType)
+                            ? "90." + String.valueOf(params.get("boardCode"))
+                            : secidFor(taskType, params);
+                    return baseUrl
+                            + "?lmt=0&klt=101"
+                            + "&fields1=f1%2Cf2%2Cf3%2Cf7"
+                            + "&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61%2Cf62%2Cf63%2Cf64%2Cf65"
+                            + "&ut=b2884a393a59ad64002292a3e90d46a5"
+                            + "&secid=" + secid;
                 }
                 case CLIST: {
                     String fsVal;
@@ -300,6 +314,14 @@ public final class EastmoneyEndpoints {
         SPEC_BY_TYPE.put("MAIN_FUND_BOARD", new EndpointSpec(
                 "MAIN_FUND_BOARD", "https://push2.eastmoney.com/api/qt/clist/get",
                 ParserType.CLIST, "m:90+t:2,m:90+t:3,m:90+t:1", null, null));
+        // 个股主力资金流历史（push2his fflow/daykline，一次拿满 ~120 交易日窗口）
+        SPEC_BY_TYPE.put("MAIN_FUND_STOCK_HIST", new EndpointSpec(
+                "MAIN_FUND_STOCK_HIST", "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get",
+                ParserType.FFLOW, null, null, null));
+        // 板块主力资金流历史（同上，secid=90.BKxxxx）
+        SPEC_BY_TYPE.put("MAIN_FUND_BOARD_HIST", new EndpointSpec(
+                "MAIN_FUND_BOARD_HIST", "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get",
+                ParserType.FFLOW, null, null, null));
         // 龙虎榜
         SPEC_BY_TYPE.put("DRAGON_TIGER", new EndpointSpec(
                 "DRAGON_TIGER", "https://datacenter-web.eastmoney.com/api/data/get",

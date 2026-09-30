@@ -266,6 +266,43 @@ public final class EastmoneyParsers {
         return rows;
     }
 
+    /**
+     * FFLOW 解析器（主力资金流日频历史，push2his fflow/daykline）。
+     * <p>klines CSV 字段序：f51日期,f52主力净额,f53小单,f54中单,f55大单,f56超大单,f57~f61净占比%,f62收盘,f63涨跌幅。
+     * 顺序已实测验证（茅台 2026-04-03：f52 = f55+f56，主力=大单+超大单）。
+     * 行键与 writeMainFundFlow 对齐：obj_type/ts_code/board_code/index_code 全部非空（"0" 占位）。</p>
+     */
+    public static List<Map<String, Object>> parseFflow(JsonNode data, EastmoneyEndpoints.EndpointSpec spec,
+                                                       Map<String, Object> params) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        JsonNode klines = data.path("klines");
+        if (!klines.isArray()) {
+            return rows;
+        }
+        boolean isBoard = "MAIN_FUND_BOARD_HIST".equals(spec.getTaskType());
+        String name = txt(data, "name");
+        for (JsonNode line : klines) {
+            String[] f = line.asText().split(",");
+            if (f.length < 6) {
+                continue;
+            }
+            Map<String, Object> row = new HashMap<>();
+            row.put("obj_type", isBoard ? "board" : "stock");
+            row.put("ts_code", isBoard ? "0" : String.valueOf(params.get("tsCode")));
+            row.put("board_code", isBoard ? String.valueOf(params.get("boardCode")) : "0");
+            row.put("index_code", "0");
+            row.put("name", name);
+            row.put("trade_date", f[0]);
+            row.put("main_net", toDouble(f[1]));   // f52 主力净流入(元)
+            row.put("small_net", toDouble(f[2]));  // f53 小单净流入(元)
+            row.put("mid_net", toDouble(f[3]));    // f54 中单净流入(元)
+            row.put("big_net", toDouble(f[4]));    // f55 大单净流入(元)
+            row.put("super_big", toDouble(f[5]));  // f56 超大单净流入(元)
+            rows.add(row);
+        }
+        return rows;
+    }
+
     /** ZT_POOL 解析器（涨跌停/炸板/强势/次新池，push2ex）。 */
     public static List<Map<String, Object>> parseZtPool(JsonNode data, EastmoneyEndpoints.EndpointSpec spec,
                                                        Map<String, Object> params) {

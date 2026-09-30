@@ -53,9 +53,9 @@ proxy:
   # 长效 IP 每 30 分钟自动换一次,不限流量。与 worker 共用同一套凭证。
   # 提取 API: https://share.proxy.qg.net/get?key=...&num=1&format=json&distinct=true
   qg:
-    auth-key: NM8XFDR2
+    auth-key: SUFN2D1R
     business-id: 7pabvimp
-    password: 22574E11640D
+    password: 552B50948EA8
 
 # ---------------------- XXL-JOB 执行器（调度接入 M3） ----------------------
 # 执行器挂在 admin（控制面）：worker 只认领、不调度。

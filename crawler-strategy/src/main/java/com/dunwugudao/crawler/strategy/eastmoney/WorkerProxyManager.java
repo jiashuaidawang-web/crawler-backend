@@ -122,7 +122,7 @@ public class WorkerProxyManager {
             currentProxy.set(newProxy);
             invalidated.set(false);
             log.info("[WorkerProxyManager] new proxy acquired, proxy={}, will be used until failure",
-                    newProxy);
+                    EastmoneyClient.maskProxy(newProxy));
             return newProxy;
         } finally {
             fetchLock.unlock();
