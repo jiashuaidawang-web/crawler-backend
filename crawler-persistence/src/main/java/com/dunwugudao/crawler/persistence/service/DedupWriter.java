@@ -377,7 +377,7 @@ public class DedupWriter {
         k("MAIN_FUND_STOCK", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
         k("MAIN_FUND_BOARD", "obj_type", "ts_code", "board_code", "index_code", "trade_date");
         k("DRAGON_TIGER", "ts_code", "trade_date", "reason");
-        k("DRAGON_TIGER_DETAIL", "ts_code", "trade_date", "seat_name", "seat_type");
+        k("DRAGON_TIGER_DETAIL", "ts_code", "trade_date", "list_type", "seat_name", "rank");
         k("STOCK_BY_BOARD", "board_code", "ts_code", "board_type");
         k("NORTHBOUND_FLOW", "trade_date");
         k("FINANCIAL", "ts_code", "end_date");
@@ -1203,7 +1203,7 @@ public class DedupWriter {
             e.setAccumAmount(bigDec(r.get("accum_amount")));
             e.setChangeRate(bigDec(r.get("change_rate")));
             e.setTurnoverrateRatio(bigDec(r.get("turnoverrate_ratio")));
-            e.setTradeDirection(intVal(r.get("trade_direction")));
+            e.setListType(str(r.get("list_type")));
             e.setStatisticsDays(intVal(r.get("statistics_days")));
             e.setOnlistTimes(intVal(r.get("onlist_times")));
             e.setStartDate(toLocalDate(r.get("start_date")));

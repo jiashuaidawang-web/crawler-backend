@@ -7,23 +7,25 @@
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO dt_detail
         (
-        trade_date, ts_code, seat_name, seat_type, rank,
+        trade_date, ts_code, trade_id, list_type, rank,
+        seat_name, seat_type,
         buy, sell, net_buy, buy_ratio, sell_ratio, net_buy_ratio,
         trade_amt, trade_ratio, accum_volume, accum_amount,
-        change_rate, turnoverrate_ratio, trade_direction, statistics_days, onlist_times,
+        change_rate, turnoverrate_ratio, statistics_days, onlist_times,
         start_date, end_date, operate_dept_code, operate_dept_type,
-        change_type, explanation, trade_id, security_inner_code, sec_type,
+        change_type, explanation, security_inner_code, sec_type,
         data_source, src_detail, create_date, update_date
         )
         VALUES
         <foreach collection="list" item="r" separator=",">
             (
-             #{r.tradeDate}, #{r.tsCode}, #{r.seatName}, #{r.seatType}, #{r.rank},
+             #{r.tradeDate}, #{r.tsCode}, #{r.tradeId}, #{r.listType}, #{r.rank},
+             #{r.seatName}, #{r.seatType},
              #{r.buy}, #{r.sell}, #{r.netBuy}, #{r.buyRatio}, #{r.sellRatio}, #{r.netBuyRatio},
              #{r.tradeAmt}, #{r.tradeRatio}, #{r.accumVolume}, #{r.accumAmount},
-             #{r.changeRate}, #{r.turnoverrateRatio}, #{r.tradeDirection}, #{r.statisticsDays}, #{r.onlistTimes},
+             #{r.changeRate}, #{r.turnoverrateRatio}, #{r.statisticsDays}, #{r.onlistTimes},
              #{r.startDate}, #{r.endDate}, #{r.operateDeptCode}, #{r.operateDeptType},
-             #{r.changeType}, #{r.explanation}, #{r.tradeId}, #{r.securityInnerCode}, #{r.secType},
+             #{r.changeType}, #{r.explanation}, #{r.securityInnerCode}, #{r.secType},
              #{r.dataSource}, #{r.srcDetail}, #{r.createDate}, #{r.updateDate}
             )
         </foreach>

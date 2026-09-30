@@ -31,7 +31,7 @@ public class DtDetail {
     private BigDecimal accumAmount;  // 累计成交额
     private BigDecimal changeRate;   // 期间涨跌幅%
     private BigDecimal turnoverrateRatio; // 期间换手率%
-    private Integer tradeDirection;  // 交易方向
+    private String listType;         // 榜单类型: BUY=买入榜, SELL=卖出榜
     private Integer statisticsDays;  // 统计天数
     private Integer onlistTimes;     // 上榜次数
     private LocalDate startDate;     // 统计起始日

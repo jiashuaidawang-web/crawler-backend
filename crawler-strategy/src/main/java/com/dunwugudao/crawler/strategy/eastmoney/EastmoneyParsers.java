@@ -436,7 +436,9 @@ public final class EastmoneyParsers {
                 row.put("accum_amount", num(n, "ACCUM_AMOUNT"));
                 row.put("change_rate", num(n, "CHANGE_RATE"));
                 row.put("turnoverrate_ratio", num(n, "TURNOVERRATE_RATIO"));
-                row.put("trade_direction", toInt(num(n, "TRADE_DIRECTION")));
+                // TRADE_DIRECTION: 0=买入榜(按买入金额排序), 1=卖出榜(按卖出金额排序)
+                int td = toInt(num(n, "TRADE_DIRECTION"));
+                row.put("list_type", td == 0 ? "BUY" : "SELL");
                 row.put("statistics_days", toInt(num(n, "STATISTICS_DAYS")));
                 row.put("onlist_times", toInt(num(n, "ONLIST_TIMES")));
                 row.put("start_date", txt(n, "START_DATE"));
